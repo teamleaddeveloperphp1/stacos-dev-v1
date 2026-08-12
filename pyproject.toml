@@ -137,6 +137,11 @@ ignore = [
 "**/checks.py" = ["ARG001"]
 "**/adapters.py" = ["ARG002"]
 "**/management/commands/*.py" = ["ARG002"]
+# Every task inheriting `stacos.core.tasks.TenantTask` must declare `tenant_id`,
+# because the base class reads it from kwargs to bind the scope before the body
+# runs. It is therefore load-bearing and frequently unreferenced in the function
+# itself — and removing it to satisfy the linter would break every task at once.
+"**/tasks.py" = ["ARG001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["stacos", "config"]

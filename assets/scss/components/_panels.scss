@@ -98,6 +98,45 @@
   color: var(--stacos-status-overdue);
 }
 
+// -----------------------------------------------------------------------------
+// A panel hanging off a header control — the notification bell.
+//
+// Anchored to the right so it cannot push the viewport wider, and it becomes a
+// full-width sheet on a phone, where a 22rem panel floating off a 24px icon is
+// unusable. `z-index` sits above the sticky header and below the modal backdrop.
+// -----------------------------------------------------------------------------
+.dropdown-panel {
+  position: absolute;
+  top: calc(100% + #{$stacos-space-2});
+  right: 0;
+  z-index: 1030;
+  width: 22rem;
+  max-width: calc(100vw - #{$stacos-space-4});
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  box-shadow: var(--stacos-shadow-md);
+
+  // Empty until the panel is fetched. Without this the border and shadow of an
+  // empty box flash on screen before the response arrives.
+  &:empty { display: none; }
+
+  // The panel renders a `.card`, which brings its own frame; inside this one
+  // that would be a border drawn twice.
+  > .card { border: 0; }
+
+  @media (max-width: 36em) {
+    position: fixed;
+    top: auto;
+    left: $stacos-space-3;
+    right: $stacos-space-3;
+    width: auto;
+    max-width: none;
+  }
+}
+
 .detail-header {
   display: flex;
   flex-wrap: wrap;

@@ -1,0 +1,9 @@
+{{ notification.title }}
+
+{{ notification.body }}
+{% if notification.url %}
+Open it: {{ base_url }}{{ notification.url }}
+{% endif %}
+---
+You are receiving this because you are responsible for this in STACOS.
+Change what you are told about: {{ base_url }}/app/notifications/preferences/

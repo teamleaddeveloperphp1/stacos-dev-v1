@@ -62,6 +62,13 @@ _VIEW_BASICS = frozenset(
         # at, so both sit in the basic bundle rather than being granted upwards.
         "compliance.obligation.view",
         "catalog.view",
+        # Notifications are addressed to one person and grant nothing about
+        # anyone else, so they sit in the floor bundle. A user who can sign in
+        # but cannot see what the platform has been telling them — or change how
+        # loudly it does so — is a user who will turn the product off at their
+        # mail client instead.
+        "notifications.view",
+        "notifications.preferences.manage",
     }
     | _DOCUMENT_AND_TRACKER_BASICS
 )

@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
+from django.db import transaction
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -27,6 +28,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from stacos.accounts.models import PendingVerification
 from stacos.accounts.otp import start_verification, verify_codes
 from stacos.api.authentication import issue_tokens
+from stacos.core.rls import rls_bootstrap
 from stacos.core.typing import current_user
 from stacos.tenancy.models import Membership
 
@@ -198,18 +200,35 @@ class MobileLogoutView(APIView):
 
 
 class MeView(APIView):
-    """Who am I, and which tenants can I switch between."""
+    """Who am I, and which tenants can I switch between.
+
+    The tenant ids returned here are what the client puts in ``X-Stacos-Tenant``
+    on subsequent requests — a JWT request has no session to hold the switcher's
+    choice, so it travels per request.
+    """
 
     permission_classes = [IsAuthenticated]
 
     @extend_schema(responses={200: OpenApiResponse(description="Current user and memberships.")})
     def get(self, request: Request) -> Response:
         user = current_user(request)
-        memberships = (
-            Membership.objects_unscoped.filter(user=user, status=Membership.Status.ACTIVE)
-            .select_related("tenant", "role")
-            .order_by("tenant__name")
-        )
+
+        # The same chicken-and-egg the web request path has: "which tenants may
+        # this user reach" is answered by reading a table that is itself
+        # RLS-protected, and no scope is bound yet. Without the bootstrap the
+        # policy fails closed and this endpoint reports, with a 200, that the
+        # user belongs to nothing.
+        #
+        # The transaction is needed because the setting is transaction-local,
+        # and the lookup is anchored on the authenticated user, so lifting the
+        # policy here can only ever return rows about them.
+        with transaction.atomic(), rls_bootstrap():
+            memberships = list(
+                Membership.objects_unscoped.filter(user=user, status=Membership.Status.ACTIVE)
+                .select_related("tenant", "role")
+                .order_by("tenant__name")
+            )
+
         return Response(
             {
                 "id": str(user.pk),

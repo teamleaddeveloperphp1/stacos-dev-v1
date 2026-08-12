@@ -1,0 +1,42 @@
+{% load i18n %}
+{% comment %}
+  One notification. Severity is shown as a word and a marker, never as colour
+  alone — the same rule the status vocabulary follows everywhere else.
+{% endcomment %}
+<li class="timeline__item timeline__item--{{ notification.severity|lower }}"
+    id="notification-{{ notification.pk }}">
+  <div class="timeline__meta">
+    <time datetime="{{ notification.created_at|date:'c' }}">
+      {{ notification.created_at|date:"j M Y, H:i" }}
+    </time>
+    {% if notification.entity %}<span>{{ notification.entity.name }}</span>{% endif %}
+    {% if notification.severity == "URGENT" %}
+      <span class="badge-soft badge-soft--danger">{% translate "Urgent" %}</span>
+    {% elif notification.severity == "ATTENTION" %}
+      <span class="badge-soft badge-soft--attention">{% translate "Needs attention" %}</span>
+    {% endif %}
+    {% if not notification.is_read %}
+      <span class="badge-soft">{% translate "Unread" %}</span>
+    {% endif %}
+  </div>
+  <div class="timeline__body">
+    {% if notification.url %}
+      <a class="link-strong" href="{{ notification.url }}"
+         hx-get="{{ notification.url }}" hx-target="#main" hx-push-url="true">
+        {{ notification.title }}
+      </a>
+    {% else %}
+      <span class="link-strong">{{ notification.title }}</span>
+    {% endif %}
+    {% if notification.body %}
+      <p class="timeline__note">{{ notification.body|linebreaksbr }}</p>
+    {% endif %}
+    {% if not notification.is_read %}
+      <button class="btn btn-sm btn-link p-0"
+              hx-post="{% url 'notifications:mark_read' notification.pk %}"
+              hx-target="#notification-{{ notification.pk }}" hx-swap="outerHTML">
+        {% translate "Mark as read" %}
+      </button>
+    {% endif %}
+  </div>
+</li>

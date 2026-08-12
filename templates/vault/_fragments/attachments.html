@@ -16,6 +16,8 @@
           <a class="attachments__action" href="{% url 'vault:download' document.pk %}">
             {% translate "Download" %}
           </a>
+        {% elif document.is_quarantined %}
+          <span class="badge-soft badge-soft--danger">{% translate "Quarantined" %}</span>
         {% else %}
           <span class="text-muted small">{% translate "Scanning…" %}</span>
         {% endif %}

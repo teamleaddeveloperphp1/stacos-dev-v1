@@ -191,20 +191,32 @@
         </button>
 
         {% comment %}
-          The bell is a placeholder until the notifications module ships.
+          The bell. Its count comes from the context processor on a full page
+          load and is swapped out of band by anything that changes it; the panel
+          itself is fetched only when opened, because ten rows with entity joins
+          on every request to render something most people never open is not a
+          trade worth making.
 
-          It will be fed by a single Server-Sent Events connection carrying badge
-          counts and toasts — polling every ten seconds across fifty thousand
-          tenants would melt PostgreSQL and still not feel real-time. The
-          `sse-connect` attribute is deliberately absent rather than pointed at a
-          route that does not exist yet: EventSource retries on failure, so a
-          dead endpoint becomes a steady stream of 404s.
+          Still no Server-Sent Events stream. When one arrives it will carry badge
+          counts and toasts over a single connection — polling every ten seconds
+          across fifty thousand tenants would melt PostgreSQL and still not feel
+          real-time. `sse-connect` stays absent rather than pointed at a route
+          that does not exist: EventSource retries on failure, so a dead endpoint
+          becomes a steady stream of 404s.
         {% endcomment %}
-        <div class="position-relative">
-          <button class="btn btn-sm btn-link p-1" aria-label="{% translate 'Notifications' %}">
+        <div class="position-relative" x-data="{ open: false }">
+          <button class="btn btn-sm btn-link p-1"
+                  aria-label="{% translate 'Notifications' %}"
+                  :aria-expanded="open"
+                  aria-controls="notification-panel-container"
+                  x-on:click="open = !open"
+                  hx-get="{% url 'notifications:panel' %}"
+                  hx-target="#notification-panel-container" hx-swap="innerHTML">
             <c-icon name="bell" />
-            <span id="notification-badge"></span>
+            {% include "notifications/_fragments/badge.html" with unread=notification_unread %}
           </button>
+          <div id="notification-panel-container" class="dropdown-panel"
+               x-show="open" x-cloak x-on:click.outside="open = false"></div>
         </div>
 
         <c-user-menu :user="request.user" />

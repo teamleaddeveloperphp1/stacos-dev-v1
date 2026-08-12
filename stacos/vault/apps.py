@@ -8,4 +8,7 @@ class VaultConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self) -> None:
-        from stacos.vault import permissions_catalog  # noqa: F401
+        from stacos.vault import (
+            checks,  # noqa: F401
+            permissions_catalog,  # noqa: F401
+        )

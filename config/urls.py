@@ -51,6 +51,7 @@ urlpatterns = [
     path("app/requests/", include("stacos.requests.urls", namespace="rfi")),
     path("app/notices/", include("stacos.notices.urls", namespace="notices")),
     path("app/documents/", include("stacos.vault.urls", namespace="vault")),
+    path("app/notifications/", include("stacos.notifications.urls", namespace="notifications")),
     path("app/returns/", include("stacos.returns.urls", namespace="returns")),
     path("app/secretarial/", include("stacos.secretarial.urls", namespace="secretarial")),
     path("app/practice/", include("stacos.practice.urls", namespace="practice")),

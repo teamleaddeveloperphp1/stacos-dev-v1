@@ -1,0 +1,34 @@
+{% load i18n %}
+{% comment %}
+  The bell dropdown. Ten rows, unread first, loaded when opened rather than with
+  every page — see the note in views.panel.
+{% endcomment %}
+<div class="card" id="notification-panel" aria-live="polite" aria-atomic="true">
+  <div class="card__header">
+    <span class="card__title">{% translate "Notifications" %}</span>
+    <a href="{% url 'notifications:list' %}"
+       hx-get="{% url 'notifications:list' %}" hx-target="#main" hx-push-url="true">
+      {% translate "See all" %}
+    </a>
+  </div>
+  <ul class="due-list">
+    {% for notification in notifications %}
+      <li class="due-list__item">
+        {% if notification.url %}
+          <a class="{% if notification.is_read %}link-strong{% else %}link-attention{% endif %}"
+             href="{{ notification.url }}"
+             hx-get="{{ notification.url }}" hx-target="#main" hx-push-url="true">
+            {{ notification.title }}
+          </a>
+        {% else %}
+          <span>{{ notification.title }}</span>
+        {% endif %}
+        <time class="text-muted small" datetime="{{ notification.created_at|date:'c' }}">
+          {{ notification.created_at|date:"j M" }}
+        </time>
+      </li>
+    {% empty %}
+      <li class="due-list__item text-muted small">{% translate "Nothing new." %}</li>
+    {% endfor %}
+  </ul>
+</div>

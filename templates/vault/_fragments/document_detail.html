@@ -64,7 +64,12 @@
             {% translate "Download" %}
           </a>
         {% else %}
-          <span class="text-muted small">{% translate "Waiting for virus scanning to finish." %}</span>
+          {% comment %}
+            The model composes this sentence: whether a user should wait, tell
+            somebody, or stop trying depends on the scan state, and each answer
+            is a different sentence.
+          {% endcomment %}
+          <span class="text-muted small">{{ document.download_refusal }}</span>
         {% endif %}
       </div>
     </div>

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -140,7 +141,7 @@ def _branches(value: str, depth: int = 0) -> list[str]:
     head, tail = value[: opener.start()], value[end[1] :]
     bounds = [*cuts, end]
     out: list[str] = []
-    for (_, start), (stop, _) in zip(bounds, bounds[1:]):
+    for (_, start), (stop, _) in pairwise(bounds):
         out.extend(_branches(head + value[start:stop] + tail, depth + 1))
     return out
 
@@ -217,7 +218,9 @@ def _bundles_by_template() -> dict[str, frozenset[str]]:
         if reach[path]:
             continue
         app = path.split("/")[0]
-        siblings = {b for other, bundles in reach.items() if other.startswith(f"{app}/") for b in bundles}
+        siblings = {
+            b for other, bundles in reach.items() if other.startswith(f"{app}/") for b in bundles
+        }
         reach[path] = siblings or {"app.css"}
 
     return {path: frozenset(bundles) for path, bundles in reach.items()}
@@ -258,9 +261,7 @@ def test_every_class_used_is_defined_in_a_reachable_bundle(path: str) -> None:
         pytest.skip("no class attributes")
 
     bundles = REACHABLE[path]
-    missing = sorted(
-        name for name in used if not any(_defined(name, bundle) for bundle in bundles)
-    )
+    missing = sorted(name for name in used if not any(_defined(name, bundle) for bundle in bundles))
 
     assert not missing, (
         f"{path} uses classes that {' / '.join(sorted(bundles))} does not define: "

@@ -83,6 +83,30 @@ app.conf.beat_schedule = {
         "task": "stacos.obligations.materialise_roll_horizon",
         "schedule": crontab(hour=1, minute=30),
     },
+    # The reminder ladder. Hourly rather than daily so that a tenant whose
+    # sweep failed at 06:00 is not silent until tomorrow, and because the
+    # dedupe key makes a repeat run cost nothing. 06:00-22:00 IST only: a
+    # WhatsApp message about a filing at three in the morning is a way to lose
+    # a customer, not to remind them.
+    "reminder-sweep": {
+        "task": "stacos.notifications.sweep_tenants",
+        "schedule": crontab(minute=15, hour="6-22"),
+    },
+    # Digests are selected by each subscriber's own hour, so this has to run
+    # every hour to catch them.
+    "notification-digests": {
+        "task": "stacos.notifications.send_digests",
+        "schedule": crontab(minute=0),
+    },
+    # Documents whose scan or text extraction never ran. The broker guarantees
+    # at-least-once *delivery*, which does nothing about a message that was never
+    # published — a crash between commit and publish leaves a file permanently
+    # undownloadable, and it looks exactly like a slow queue. Every ten minutes,
+    # because the symptom is a user unable to open a file they just uploaded.
+    "sweep-unscanned-documents": {
+        "task": "stacos.vault.sweep_pending",
+        "schedule": crontab(minute="*/10"),
+    },
 }
 
 app.autodiscover_tasks()

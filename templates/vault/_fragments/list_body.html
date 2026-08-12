@@ -56,8 +56,21 @@
                       hx-target="#modal-container" hx-swap="innerHTML">
                 {{ document.title }}
               </button>
-              {% if not document.is_scanned %}
-                {# Said out loud: the file is stored but cannot be taken yet. #}
+              {% comment %}
+                Said out loud, and differently for each case: "wait a moment",
+                "somebody should look at this" and "this file is dangerous" are
+                three different messages, and one badge for all three is a lie.
+              {% endcomment %}
+              {% if document.scan_state == "INFECTED" %}
+                <span class="badge-soft badge-soft--danger" title="{{ document.scan_result }}">
+                  {% translate "Quarantined" %}
+                </span>
+              {% elif document.scan_state == "ERROR" %}
+                <span class="badge-soft badge-soft--attention"
+                      title="{% translate 'The scanner could not be reached. This will be retried.' %}">
+                  {% translate "Scan failed" %}
+                </span>
+              {% elif document.scan_state == "PENDING" %}
                 <span class="badge-soft badge-soft--attention"
                       title="{% translate 'Waiting for virus scanning to finish' %}">
                   {% translate "Scanning" %}

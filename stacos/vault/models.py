@@ -64,6 +64,36 @@ class DocumentKind(models.TextChoices):
     OTHER = "OTHER", _("Other")
 
 
+class ScanState(models.TextChoices):
+    """Where a file is in the scanning pipeline.
+
+    Three of these are terminal and one is not, and the distinction is the whole
+    point of not using a boolean. ``ERROR`` means the engine could not be
+    reached: the file is neither safe nor condemned, it is unknown, and the sweep
+    task will ask again. Folding that into "not scanned" makes an engine outage
+    indistinguishable from a queue backlog; folding it into "infected" quarantines
+    a firm's real documents because a daemon restarted.
+    """
+
+    PENDING = "PENDING", _("Waiting to be scanned")
+    CLEAN = "CLEAN", _("Scanned, no threat found")
+    INFECTED = "INFECTED", _("Threat found — quarantined")
+    ERROR = "ERROR", _("Scanner unavailable")
+
+
+class OcrState(models.TextChoices):
+    """Whether text has been pulled out of a file, and whether it is worth trying.
+
+    ``SKIPPED`` exists so a spreadsheet is not re-queued nightly forever by a
+    sweep looking for documents with no extracted text.
+    """
+
+    PENDING = "PENDING", _("Not yet processed")
+    DONE = "DONE", _("Text extracted")
+    EMPTY = "EMPTY", _("Processed, no text found")
+    SKIPPED = "SKIPPED", _("Not a file text can be read from")
+
+
 class LinkTarget(models.TextChoices):
     """What a document can be attached to.
 
@@ -157,16 +187,26 @@ class Document(TenantScopedModel, SoftDeleteModel):
     #: means "keep indefinitely", which is the safe default for evidence.
     retain_until = models.DateField(null=True, blank=True)
 
-    #: Cleared once a scanner has passed the file. Downloads of an unscanned file
-    #: are refused — a compliance product that distributes malware between a
+    #: Where this file is in the scanning pipeline. Downloads are refused until
+    #: it reads CLEAN — a compliance product that distributes malware between a
     #: practice and its clients has one incident and no customers.
-    is_scanned = models.BooleanField(default=False)
-    scan_result = models.CharField(max_length=40, blank=True)
+    scan_state = models.CharField(
+        max_length=10, choices=ScanState.choices, default=ScanState.PENDING, db_index=True
+    )
+    #: The engine's own words: `clean:clamav`, `clamav:Win.Trojan.Agent`. Kept
+    #: verbatim because "which signature" is the first question anybody asks
+    #: about a quarantined file, and the second is "which engine said so".
+    scan_result = models.CharField(max_length=120, blank=True)
+    scanned_at = models.DateTimeField(null=True, blank=True)
 
     #: Populated by OCR where the file is an image or a scanned PDF. Indexed for
     #: full-text search rather than parsed: the useful query is "which document
     #: mentions this notice number", not "extract field 7".
     extracted_text = models.TextField(blank=True)
+    ocr_state = models.CharField(
+        max_length=10, choices=OcrState.choices, default=OcrState.PENDING, db_index=True
+    )
+    ocr_engine = models.CharField(max_length=20, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -188,7 +228,44 @@ class Document(TenantScopedModel, SoftDeleteModel):
 
     @property
     def is_downloadable(self) -> bool:
-        return self.is_scanned and not self.is_archived
+        return self.scan_state == ScanState.CLEAN and not self.is_archived
+
+    @property
+    def is_quarantined(self) -> bool:
+        return self.scan_state == ScanState.INFECTED
+
+    @property
+    def download_refusal(self) -> str:
+        """Why the bytes are being withheld, in words a user can act on.
+
+        A single "not available" covers three situations a user would respond to
+        differently — wait, tell somebody, or stop trying — so each one says
+        which it is.
+
+        Resolved to a real string rather than left lazy: this is only ever called
+        while rendering a response, so the active language is already bound, and
+        the caller is sometimes an `HttpResponse` body rather than a template.
+        """
+        if self.is_downloadable:
+            return ""
+        if self.scan_state == ScanState.INFECTED:
+            return str(
+                _(
+                    "This file was quarantined: the virus scanner found %(signature)s. "
+                    "It cannot be downloaded. Ask whoever uploaded it to send a clean copy."
+                )
+                % {"signature": self.scan_result or _("a threat")}
+            )
+        if self.scan_state == ScanState.ERROR:
+            return str(
+                _(
+                    "This file could not be scanned because the scanner was unavailable. "
+                    "It will be retried automatically; downloads stay blocked until it passes."
+                )
+            )
+        if self.is_archived:
+            return str(_("This document has been archived."))
+        return str(_("This file has not finished virus scanning yet. Try again shortly."))
 
     @staticmethod
     def hash_bytes(data: bytes) -> str:

@@ -16,7 +16,13 @@ from stacos.accounts.models import User
 from stacos.core.models import AuditAction, AuditLog
 from stacos.core.scope import platform_scope
 from stacos.tenancy.models import Entity, Tenant
-from stacos.vault.models import Document, DocumentDownload, DocumentLink, LinkTarget
+from stacos.vault.models import (
+    Document,
+    DocumentDownload,
+    DocumentLink,
+    LinkTarget,
+    ScanState,
+)
 from stacos.vault.services import attach, detach, documents_for, record_download, replace, store
 from tests.conftest import sign_in
 
@@ -148,7 +154,7 @@ def test_replacing_a_document_keeps_the_old_bytes(org: Tenant, entity_a: Entity)
     assert version.reason == "Corrected figures"
     # A replaced file has to be re-scanned; the old clearance said nothing about
     # the new bytes.
-    assert not document.is_scanned
+    assert document.scan_state == ScanState.PENDING
 
 
 # ===========================================================================
@@ -172,8 +178,8 @@ def test_a_scanned_document_downloads_and_is_logged(
 ) -> None:
     with platform_scope(reason="test"):
         document, _ = store(tenant=org, entity=entity_a, upload=_upload())
-        document.is_scanned = True
-        document.save(update_fields=["is_scanned"])
+        document.scan_state = ScanState.CLEAN
+        document.save(update_fields=["scan_state"])
 
     response = signed_in.get(reverse("vault:download", args=[document.pk]))
     assert response.status_code == 200

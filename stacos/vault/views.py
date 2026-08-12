@@ -178,9 +178,13 @@ def document_download(request: HttpRequest, pk: str) -> HttpResponseBase:
         # Refusing an unscanned file is not paranoia: a practice and its clients
         # exchange files through this product, and one distributed malware
         # incident ends it.
+        #
+        # 409 for "not yet" and 403 for "never": the first invites a retry and
+        # the second forecloses it, and a client polling a quarantined file
+        # forever is a support call nobody needs.
         return HttpResponse(
-            _("This file has not finished virus scanning yet. Try again shortly."),
-            status=409,
+            document.download_refusal,
+            status=403 if document.is_quarantined else 409,
             content_type="text/plain; charset=utf-8",
         )
 

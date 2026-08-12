@@ -1,0 +1,43 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Notifications' %}"
+               subtitle="{% translate 'Everything the platform has told you, newest first.' %}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'notifications:preferences' %}"
+     hx-get="{% url 'notifications:preferences' %}" hx-target="#main" hx-push-url="true">
+    {% translate "Settings" %}
+  </a>
+  {% if unread %}
+    <button class="btn btn-sm btn-primary"
+            hx-post="{% url 'notifications:mark_all' %}"
+            hx-swap="none">
+      {% translate "Mark all as read" %}
+    </button>
+  {% endif %}
+</c-page-header>
+
+<div class="stat-row">
+  <a class="stat-tile {% if unread %}stat-tile--attention{% else %}stat-tile--quiet{% endif %}"
+     href="?filter=unread" hx-get="?filter=unread" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ unread }}</span>
+    <span class="stat-tile__label">{% translate "Unread" %}</span>
+  </a>
+  <a class="stat-tile stat-tile--quiet" href="?" hx-get="?" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ notifications|length }}</span>
+    <span class="stat-tile__label">{% translate "Showing" %}</span>
+  </a>
+</div>
+
+{% comment %}
+  `aria-live` because a row is swapped in place when it is marked read, and a
+  screen reader is otherwise told nothing at all about a partial update.
+{% endcomment %}
+<ol class="timeline" id="notification-list" aria-live="polite" aria-atomic="false">
+  {% for notification in notifications %}
+    {% include "notifications/_fragments/row.html" %}
+  {% empty %}
+    <li>
+      <c-empty-state title="{% translate 'Nothing to report' %}"
+                     body="{% translate 'Reminders about filings, requests and deadlines appear here.' %}" />
+    </li>
+  {% endfor %}
+</ol>

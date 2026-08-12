@@ -130,9 +130,7 @@ class ClamAVScanner(Scanner):
                         # it under us, which would be indistinguishable from a
                         # crash and would retry forever.
                         sock.sendall(b"\0\0\0\0")
-                        raise ScanError(
-                            f"File exceeds the scanner's {self.max_bytes} byte limit."
-                        )
+                        raise ScanError(f"File exceeds the scanner's {self.max_bytes} byte limit.")
                     sock.sendall(len(chunk).to_bytes(4, "big") + chunk)
 
                 sock.sendall(b"\0\0\0\0")

@@ -25,11 +25,36 @@ from stacos.vault.models import (
     DocumentLink,
     DocumentVersion,
     LinkTarget,
+    OcrState,
+    ScanState,
 )
 
 logger = structlog.get_logger(__name__)
 
 __all__ = ["attach", "detach", "documents_for", "record_download", "store"]
+
+
+def _queue_scan(document: Document) -> None:
+    """Hand the new bytes to the scanner, after the row is durable.
+
+    ``on_commit`` rather than a direct call: a worker is fast enough to pick the
+    message up before this transaction commits, and then it queries for a
+    document that does not exist yet and gives up. That race is rare on a laptop
+    and routine under load, which is the worst combination.
+
+    Imported here rather than at module scope because `tasks` imports the models
+    this module also imports; at module scope that is a cycle.
+    """
+    from stacos.vault.tasks import scan_document
+
+    tenant_id = str(document.tenant_id)
+    document_id = str(document.pk)
+    transaction.on_commit(
+        lambda: scan_document.apply_async(
+            kwargs={"tenant_id": tenant_id, "document_id": document_id}
+        )
+    )
+
 
 #: Read in chunks so a 200 MB scanned assessment order does not become 200 MB of
 #: resident memory per concurrent upload.
@@ -92,12 +117,10 @@ def store(
         tags=tags or [],
         note=note,
         uploaded_by=actor if getattr(actor, "is_authenticated", False) else None,
-        # Cleared by the scanner. Until then the file is stored but not
-        # downloadable — see `Document.is_downloadable`.
-        is_scanned=False,
     )
     document.file = upload
     document.save()
+    _queue_scan(document)
 
     record_event(
         action=AuditAction.CREATE,
@@ -225,19 +248,29 @@ def replace(
     document.content_hash = _hash_upload(upload)
     document.size_bytes = upload.size or 0
     document.original_filename = (upload.name or "")[:250]
-    document.is_scanned = False
+    # New bytes are unscanned bytes. Carrying the old verdict forward would let
+    # anyone with replace rights launder a file past the scanner, which is the
+    # obvious way to attack a pipeline like this one.
+    document.scan_state = ScanState.PENDING
     document.scan_result = ""
+    document.scanned_at = None
+    document.extracted_text = ""
+    document.ocr_state = OcrState.PENDING
     document.save(
         update_fields=[
             "file",
             "content_hash",
             "size_bytes",
             "original_filename",
-            "is_scanned",
+            "scan_state",
             "scan_result",
+            "scanned_at",
+            "extracted_text",
+            "ocr_state",
             "updated_at",
         ]
     )
+    _queue_scan(document)
 
     record_event(
         action=AuditAction.UPDATE,

@@ -83,6 +83,7 @@ LOCAL_APPS = [
     "stacos.vault",
     "stacos.requests",
     "stacos.notices",
+    "stacos.notifications",
     "stacos.returns",
     "stacos.secretarial",
     "stacos.practice",
@@ -153,6 +154,9 @@ TEMPLATES = [
                 # Public navigation and footer. Module constants only — no
                 # queries, so it is cheap enough to run on every render.
                 "stacos.marketing.context_processors.marketing_chrome",
+                # One count on a partial index. It guards itself against running
+                # outside a tenant scope — see the module docstring.
+                "stacos.notifications.context_processors.notification_badge",
             ],
             # django-cotton's loader must precede the app-directories loader.
             # In production these are wrapped by the cached loader (see prod.py).
@@ -321,6 +325,36 @@ WHATSAPP = {
     # daily spend cap. Reconciled against Meta's billing webhook.
     "COST_PER_MESSAGE": env("WHATSAPP_COST_PER_MESSAGE", default="0.125"),
     "DAILY_SPEND_CAP_UNITS": env.int("WHATSAPP_DAILY_SPEND_CAP_UNITS", default=1000),
+}
+
+# --- Vault: scanning and text extraction --------------------------------------
+# Files move between a practice and its clients through this product, which is
+# exactly the path a malicious document is built to travel. Nothing becomes
+# downloadable until an engine has passed it.
+#
+# The development scanner passes everything except the EICAR test string, so the
+# quarantine path is reachable on a laptop with no daemon installed. Running it
+# with DEBUG off is refused by `stacos.vault.E001` — see stacos/vault/checks.py.
+VAULT_SCANNER = {
+    "PROVIDER": env("VAULT_SCANNER", default="development"),  # clamav | development | memory
+    "HOST": env("CLAMAV_HOST", default="127.0.0.1"),
+    "PORT": env.int("CLAMAV_PORT", default=3310),
+    "TIMEOUT": env.int("CLAMAV_TIMEOUT", default=30),
+    # clamd's own StreamMaxLength. Raise both together or the daemon drops the
+    # connection mid-stream, which reads here as an outage rather than a limit.
+    "MAX_BYTES": env.int("CLAMAV_MAX_BYTES", default=25 * 1024 * 1024),
+}
+
+# OCR is optional and degrades to "not searchable by content" when the binaries
+# are absent. `local` needs poppler-utils (pdftotext, pdftoppm) and tesseract on
+# PATH; it prefers a PDF's own text layer and only rasterises when there is none.
+VAULT_OCR = {
+    "PROVIDER": env("VAULT_OCR", default="none"),  # local | none | memory
+    "LANGUAGES": env("VAULT_OCR_LANGUAGES", default="eng"),
+    "TIMEOUT": env.int("VAULT_OCR_TIMEOUT", default=120),
+    # Pages rasterised from a scanned PDF. A bound, because a 400-page assessment
+    # record would otherwise hold an OCR worker for an hour.
+    "MAX_PAGES": env.int("VAULT_OCR_MAX_PAGES", default=20),
 }
 
 

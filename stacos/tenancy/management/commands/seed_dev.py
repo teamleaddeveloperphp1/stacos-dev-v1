@@ -21,6 +21,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
@@ -47,6 +48,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument("--reset", action="store_true", help="Delete existing demo data first.")
+        parser.add_argument(
+            "--bare",
+            action="store_true",
+            help="Tenants and entities only — skip the in-flight work `seed_work` adds.",
+        )
 
     @transaction.atomic
     def handle(self, *args: Any, **options: Any) -> None:
@@ -59,6 +65,13 @@ class Command(BaseCommand):
             self._users(org, practice)
             entities = self._entities(org)
             self._engagement(practice, entities["textile"])
+
+        # The world exists; now fill it with work. Kept in its own command
+        # because it imports nine modules, and a command in `tenancy` reaching
+        # into `billing` and `practice` inverts the dependency direction the app
+        # list is careful about. `--bare` skips it for a clean slate.
+        if not options["bare"]:
+            call_command("seed_work")
 
         self.stdout.write(self.style.SUCCESS("\nDemo data ready."))
         self.stdout.write(

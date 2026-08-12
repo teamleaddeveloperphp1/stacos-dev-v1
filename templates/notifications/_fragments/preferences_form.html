@@ -1,0 +1,28 @@
+{% load i18n crispy_forms_tags %}
+
+<form id="notification-preferences" class="card"
+      hx-post="{% url 'notifications:preferences' %}"
+      hx-target="#notification-preferences" hx-swap="outerHTML">
+  {% csrf_token %}
+
+  <div aria-live="polite" aria-atomic="true">
+    {% if saved %}
+      <div class="callout callout--info">{% translate "Your settings have been saved." %}</div>
+    {% endif %}
+  </div>
+
+  {% comment %}
+    Said plainly rather than buried in help text. Somebody turning things off
+    should know exactly what will still reach them — otherwise the first urgent
+    message after they opted out reads as the product ignoring them.
+  {% endcomment %}
+  <div class="callout">
+    {% blocktranslate %}Urgent deadlines — an overdue filing, a notice response date — are always sent, whatever you choose here. Everything else follows these settings.{% endblocktranslate %}
+  </div>
+
+  {% crispy form %}
+
+  <div class="action-bar">
+    <button type="submit" class="btn btn-primary">{% translate "Save" %}</button>
+  </div>
+</form>

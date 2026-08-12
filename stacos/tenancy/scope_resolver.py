@@ -35,9 +35,24 @@ from stacos.tenancy.models import Membership, Tenant
 
 logger = structlog.get_logger(__name__)
 
-__all__ = ["SESSION_TENANT_KEY", "resolve_scope_for_membership", "resolve_scope_for_request"]
+__all__ = [
+    "SESSION_TENANT_KEY",
+    "TENANT_HEADER",
+    "resolve_scope_for_membership",
+    "resolve_scope_for_request",
+]
 
 SESSION_TENANT_KEY = "stacos_tenant_id"
+
+#: How a mobile client says which tenant it is working in. A JWT request has no
+#: session, so without this an accountant who works across four clients would be
+#: permanently stuck in whichever membership happened to be created first.
+#:
+#: Safe to take from the client because the lookup that consumes it is anchored
+#: on the authenticated user: a forged id resolves to no membership and falls
+#: back, exactly as a stale session value does. It cannot widen access.
+TENANT_HEADER = "X-Stacos-Tenant"
+
 REQUEST_CACHE_ATTR = "_stacos_access_scope"
 
 
@@ -84,14 +99,33 @@ def _select_membership(request: HttpRequest) -> Membership | None:
             .order_by("created_at")
         )
 
-        selected = request.session.get(SESSION_TENANT_KEY)
-        if selected:
+        for selected, source in (
+            (_session_selection(request), "session"),
+            (request.headers.get(TENANT_HEADER), "header"),
+        ):
+            if not selected:
+                continue
             membership = cast("Membership | None", base.filter(tenant_id=selected).first())
             if membership is not None:
                 return membership
-            logger.info("tenancy.stale_tenant_selection", user_id=str(user.pk), tenant_id=selected)
+            logger.info(
+                "tenancy.stale_tenant_selection",
+                user_id=str(user.pk),
+                tenant_id=selected,
+                source=source,
+            )
 
         return cast("Membership | None", base.first())
+
+
+def _session_selection(request: HttpRequest) -> str | None:
+    """The tenant switcher's choice, when there is a session at all.
+
+    A mobile request authenticated by JWT has no session, and touching
+    ``request.session`` on one would raise.
+    """
+    session = getattr(request, "session", None)
+    return session.get(SESSION_TENANT_KEY) if session is not None else None
 
 
 def resolve_scope_for_membership(membership: Membership, *, reason: str) -> AccessScope:

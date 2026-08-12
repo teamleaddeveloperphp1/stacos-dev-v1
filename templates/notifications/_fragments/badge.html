@@ -1,0 +1,8 @@
+{% comment %}
+  Swapped out of band whenever the unread count changes. Rendered empty rather
+  than as "0": a badge showing zero is a badge that has stopped meaning anything,
+  and `:not(:empty)` in the stylesheet hides it on that basis.
+{% endcomment %}
+<span id="notification-badge"
+      class="app-nav__count{% if unread %} app-nav__count--alert{% endif %}"
+      aria-live="polite">{% if unread %}{{ unread }}{% endif %}</span>

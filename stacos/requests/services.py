@@ -30,6 +30,8 @@ logger = structlog.get_logger(__name__)
 __all__ = [
     "RequestError",
     "close_request",
+    "due_for_reminder",
+    "mark_reminded",
     "record_response",
     "refresh_state",
     "reject_response",
@@ -102,18 +104,64 @@ def send_request(request: InformationRequest, *, actor: Any = None) -> Informati
 def notify(request: InformationRequest, *, reason: str) -> None:
     """Tell the recipient there is something waiting.
 
-    Deliberately thin: the notifications module owns channel selection, template
-    approval and spend. Until it exists this records intent rather than
-    pretending to deliver, because a silent no-op here would look identical to a
-    working reminder right up until a client complained they were never asked.
+    Still deliberately thin: this says what happened, and the notifications
+    module decides who hears about it, on which channel, and whether they have
+    already been told. Imported inside the function because `notifications.tasks`
+    reaches back into this module for the reminder ladder.
     """
+    from stacos.notifications.models import NotificationKind, Severity, SubjectType
+    from stacos.notifications.services import raise_notification
+
+    outstanding = [item.label for item in request.items.all() if not item.is_answered]
+
     logger.info(
         "rfi.notify",
         request_id=str(request.pk),
         reason=reason,
         recipient=request.assigned_email or str(request.assigned_to_id or ""),
-        outstanding=[item.label for item in request.items.all() if not item.is_answered][:10],
+        outstanding=outstanding[:10],
     )
+
+    if request.assigned_to_id is None:
+        # An external contact with no account. The email goes out through the
+        # request's own delivery path rather than as a notification, because a
+        # notification is addressed to a *user* and there is not one here.
+        return
+
+    raise_notification(
+        tenant_id=request.tenant_id,
+        recipient=request.assigned_to,
+        kind=NotificationKind.REQUEST_SENT,
+        severity=Severity.ATTENTION,
+        entity=request.entity,
+        title=f"{len(outstanding)} item(s) requested — {request.title}",
+        body="\n".join(f"• {label}" for label in outstanding[:10]),
+        url=f"/app/requests/{request.pk}/",
+        subject_type=SubjectType.REQUEST,
+        subject_id=request.pk,
+        # Keyed on the reason, so "sent" and a later "reopened" are separate
+        # events while a retried send is not.
+        dedupe_key=f"request:{request.pk}:{reason}",
+        context={
+            "entity": request.entity.name if request.entity else "",
+            "count": str(len(outstanding)),
+            "date": f"{request.due_on:%d %b %Y}" if request.due_on else "",
+        },
+    )
+
+
+def mark_reminded(request: InformationRequest, *, on: date) -> None:
+    """Record that today's reminder went out.
+
+    Written after the notifications are raised rather than before: a sweep that
+    crashed halfway through should chase the remaining people on the next run,
+    and a stamp written first would silently suppress that for a day.
+    """
+    request.last_reminder_at = timezone.now()
+    InformationRequest.objects.filter(pk=request.pk).update(
+        last_reminder_at=request.last_reminder_at
+    )
+    logger.info("rfi.reminded", request_id=str(request.pk), on=on.isoformat())
 
 
 @transaction.atomic
