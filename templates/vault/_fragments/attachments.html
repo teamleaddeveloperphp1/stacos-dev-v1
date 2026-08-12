@@ -1,0 +1,35 @@
+{% load i18n %}
+{% comment %}
+  The attachment strip, used everywhere something owns documents.
+
+  One partial rather than one per module, so an information request item, an
+  obligation and a notice all get the same control — and a change to how
+  attachments behave happens once.
+{% endcomment %}
+<div class="attachments" id="attachments-{{ target_id }}" aria-live="polite" aria-atomic="false">
+  <ul class="attachments__list">
+    {% for document in documents %}
+      <li class="attachments__item">
+        <c-icon name="document" size="14" />
+        <span class="attachments__name">{{ document.title }}</span>
+        {% if document.is_downloadable %}
+          <a class="attachments__action" href="{% url 'vault:download' document.pk %}">
+            {% translate "Download" %}
+          </a>
+        {% else %}
+          <span class="text-muted small">{% translate "Scanning…" %}</span>
+        {% endif %}
+      </li>
+    {% empty %}
+      <li class="text-muted small">{% translate "Nothing attached." %}</li>
+    {% endfor %}
+  </ul>
+
+  {% if can_upload %}
+    <button class="btn btn-sm btn-outline-secondary"
+            hx-get="{% url 'vault:upload' %}?target_type={{ target_type }}&target_id={{ target_id }}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+      <c-icon name="plus" size="12" /> {% translate "Attach a file" %}
+    </button>
+  {% endif %}
+</div>

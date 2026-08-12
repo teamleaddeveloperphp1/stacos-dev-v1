@@ -1,0 +1,32 @@
+{% load i18n %}
+{% comment %}
+  Open notices for one entity, embedded in its detail page. Deliberately shows
+  only open ones: a closed notice is history and belongs in the register, not on
+  the entity's front page.
+{% endcomment %}
+<section class="card" id="entity-notices" aria-live="polite" aria-atomic="false">
+  <div class="card__header">
+    <h2 class="card__title">{% translate "Open notices" %}</h2>
+    <a class="small" href="{% url 'notices:list' %}?entity={{ entity_pk }}&status=all"
+       hx-get="{% url 'notices:list' %}?entity={{ entity_pk }}&status=all"
+       hx-target="#main" hx-push-url="true">{% translate "See all" %}</a>
+  </div>
+
+  <ul class="due-list">
+    {% for notice in notices %}
+      <li class="due-list__item">
+        <a href="{% url 'notices:detail' notice.pk %}"
+           hx-get="{% url 'notices:detail' notice.pk %}"
+           hx-target="#main" hx-push-url="true">{{ notice.subject }}</a>
+        <span class="text-muted small">{{ notice.authority.short_name|default:notice.authority.code }}</span>
+        {% if notice.respond_by %}
+          <c-due-badge :date="notice.respond_by" :days="notice.days_remaining" />
+        {% else %}
+          <span class="link-attention small">{% translate "No deadline set" %}</span>
+        {% endif %}
+      </li>
+    {% empty %}
+      <li class="text-muted small">{% translate "No open notices." %}</li>
+    {% endfor %}
+  </ul>
+</section>

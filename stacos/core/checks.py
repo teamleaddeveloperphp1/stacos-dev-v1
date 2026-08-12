@@ -71,6 +71,10 @@ GLOBAL_MODEL_ALLOWLIST: dict[str, str] = {
     "catalog.ComplianceDefinition": "Platform-owned reference data; the law is the same for all tenants.",
     "catalog.DefinitionVersion": "Platform-owned reference data; append-only versions of the above.",
     "catalog.GovernmentExtension": "Platform-owned reference data; a published notification is public.",
+    # The price list is the same for everyone. A negotiated price is a discount
+    # on a subscription, not a private plan — otherwise the list becomes
+    # unenumerable and nobody can answer "what do we charge".
+    "billing.Plan": "Published price list; identical for every customer.",
     # An invitation frequently predates the receiving tenant existing at all, so
     # it cannot carry that tenant's id. Access is controlled by a single-use
     # hashed token and an expiry instead.

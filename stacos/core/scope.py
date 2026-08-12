@@ -164,13 +164,20 @@ def tenant_context(
         permissions=frozenset(permissions),
         reason=reason,
     )
+    previous = _current.get()
     token: Token[AccessScope | None] = _current.set(scope)
     _sync_rls(tenant_ids=readable)
     try:
         yield scope
     finally:
         _current.reset(token)
-        _sync_rls(tenant_ids=frozenset())
+        # Restore what was bound before, rather than clearing. Scopes nest: a
+        # service inside a scope calls another service that opens its own, and an
+        # unconditional clear on the inner exit would silently leave the outer
+        # one with no tenants — which fails *closed*, so the symptom is a query
+        # returning nothing rather than an error, in a caller that never asked
+        # for a nested scope.
+        _restore_rls(previous)
 
 
 @contextlib.contextmanager
@@ -183,6 +190,7 @@ def platform_scope(*, reason: str, actor_id: UUID | None = None) -> Iterator[Acc
     through consented, time-boxed impersonation instead.
     """
     scope = AccessScope(reason=f"platform:{reason}", bypass=True)
+    previous = _current.get()
     token: Token[AccessScope | None] = _current.set(scope)
     _sync_rls(bypass=True)
     try:
@@ -190,7 +198,26 @@ def platform_scope(*, reason: str, actor_id: UUID | None = None) -> Iterator[Acc
         yield scope
     finally:
         _current.reset(token)
-        _sync_rls(bypass=False)
+        _restore_rls(previous)
+
+
+def _restore_rls(previous: AccessScope | None) -> None:
+    """Put PostgreSQL's settings back to whatever the enclosing scope had.
+
+    Nesting is not exotic: billing opens a platform scope to write a commission
+    row into a *dealer's* tenant while already inside the client's. Turning the
+    bypass off on the inner exit would leave the outer scope reading through RLS
+    with nothing bound — and RLS fails closed, so the caller sees an empty
+    queryset rather than an error. That is the worst possible failure mode, and
+    this function is what prevents it.
+    """
+    if previous is None:
+        _sync_rls(tenant_ids=frozenset(), bypass=False)
+        return
+    if previous.bypass:
+        _sync_rls(bypass=True)
+        return
+    _sync_rls(tenant_ids=previous.readable_tenant_ids, bypass=False)
 
 
 def _sync_rls(

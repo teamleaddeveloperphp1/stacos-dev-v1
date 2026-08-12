@@ -1,0 +1,48 @@
+{% load i18n %}
+
+<c-page-header title="{{ item.title }}"
+               subtitle="{% if item.client_tenant %}{{ item.client_tenant.name }}{% endif %}{% if item.due_on %} · {% translate 'due' %} {{ item.due_on|date:'j M Y' }}{% endif %}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'practice:board' %}"
+     hx-get="{% url 'practice:board' %}" hx-target="#main" hx-push-url="true">
+    {% translate "Back to the board" %}
+  </a>
+</c-page-header>
+
+<div class="detail-grid">
+  <div class="detail-grid__main">
+    {% include "practice/_fragments/work_panel.html" %}
+  </div>
+
+  <aside class="detail-grid__aside">
+    <section class="card">
+      <h2 class="card__title">{% translate "Details" %}</h2>
+      <dl class="key-values small">
+        <dt>{% translate "Assigned to" %}</dt><dd>{{ item.assigned_to|default:"—" }}</dd>
+        <dt>{% translate "Reviewer" %}</dt><dd>{{ item.reviewer|default:"—" }}</dd>
+        <dt>{% translate "Priority" %}</dt><dd>{{ item.get_priority_display }}</dd>
+        {% if item.estimated_hours %}
+          <dt>{% translate "Estimate" %}</dt><dd>{{ item.estimated_hours }}h</dd>
+        {% endif %}
+        <dt>{% translate "Logged" %}</dt><dd>{{ hours_logged }}h</dd>
+        {% if item.fixed_fee %}
+          <dt>{% translate "Fixed fee" %}</dt><dd>{{ item.fixed_fee|inr }}</dd>
+        {% endif %}
+        {% if wip is not None %}
+          {% comment %}
+            Recomputed from the time ledger, never a stored balance. Rates change
+            and entries get corrected, and this is the number a partner bills from.
+          {% endcomment %}
+          <dt>{% translate "Work in progress" %}</dt><dd>{{ wip|inr }}</dd>
+        {% endif %}
+      </dl>
+      {% if item.description %}<p class="small">{{ item.description|linebreaksbr }}</p>{% endif %}
+    </section>
+
+    {% if item.obligation_id %}
+      <section class="card">
+        <h2 class="card__title">{% translate "For" %}</h2>
+        <p class="small">{{ item.obligation_title }}</p>
+      </section>
+    {% endif %}
+  </aside>
+</div>

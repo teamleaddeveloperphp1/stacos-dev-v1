@@ -1,0 +1,77 @@
+{% load i18n %}
+{% comment %}
+  What each client was worth and what is still unbilled.
+
+  Everything here is recomputed from the time ledger. A stored WIP balance and a
+  time ledger disagree eventually, and when they do the number a partner bills
+  from is the wrong one.
+{% endcomment %}
+
+<c-page-header title="{% translate 'Profitability' %}"
+               subtitle="{% blocktranslate with since=since|date:'j M Y' %}Time logged since {{ since }}.{% endblocktranslate %}">
+  <div class="btn-group btn-group-sm">
+    <a class="btn btn-outline-secondary {% if days == '30' %}active{% endif %}" href="?days=30"
+       hx-get="?days=30" hx-target="#main" hx-push-url="true">{% translate "30 days" %}</a>
+    <a class="btn btn-outline-secondary {% if days == '90' or not days %}active{% endif %}" href="?days=90"
+       hx-get="?days=90" hx-target="#main" hx-push-url="true">{% translate "90 days" %}</a>
+    <a class="btn btn-outline-secondary {% if days == '365' %}active{% endif %}" href="?days=365"
+       hx-get="?days=365" hx-target="#main" hx-push-url="true">{% translate "Year" %}</a>
+  </div>
+</c-page-header>
+
+<div class="stat-row">
+  <span class="stat-tile">
+    <span class="stat-tile__value">{{ total_value|inr }}</span>
+    <span class="stat-tile__label">{% translate "Billable value" %}</span>
+  </span>
+  <span class="stat-tile stat-tile--attention">
+    <span class="stat-tile__value">{{ total_unbilled|inr }}</span>
+    <span class="stat-tile__label">{% translate "Still unbilled" %}</span>
+  </span>
+</div>
+
+<div class="data-table">
+  <div class="data-table__scroll" aria-live="polite" aria-atomic="false">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>{% translate "Client" %}</th>
+          <th class="num">{% translate "Hours" %}</th>
+          <th class="num">{% translate "Billable" %}</th>
+          <th class="num">{% translate "Recovery" %}</th>
+          <th class="num">{% translate "Value" %}</th>
+          <th class="num">{% translate "Unbilled" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in clients %}
+          <tr>
+            <td>{{ row.client_tenant__name|default:"—" }}</td>
+            <td class="num">{{ row.hours|default:0 }}</td>
+            <td class="num">{{ row.billable_hours|default:0 }}</td>
+            <td class="num">
+              {# Low recovery is where a fixed fee is quietly losing money. #}
+              <span class="{% if row.recovery < 70 %}status-text--overdue{% endif %}">
+                {{ row.recovery|floatformat:0 }}%
+              </span>
+            </td>
+            <td class="num">{{ row.value|default:0|inr }}</td>
+            <td class="num">{{ row.unbilled|default:0|inr }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="p-0">
+              <c-empty-state title="{% translate 'No time logged yet' %}"
+                             body="{% translate 'Log time against a work item and this fills in.' %}">
+                <a class="btn btn-sm btn-primary" href="{% url 'practice:board' %}"
+                   hx-get="{% url 'practice:board' %}" hx-target="#main" hx-push-url="true">
+                  {% translate "Go to the board" %}
+                </a>
+              </c-empty-state>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

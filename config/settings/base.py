@@ -79,6 +79,16 @@ LOCAL_APPS = [
     # tenant owes. Catalog first, because obligations reference its models.
     "stacos.catalog",
     "stacos.obligations",
+    # The vault comes before the modules that attach documents to things.
+    "stacos.vault",
+    "stacos.requests",
+    "stacos.notices",
+    "stacos.returns",
+    "stacos.secretarial",
+    "stacos.practice",
+    # Billing before dealers: a commission is a share of an invoice.
+    "stacos.billing",
+    "stacos.dealers",
     "stacos.marketing",
     "stacos.api",
     "stacos.platformadmin",

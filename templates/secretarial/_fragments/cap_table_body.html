@@ -1,0 +1,93 @@
+{% load i18n %}
+{% comment %}
+  Holdings, derived by replaying the transaction ledger.
+
+  Nothing here is a stored balance. A stored balance and a transaction history
+  disagree eventually, and when they do nobody can tell which is right — whereas
+  a ledger can always be re-totalled.
+{% endcomment %}
+
+<c-page-header title="{% translate 'Cap table' %}"
+               subtitle="{{ entity.name }}" />
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <section class="card">
+      <h2 class="card__title">{% translate "Holdings" %}</h2>
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>{% translate "Shareholder" %}</th>
+            <th class="num">{% translate "Shares" %}</th>
+            <th class="num">{% translate "%" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in holdings %}
+            <tr>
+              <td>
+                {{ row.shareholder.name }}
+                {% if row.shareholder.is_non_resident %}
+                  <span class="badge-soft">{% translate "Non-resident" %}</span>
+                {% endif %}
+              </td>
+              <td class="num">{{ row.shares|num }}</td>
+              <td class="num">{{ row.percent|floatformat:2 }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="3" class="p-0">
+                <c-empty-state title="{% translate 'No shareholders recorded' %}"
+                               body="{% translate 'The cap table is built from share transactions — record an allotment and it appears here.' %}" />
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        {% if holdings %}
+          <tfoot>
+            <tr>
+              <th>{% translate "Total" %}</th>
+              <th class="num">{{ total_shares|num }}</th>
+              <th class="num">100.00</th>
+            </tr>
+          </tfoot>
+        {% endif %}
+      </table>
+    </section>
+  </div>
+
+  <div class="col-lg-6">
+    <section class="card">
+      <h2 class="card__title">{% translate "Transactions" %}</h2>
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>{% translate "Date" %}</th>
+            <th>{% translate "Shareholder" %}</th>
+            <th>{% translate "Kind" %}</th>
+            <th class="num">{% translate "Shares" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for transaction in transactions %}
+            <tr>
+              <td>{{ transaction.executed_on|date:"j M Y" }}</td>
+              <td class="text-muted small">{{ transaction.shareholder.name }}</td>
+              <td class="text-muted small">
+                {{ transaction.get_kind_display }}
+                {% if transaction.requires_fcgpr and not transaction.fcgpr_filed_on %}
+                  <span class="badge-soft badge-soft--attention">{% translate "FC-GPR due" %}</span>
+                {% endif %}
+              </td>
+              <td class="num">{{ transaction.quantity|num }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" class="text-muted small">{% translate "No transactions recorded." %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>

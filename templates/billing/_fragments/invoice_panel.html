@@ -1,0 +1,83 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  One invoice, its lines and what has been received against it.
+
+  An issued invoice is never edited. Correcting one means a credit note, because
+  a numbered tax invoice is a document the client has filed against.
+{% endcomment %}
+<div id="invoice-panel" aria-live="polite" aria-atomic="true">
+  {% if error %}
+    <p class="callout callout--danger" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <dl class="key-values small">
+    <dt>{% translate "Status" %}</dt><dd>{{ invoice.get_status_display }}</dd>
+    <dt>{% translate "Issued" %}</dt><dd>{{ invoice.issued_on|date:"j M Y"|default:"—" }}</dd>
+    <dt>{% translate "Due" %}</dt><dd>{{ invoice.due_on|date:"j M Y"|default:"—" }}</dd>
+    <dt>{% translate "Outstanding" %}</dt><dd>{{ outstanding|inr }}</dd>
+  </dl>
+
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>{% translate "Description" %}</th>
+        <th>{% translate "SAC" %}</th>
+        <th class="num">{% translate "Amount" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+        <tr>
+          <td>{{ line.description }}</td>
+          <td class="text-muted small">{{ line.sac_code|default:"—" }}</td>
+          <td class="num">{{ line.amount_minor|minor|inr }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="2">{% translate "GST" %} ({{ invoice.tax_rate_bps|bps }}%)</th>
+        <th class="num">{{ invoice.tax_minor|minor|inr }}</th>
+      </tr>
+      <tr>
+        <th colspan="2">{% translate "Total" %}</th>
+        <th class="num">{{ invoice.total|inr }}</th>
+      </tr>
+    </tfoot>
+  </table>
+
+  {% if payments %}
+    <h3 class="h6">{% translate "Received" %}</h3>
+    <ul class="small">
+      {% for payment in payments %}
+        <li>
+          {{ payment.received_on|date:"j M Y" }} — {{ payment.amount|inr }}
+          ({{ payment.get_method_display }})
+          {% if payment.external_reference %} · {{ payment.external_reference }}{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if can_record_payment and invoice.outstanding_minor %}
+    <form hx-post="{% url 'billing:payment_record' invoice.pk %}"
+          hx-target="#invoice-panel" hx-swap="outerHTML"
+          class="d-flex gap-2 align-items-end flex-wrap mt-3">
+      {% csrf_token %}
+      {% crispy payment_form %}
+      <button class="btn btn-sm btn-primary" type="submit">{% translate "Record payment" %}</button>
+    </form>
+  {% endif %}
+
+  {% if can_void and invoice.status != "VOID" and not payments %}
+    <form hx-post="{% url 'billing:invoice_void' invoice.pk %}"
+          hx-target="#invoice-panel" hx-swap="outerHTML"
+          class="d-flex gap-2 align-items-end mt-2">
+      {% csrf_token %}
+      <label class="visually-hidden" for="void-reason">{% translate "Reason" %}</label>
+      <input class="form-control form-control-sm" id="void-reason" name="reason" required
+             placeholder="{% translate 'Why is this being voided?' %}">
+      <button class="btn btn-sm btn-outline-secondary" type="submit">{% translate "Void" %}</button>
+    </form>
+  {% endif %}
+</div>

@@ -37,6 +37,36 @@ def num(value: Decimal | float | int | str | None, decimals: int = 0) -> str:
     return format_number(value, decimals=int(decimals))
 
 
+@register.filter(name="minor")
+def minor(value: int | None) -> Decimal:
+    """Paise to rupees: ``{{ invoice.total_minor|minor|inr }}``.
+
+    Billing stores every amount as an integer in minor units, so nothing can
+    hand a float to the database. Rendering therefore needs exactly one place
+    that divides by a hundred, and this is it — a template doing its own
+    arithmetic is how a rounding difference reaches an invoice.
+    """
+    if value is None:
+        return Decimal("0.00")
+    try:
+        return (Decimal(int(value)) / 100).quantize(Decimal("0.01"))
+    except (TypeError, ValueError, ArithmeticError):
+        return Decimal("0.00")
+
+
+@register.filter(name="bps")
+def bps(value: int | None) -> str:
+    """Basis points as a percentage: ``{{ rate_bps|bps }}`` -> ``18``.
+
+    Rates are stored in basis points so "12.5%" is exact rather than a float
+    that drifts by a rupee somewhere nobody looks.
+    """
+    if value is None:
+        return "0"
+    quotient = Decimal(int(value)) / 100
+    return f"{quotient.normalize():f}"
+
+
 @register.filter(name="compact")
 def compact(value: Decimal | float | int | str | None) -> str:
     """``{{ turnover|compact }}`` -> ``₹8.00 Cr``."""

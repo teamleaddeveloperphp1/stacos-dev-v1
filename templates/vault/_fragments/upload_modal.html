@@ -1,0 +1,38 @@
+{% load i18n crispy_forms_tags %}
+
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="upload-modal-title">
+  <div class="modal-dialog" role="document">
+    <form class="modal-content"
+          hx-post="{% url 'vault:upload' %}"
+          hx-target="#modal-container"
+          hx-swap="innerHTML"
+          hx-encoding="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="target_type" value="{{ target_type }}">
+      <input type="hidden" name="target_id" value="{{ target_id }}">
+
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="upload-modal-title">{% translate "Upload documents" %}</h2>
+        <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                @click="$dispatch('stacos:modal-close')"></button>
+      </div>
+      <div class="modal-body">
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 small" role="alert">
+            {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+          </div>
+        {% endif %}
+        {% crispy form %}
+        <p class="text-muted small mb-0">
+          {% translate "A file already in the vault is recognised and linked again rather than stored twice." %}
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary"
+                @click="$dispatch('stacos:modal-close')">{% translate "Cancel" %}</button>
+        <button type="submit" class="btn btn-primary">{% translate "Upload" %}</button>
+      </div>
+    </form>
+  </div>
+</div>

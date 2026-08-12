@@ -1,0 +1,37 @@
+{% load i18n %}
+{% comment %}
+  One row of the request queue.
+
+  `progress` reads from the prefetched items, so this costs no query per row —
+  the list view prefetches and the query-count test keeps it that way.
+{% endcomment %}
+{% with progress=request_obj.progress %}
+<tr id="request-{{ request_obj.pk }}" class="{% if request_obj.is_overdue %}row--overdue{% endif %}">
+  <td>
+    <a class="link-strong" href="{% url 'rfi:detail' request_obj.pk %}"
+       hx-get="{% url 'rfi:detail' request_obj.pk %}"
+       hx-target="#main" hx-push-url="true">{{ request_obj.title }}</a>
+    {% if request_obj.obligation %}
+      <div class="text-muted small">{{ request_obj.obligation.title }}</div>
+    {% endif %}
+  </td>
+  <td class="text-muted small">{{ request_obj.entity.name }}</td>
+  <td>
+    <span class="progress-fraction">{{ progress.0 }}/{{ progress.1 }}</span>
+    <span class="visually-hidden">
+      {% blocktranslate with done=progress.0 total=progress.1 %}{{ done }} of {{ total }} answered{% endblocktranslate %}
+    </span>
+  </td>
+  <td>
+    {% if request_obj.due_on %}
+      <time datetime="{{ request_obj.due_on|date:'Y-m-d' }}">{{ request_obj.due_on|date:"j M Y" }}</time>
+    {% else %}
+      <span class="text-muted small">{% translate "No date" %}</span>
+    {% endif %}
+  </td>
+  <td>
+    <c-status-chip status="{% if request_obj.is_overdue %}overdue{% elif request_obj.state == 'ANSWERED' %}complete{% elif request_obj.state == 'CLARIFICATION_NEEDED' %}disputed{% elif request_obj.state == 'CLOSED' %}complete{% elif request_obj.state == 'DRAFT' %}na{% else %}waiting{% endif %}"
+                   :label="request_obj.get_state_display" />
+  </td>
+</tr>
+{% endwith %}

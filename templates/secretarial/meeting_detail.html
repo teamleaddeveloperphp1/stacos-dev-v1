@@ -1,0 +1,6 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{{ meeting }} · STACOS{% endblock %}
+
+{% block main %}{% include "secretarial/_fragments/meeting_detail_body.html" %}{% endblock %}

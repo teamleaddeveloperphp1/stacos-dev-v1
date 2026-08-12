@@ -1,0 +1,100 @@
+{% load i18n %}
+{% comment %}
+  A dealer's commission statement.
+
+  Note what is not on this page and cannot be reached from it: any client
+  compliance data. A commission row *names* a client; naming is not access. Sight
+  of a client's obligations, documents or notices requires an explicit,
+  time-boxed, client-approved engagement, exactly like a professional firm's.
+{% endcomment %}
+
+<c-page-header title="{% translate 'Commission' %}"
+               subtitle="{% if plan %}{{ plan.name }}{% else %}{% translate 'No active commission plan' %}{% endif %}" />
+
+<div class="stat-row" aria-live="polite" aria-atomic="true">
+  <span class="stat-tile">
+    <span class="stat-tile__value">{{ accrued|inr }}</span>
+    <span class="stat-tile__label">{% translate "Accrued" %}</span>
+  </span>
+  <span class="stat-tile stat-tile--attention">
+    <span class="stat-tile__value">{{ approved|inr }}</span>
+    <span class="stat-tile__label">{% translate "Approved for payout" %}</span>
+  </span>
+  <span class="stat-tile stat-tile--quiet">
+    <span class="stat-tile__value">{{ paid|inr }}</span>
+    <span class="stat-tile__label">{% translate "Paid" %}</span>
+  </span>
+  {% if clawed_back %}
+    <span class="stat-tile stat-tile--overdue">
+      <span class="stat-tile__value">{{ clawed_back|inr }}</span>
+      <span class="stat-tile__label">{% translate "Clawed back" %}</span>
+    </span>
+  {% endif %}
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="data-table">
+      <div class="data-table__scroll" id="commission-rows" aria-live="polite" aria-atomic="false">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>{% translate "Invoice" %}</th>
+              <th>{% translate "Client" %}</th>
+              <th class="num">{% translate "Base" %}</th>
+              <th class="num">{% translate "Rate" %}</th>
+              <th class="num">{% translate "Commission" %}</th>
+              <th>{% translate "Status" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+              <tr>
+                <td>{{ entry.invoice_number|default:"—" }}</td>
+                <td class="text-muted small">{{ entry.client_tenant.name }}</td>
+                <td class="num">{{ entry.base_amount_minor|minor|inr }}</td>
+                <td class="num">{{ entry.rate_bps|bps }}%</td>
+                <td class="num {% if entry.amount_minor < 0 %}status-text--overdue{% endif %}">
+                  {{ entry.amount_minor|minor|inr }}
+                </td>
+                <td>
+                  <c-status-chip status="{% if entry.status == 'PAID' %}complete{% elif entry.status == 'CLAWED_BACK' %}disputed{% elif entry.status == 'APPROVED' %}waiting{% else %}in-progress{% endif %}"
+                                 :label="entry.get_status_display" />
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="6" class="p-0">
+                  <c-empty-state title="{% translate 'Nothing accrued yet' %}"
+                                 body="{% translate 'Commission is booked when a client you sold to is invoiced.' %}" />
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <section class="card">
+      <h2 class="card__title">{% translate "Payouts" %}</h2>
+      <ul class="due-list">
+        {% for payout in payouts %}
+          <li class="due-list__item">
+            <button class="btn btn-link p-0"
+                    hx-get="{% url 'dealers:payout_detail' payout.pk %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+              {{ payout.period_start|date:"j M" }} – {{ payout.period_end|date:"j M Y" }}
+            </button>
+            <span class="num">{{ payout.total_minor|minor|inr }}</span>
+            <c-status-chip status="{% if payout.status == 'PAID' %}complete{% elif payout.status == 'APPROVED' %}waiting{% elif payout.status == 'CANCELLED' %}na{% else %}in-progress{% endif %}"
+                           :label="payout.get_status_display" />
+          </li>
+        {% empty %}
+          <li class="text-muted small">{% translate "No payouts yet." %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>

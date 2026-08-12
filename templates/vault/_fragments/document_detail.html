@@ -1,0 +1,72 @@
+{% load i18n %}
+{% comment %}
+  What we know about one file, including who has taken a copy of it. The download
+  log is the point: "who saw this, when" is asked years later about a specific
+  document, and the answer has to be cheap.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="doc-modal-title">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="doc-modal-title">{{ document.title }}</h2>
+        <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                @click="$dispatch('stacos:modal-close')"></button>
+      </div>
+      <div class="modal-body">
+        <dl class="key-values small">
+          <dt>{% translate "Kind" %}</dt><dd>{{ document.get_kind_display }}</dd>
+          <dt>{% translate "Classification" %}</dt><dd>{{ document.get_classification_display }}</dd>
+          <dt>{% translate "Filename" %}</dt><dd>{{ document.original_filename }}</dd>
+          <dt>{% translate "Size" %}</dt><dd>{{ document.size_bytes|filesizeformat }}</dd>
+          <dt>{% translate "Uploaded" %}</dt>
+          <dd>{{ document.created_at|date:"j M Y, H:i" }} · {{ document.uploaded_by|default:"—" }}</dd>
+          <dt>{% translate "Source" %}</dt><dd>{{ document.get_source_display }}</dd>
+        </dl>
+
+        {% if links %}
+          <h3 class="h6">{% translate "Used in" %}</h3>
+          <ul class="small">
+            {% for link in links %}
+              <li>{{ link.get_target_type_display }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {% if versions %}
+          <h3 class="h6">{% translate "Earlier versions" %}</h3>
+          <ul class="small">
+            {% for version in versions %}
+              <li>
+                {% blocktranslate with number=version.version when=version.replaced_at|date:"j M Y" %}
+                  Version {{ number }}, replaced {{ when }}
+                {% endblocktranslate %}
+                {% if version.reason %} — {{ version.reason }}{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        <h3 class="h6">{% translate "Downloads" %}</h3>
+        <ul class="small">
+          {% for download in downloads %}
+            <li>
+              {{ download.downloaded_at|date:"j M Y, H:i" }} — {{ download.actor_label|default:"—" }}
+            </li>
+          {% empty %}
+            <li class="text-muted">{% translate "Nobody has downloaded this." %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="modal-footer">
+        {% if document.is_downloadable %}
+          <a class="btn btn-primary" href="{% url 'vault:download' document.pk %}">
+            {% translate "Download" %}
+          </a>
+        {% else %}
+          <span class="text-muted small">{% translate "Waiting for virus scanning to finish." %}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

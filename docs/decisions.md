@@ -150,7 +150,7 @@ Things that need a decision from the product owner before the module they affect
 
 3. **Government portal scraping — decided: no scraping in v1.** Automated retrieval from the income tax, GST and MCA portals would require holding client credentials and driving a session against terms of service that do not contemplate it. Both are legal exposures, not technical ones, and neither is worth taking before there is a product to protect.
 
-   The notices module will therefore ship with **manual entry and email ingestion**, and a documented adapter interface with no implementation behind it. That interface is the whole point: it keeps the decision reversible, so that a written legal position — or an official API, which is the outcome actually worth waiting for — turns into an adapter rather than a rewrite. The pricing page already says "notice auto-retrieval, where the authority permits it", which is the honest formulation and should stay that way.
+   The notices module therefore shipped with **manual entry**, and a documented adapter interface with no implementation behind it (`stacos/notices/portals.py`). A test asserts the registry is empty, so the day an adapter appears is the day somebody has to justify it. Email ingestion reuses the same `ingest_retrieved` path and is not yet wired to a mailbox. That interface is the whole point: it keeps the decision reversible, so that a written legal position — or an official API, which is the outcome actually worth waiting for — turns into an adapter rather than a rewrite. The pricing page already says "notice auto-retrieval, where the authority permits it", which is the honest formulation and should stay that way.
 
 ### Before launch
 

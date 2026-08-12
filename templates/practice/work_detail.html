@@ -1,0 +1,6 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{{ item.title }} · STACOS{% endblock %}
+
+{% block main %}{% include "practice/_fragments/work_detail_body.html" %}{% endblock %}

@@ -1,0 +1,77 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The card, its column, and its time.
+
+  A user without `practice.time.view_all` sees only their own entries here.
+  Utilisation is a management view, not a peer-comparison tool.
+{% endcomment %}
+<section class="card" id="work-panel" aria-live="polite" aria-atomic="true">
+  {% if error %}
+    <p class="callout callout--danger" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <div class="detail-header">
+    <c-status-chip status="{% if item.state == 'DONE' %}complete{% elif item.state == 'BLOCKED' %}disputed{% elif item.state == 'IN_REVIEW' %}waiting{% elif item.state == 'BACKLOG' %}na{% else %}in-progress{% endif %}"
+                   :label="item.get_state_display" />
+    {% if item.is_overdue %}
+      <span class="badge-soft badge-soft--danger">{% translate "Past its date" %}</span>
+    {% endif %}
+  </div>
+
+  {% if can_manage %}
+    <form hx-post="{% url 'practice:work_move' item.pk %}"
+          hx-target="#work-panel" hx-swap="outerHTML"
+          class="d-flex gap-2 align-items-end mb-3">
+      {% csrf_token %}
+      <label class="visually-hidden" for="work-state">{% translate "Move to" %}</label>
+      <select class="form-select form-select-sm" id="work-state" name="state" style="max-width:14rem">
+        {% for value, label in states %}
+          <option value="{{ value }}" {% if value == item.state %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <input class="form-control form-control-sm" name="reason"
+             placeholder="{% translate 'Reason, if blocked' %}"
+             aria-label="{% translate 'Blocked reason' %}">
+      <button class="btn btn-sm btn-outline-secondary" type="submit">{% translate "Move" %}</button>
+    </form>
+  {% endif %}
+
+  <h3 class="h6">{% translate "Time" %}</h3>
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>{% translate "Date" %}</th>
+        <th>{% translate "Who" %}</th>
+        <th class="num">{% translate "Hours" %}</th>
+        <th>{% translate "Narrative" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in entries %}
+        <tr>
+          <td>{{ entry.worked_on|date:"j M Y" }}</td>
+          <td class="text-muted small">{{ entry.user }}</td>
+          <td class="num">
+            {{ entry.hours }}
+            {% if not entry.is_billable %}
+              <span class="badge-soft">{% translate "Non-billable" %}</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ entry.narrative|default:"—" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="text-muted small">{% translate "No time logged." %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if can_log %}
+    <form hx-post="{% url 'practice:time_log' item.pk %}"
+          hx-target="#work-panel" hx-swap="outerHTML"
+          class="d-flex gap-2 align-items-end flex-wrap">
+      {% csrf_token %}
+      {% crispy time_form %}
+      <button class="btn btn-sm btn-primary" type="submit">{% translate "Log time" %}</button>
+    </form>
+  {% endif %}
+</section>

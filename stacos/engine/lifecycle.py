@@ -41,6 +41,7 @@ __all__ = [
     "derive_display_status",
     "filed_late",
     "is_overdue",
+    "path_to",
     "transition_for",
 ]
 
@@ -341,6 +342,42 @@ def allowed_transitions(
         return moves
     held = frozenset(permissions)
     return tuple(move for move in moves if move.permission in held)
+
+
+def path_to(source: str, target: str) -> tuple[Transition, ...]:
+    """The shortest legal sequence of moves from ``source`` to ``target``.
+
+    Exists because another module frequently knows the *outcome* without knowing
+    the route. Filing a return means the obligation is filed — but an obligation
+    sitting at ``NOT_STARTED`` cannot jump there, and the alternative to walking
+    it is a preparation marked filed beside an obligation that still says "not
+    started". That split-brain is worse than either state being wrong, because
+    the dashboard is the product.
+
+    Breadth-first, so the route taken is the shortest one and therefore the least
+    surprising on the timeline. Returns empty when no route exists, which the
+    caller must treat as "do not force it" rather than as an error: some targets
+    genuinely are unreachable from some states, and that is the table doing its
+    job.
+    """
+    if source == target:
+        return ()
+
+    queue: list[tuple[str, tuple[Transition, ...]]] = [(source, ())]
+    seen = {source}
+
+    while queue:
+        state, route = queue.pop(0)
+        for move in _BY_SOURCE.get(state, ()):
+            if move.target in seen:
+                continue
+            extended = (*route, move)
+            if move.target == target:
+                return extended
+            seen.add(move.target)
+            queue.append((move.target, extended))
+
+    return ()
 
 
 def transition_for(state: str, target: str) -> Transition | None:

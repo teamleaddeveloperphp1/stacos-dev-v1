@@ -1,0 +1,69 @@
+{% load i18n %}
+
+<c-page-header title="{{ notice.subject }}"
+               subtitle="{{ notice.reference_number }} · {{ notice.entity.name }} · {{ notice.authority }}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'notices:list' %}"
+     hx-get="{% url 'notices:list' %}" hx-target="#main" hx-push-url="true">
+    {% translate "Back to notices" %}
+  </a>
+</c-page-header>
+
+<div class="detail-grid">
+  <div class="detail-grid__main">
+    {% include "notices/_fragments/detail_panel.html" %}
+  </div>
+
+  <aside class="detail-grid__aside">
+    <section class="card">
+      <h2 class="card__title">{% translate "The notice" %}</h2>
+      <dl class="key-values small">
+        <dt>{% translate "Type" %}</dt><dd>{{ notice.get_notice_type_display }}</dd>
+        {% if notice.statutory_reference %}
+          <dt>{% translate "Under" %}</dt><dd>{{ notice.statutory_reference }}</dd>
+        {% endif %}
+        {% if notice.period_key %}
+          <dt>{% translate "Period" %}</dt><dd>{{ notice.period_key }}</dd>
+        {% endif %}
+        {% if notice.issued_on %}
+          <dt>{% translate "Issued" %}</dt><dd>{{ notice.issued_on|date:"j M Y" }}</dd>
+        {% endif %}
+        <dt>{% translate "Received" %}</dt><dd>{{ notice.received_on|date:"j M Y" }}</dd>
+        {% if notice.demand_amount %}
+          <dt>{% translate "Demanded" %}</dt><dd>{{ notice.demand_amount|inr }}</dd>
+        {% endif %}
+        {% if notice.accepted_amount is not None %}
+          <dt>{% translate "Accepted" %}</dt><dd>{{ notice.accepted_amount|inr }}</dd>
+          <dt>{% translate "Disputed" %}</dt><dd>{{ notice.disputed_amount|inr }}</dd>
+        {% endif %}
+        <dt>{% translate "Assigned to" %}</dt>
+        <dd>{{ notice.assigned_to|default:"—" }}</dd>
+      </dl>
+      {% if notice.summary %}<p class="small">{{ notice.summary|linebreaksbr }}</p>{% endif %}
+    </section>
+
+    <section class="card">
+      <h2 class="card__title">{% translate "Documents" %}</h2>
+      {% include "vault/_fragments/attachments.html" with documents=documents target_type="NOTICE" target_id=notice.pk can_upload=can_edit %}
+    </section>
+
+    <section class="card">
+      <h2 class="card__title">{% translate "Correspondence" %}</h2>
+      <ol class="timeline">
+        {% for event in events %}
+          <li class="timeline__item">
+            <div class="timeline__meta">
+              <time datetime="{{ event.occurred_on|date:'Y-m-d' }}">{{ event.occurred_on|date:"j M Y" }}</time>
+              <span class="text-muted">{{ event.actor_label|default:"STACOS" }}</span>
+            </div>
+            <div class="timeline__body">
+              {{ event.get_kind_display }}
+              {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
+            </div>
+          </li>
+        {% empty %}
+          <li class="text-muted small">{% translate "Nothing recorded yet." %}</li>
+        {% endfor %}
+      </ol>
+    </section>
+  </aside>
+</div>

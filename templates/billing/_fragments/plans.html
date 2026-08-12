@@ -1,0 +1,35 @@
+{% load i18n %}
+
+<div class="plan-grid" id="plan-grid">
+  {% for plan in plans %}
+    <section class="plan-card {% if plan.id == current %}plan-card--current{% endif %}">
+      <h3 class="plan-card__name">{{ plan.name }}</h3>
+      <p class="plan-card__price">
+        {{ plan.amount|inr }}
+        <span class="text-muted small">/ {{ plan.get_interval_display|lower }}</span>
+      </p>
+      <ul class="plan-card__features">
+        <li>
+          {% blocktranslate count counter=plan.included_entities %}
+            {{ counter }} entity
+          {% plural %}
+            {{ counter }} entities
+          {% endblocktranslate %}
+        </li>
+        <li>
+          {% blocktranslate count counter=plan.included_users %}
+            {{ counter }} user
+          {% plural %}
+            {{ counter }} users
+          {% endblocktranslate %}
+        </li>
+        {% for feature in plan.features %}<li>{{ feature }}</li>{% endfor %}
+      </ul>
+      {% if plan.id == current %}
+        <span class="badge-soft">{% translate "Your plan" %}</span>
+      {% endif %}
+    </section>
+  {% empty %}
+    <p class="text-muted small">{% translate "No plans published for this account type." %}</p>
+  {% endfor %}
+</div>

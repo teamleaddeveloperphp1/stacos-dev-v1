@@ -1,0 +1,88 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Attendance and the "held" action.
+
+  Quorum is computed from the attendance register rather than typed in, so the
+  two cannot disagree — and marking a meeting held is what writes the calendar
+  anchor that AOC-4, MGT-7 and ADT-1 are waiting for.
+{% endcomment %}
+<section class="card" id="meeting-panel" aria-live="polite" aria-atomic="true">
+  {% if error %}
+    <p class="callout callout--danger" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <div class="detail-header">
+    <c-status-chip status="{% if meeting.state == 'MINUTED' %}complete{% elif meeting.state == 'HELD' %}in-progress{% elif meeting.state == 'CANCELLED' %}na{% else %}waiting{% endif %}"
+                   :label="meeting.get_state_display" />
+    {% if meeting.has_quorum is not None %}
+      <span class="badge-soft {% if not meeting.has_quorum %}badge-soft--danger{% endif %}">
+        {% blocktranslate with present=meeting.quorum_present required=meeting.quorum_required %}
+          Quorum {{ present }} of {{ required }}
+        {% endblocktranslate %}
+      </span>
+    {% endif %}
+  </div>
+
+  <h3 class="h6">{% translate "Attendance" %}</h3>
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>{% translate "Name" %}</th>
+        <th>{% translate "Role" %}</th>
+        <th>{% translate "Attendance" %}</th>
+        <th>{% translate "Interested" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for attendee in attendees %}
+        <tr>
+          <td>
+            {{ attendee.name }}
+            {% if attendee.din %}<span class="text-muted small">{{ attendee.din }}</span>{% endif %}
+          </td>
+          <td class="text-muted small">{{ attendee.get_role_display }}</td>
+          <td>{{ attendee.get_attendance_display }}</td>
+          <td>
+            {% if attendee.is_interested %}
+              <span class="badge-soft badge-soft--attention">{% translate "Must abstain" %}</span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="4" class="text-muted small">
+            {% translate "Nobody recorded yet. Attendance is what proves quorum, and quorum is what makes a resolution valid." %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if can_manage and meeting.state != "MINUTED" and meeting.state != "CANCELLED" %}
+    <form hx-post="{% url 'secretarial:attendee_add' meeting.pk %}"
+          hx-target="#meeting-panel" hx-swap="outerHTML"
+          class="d-flex gap-2 align-items-end flex-wrap mb-3">
+      {% csrf_token %}
+      {% crispy attendee_form %}
+      <button class="btn btn-sm btn-outline-secondary" type="submit">{% translate "Add" %}</button>
+    </form>
+
+    {% if meeting.state != "HELD" %}
+      <div class="action-bar">
+        <form hx-post="{% url 'secretarial:meeting_hold' meeting.pk %}"
+              hx-target="#meeting-panel" hx-swap="outerHTML"
+              class="d-flex gap-2 align-items-end">
+          {% csrf_token %}
+          <label class="visually-hidden" for="held-on">{% translate "Held on" %}</label>
+          <input class="form-control form-control-sm" type="date" id="held-on" name="held_on" required>
+          <button class="btn btn-sm btn-primary" type="submit">{% translate "Record as held" %}</button>
+        </form>
+      </div>
+      {% if meeting.event_key %}
+        <p class="text-muted small mb-0">
+          {% translate "Recording this meeting will fill in the dates that AOC-4, MGT-7 and ADT-1 are waiting for." %}
+        </p>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+</section>

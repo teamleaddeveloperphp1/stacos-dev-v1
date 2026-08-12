@@ -35,6 +35,20 @@ class RoleSpec:
 
 # --- Shared bundles, so the same capability is spelled the same way twice -----
 
+#: Reading the things a compliance user reads. Bundled with the view basics
+#: because a calendar you cannot attach a document to, or whose notices you
+#: cannot see, is not a compliance product.
+_DOCUMENT_AND_TRACKER_BASICS = frozenset(
+    {
+        "vault.document.view",
+        "vault.document.download",
+        "rfi.request.view",
+        "notices.notice.view",
+        "returns.preparation.view",
+        "secretarial.view",
+    }
+)
+
 _VIEW_BASICS = frozenset(
     {
         "core.search",
@@ -49,6 +63,7 @@ _VIEW_BASICS = frozenset(
         "compliance.obligation.view",
         "catalog.view",
     }
+    | _DOCUMENT_AND_TRACKER_BASICS
 )
 
 _ENTITY_STEWARD = _VIEW_BASICS | {
@@ -68,6 +83,19 @@ _COMPLIANCE_PREPARER = frozenset(
         "compliance.obligation.assign",
         "compliance.event.record",
         "compliance.calendar.rebuild",
+        "vault.document.upload",
+        "rfi.request.create",
+        "rfi.request.send",
+        "rfi.request.review",
+        "rfi.request.close",
+        "notices.notice.create",
+        "notices.notice.edit",
+        "notices.notice.assign",
+        "returns.preparation.prepare",
+        "returns.reconciliation.run",
+        "secretarial.meeting.manage",
+        "secretarial.resolution.manage",
+        "secretarial.register.manage",
     }
 )
 
@@ -81,6 +109,16 @@ _COMPLIANCE_APPROVER = _COMPLIANCE_PREPARER | {
     "compliance.obligation.defer",
     "compliance.obligation.dismiss",
     "compliance.obligation.dispute",
+    "notices.notice.respond",
+    "notices.notice.close",
+    "vault.document.delete",
+    # The checker half of maker-checker. Deliberately NOT in the preparer bundle:
+    # a preparer holding both would satisfy the permission check and still be
+    # refused by the service and the database, which is the right answer but a
+    # confusing way to discover the rule.
+    "returns.preparation.review",
+    "returns.preparation.file",
+    "secretarial.minutes.sign",
 }
 
 
@@ -122,6 +160,16 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             # to whoever is answerable for the filing, which is the owner.
             "compliance.obligation.approve",
             "compliance.obligation.reopen",
+            # The client answers requests. A practice user never holds this:
+            # nobody should be able to satisfy their own outstanding item.
+            "rfi.request.respond",
+            "vault.document.export",
+            "returns.preparation.approve",
+            # Who owns what is the owner's business, and nobody else's by default.
+            "secretarial.captable.view",
+            "secretarial.captable.manage",
+            "billing.view",
+            "billing.subscription.manage",
         },
     ),
     RoleSpec(
@@ -145,7 +193,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         # Prepares and chases, but does not approve — that is the whole point of
         # the role, and the reason `_COMPLIANCE_APPROVER` is not used here.
         | _COMPLIANCE_PREPARER
-        | {"compliance.obligation.close"},
+        | {"compliance.obligation.close", "rfi.request.respond"},
     ),
     RoleSpec(
         code="org-department-user",
@@ -161,7 +209,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         permissions=_VIEW_BASICS
         | {"tenancy.premises.manage"}
         | _COMPLIANCE_PREPARER
-        | {"compliance.obligation.close"},
+        | {"compliance.obligation.close", "rfi.request.respond"},
         default_categories=("SAFETY_FIRE", "LABOUR", "ENVIRONMENT", "LICENSING"),
     ),
     RoleSpec(
@@ -199,7 +247,17 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "finance.view",
         }
         | _COMPLIANCE_APPROVER
-        | {"compliance.obligation.reopen"},
+        | {
+            "compliance.obligation.reopen",
+            "practice.work.manage",
+            "practice.time.log",
+            "practice.time.view_all",
+            "practice.rates.manage",
+            "practice.wip.view",
+            "billing.view",
+            "billing.subscription.manage",
+            "billing.payment.record",
+        },
     ),
     RoleSpec(
         code="practice-manager",
@@ -216,7 +274,13 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "engagements.invite",
             "finance.view",
         }
-        | _COMPLIANCE_APPROVER,
+        | _COMPLIANCE_APPROVER
+        | {
+            "practice.work.manage",
+            "practice.time.log",
+            "practice.time.view_all",
+            "practice.wip.view",
+        },
     ),
     RoleSpec(
         code="practice-staff",
@@ -228,7 +292,12 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         ),
         permissions=_VIEW_BASICS
         | {"tenancy.profile.edit", "tenancy.registration.view"}
-        | _COMPLIANCE_PREPARER,
+        | _COMPLIANCE_PREPARER
+        # The board, their own cards, and their own time. Not
+        # `practice.time.view_all`: seeing everybody's hours is a management
+        # view, not a peer-comparison tool. And not `practice.wip.view`: what the
+        # work is worth is a partner's question.
+        | {"practice.work.view", "practice.work.manage", "practice.time.log"},
     ),
     # -----------------------------------------------------------------------
     # Dealer — a channel partner
@@ -256,6 +325,11 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
                 "tenancy.tenant.view",
                 "accounts.user.view",
                 "accounts.user.invite",
+                # Their own commission ledger and the accounts they manage.
+                # Deliberately nothing from compliance: that needs an engagement.
+                "dealers.commission.view",
+                "dealers.account.manage",
+                "billing.view",
             }
         ),
     ),
@@ -265,6 +339,13 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         tenant_type=Tenant.Type.DEALER,
         rank=30,
         description="Onboards and supports client accounts. No compliance data.",
-        permissions=frozenset({"core.search", "accounts.security.manage", "tenancy.tenant.view"}),
+        permissions=frozenset(
+            {
+                "core.search",
+                "accounts.security.manage",
+                "tenancy.tenant.view",
+                "dealers.account.manage",
+            }
+        ),
     ),
 )

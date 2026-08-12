@@ -1,0 +1,144 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Notices' %}"
+               subtitle="{% translate 'Everything an authority has sent, and how long is left to answer it.' %}">
+  <button class="btn btn-sm btn-primary"
+          hx-get="{% url 'notices:create' %}"
+          hx-target="#modal-container" hx-swap="innerHTML">
+    <c-icon name="plus" size="14" /> {% translate "Record a notice" %}
+  </button>
+</c-page-header>
+
+<div class="stat-row" id="notice-counts" aria-live="polite" aria-atomic="true">
+  <a class="stat-tile stat-tile--overdue" href="?status=overdue"
+     hx-get="?status=overdue" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ summary.overdue }}</span>
+    <span class="stat-tile__label">{% translate "Past the deadline" %}</span>
+  </a>
+  {% comment %}
+    Notices with no stated deadline are their own tile rather than being given a
+    guessed date. Somebody has to read the notice and decide, and hiding that
+    decision behind an assumed thirty days is how a fifteen-day deadline is
+    missed.
+  {% endcomment %}
+  <a class="stat-tile stat-tile--attention" href="?status=undated"
+     hx-get="?status=undated" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ summary.undated }}</span>
+    <span class="stat-tile__label">{% translate "Deadline not set" %}</span>
+  </a>
+  <a class="stat-tile" href="?status=" hx-get="?status=" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ summary.open }}</span>
+    <span class="stat-tile__label">{% translate "Open" %}</span>
+  </a>
+  <span class="stat-tile stat-tile--quiet">
+    <span class="stat-tile__value">{{ summary.demanded|default:0|inr }}</span>
+    <span class="stat-tile__label">{% translate "Demanded" %}</span>
+  </span>
+</div>
+
+{% if not adapters %}
+  {% comment %}
+    Stated plainly rather than shown as a disabled button. Automated retrieval
+    would mean holding client portal credentials; that decision is recorded in
+    docs/decisions.md and the adapter interface exists with nothing behind it.
+  {% endcomment %}
+  <p class="callout callout--info small">
+    {% translate "Notices are recorded by hand or picked up from a forwarded email. We do not sign in to government portals on your behalf." %}
+  </p>
+{% endif %}
+
+<div class="data-table">
+  <div class="data-table__toolbar">
+    <form class="d-flex gap-2 flex-grow-1 flex-wrap"
+          hx-get="{% url 'notices:list' %}"
+          hx-target="#notice-rows"
+          hx-select="#notice-rows"
+          hx-swap="morph"
+          hx-push-url="true"
+          hx-trigger="keyup changed delay:250ms from:find input, change from:find select"
+          hx-indicator="#notice-spinner">
+      <input type="search" name="q" value="{{ search }}"
+             class="form-control form-control-sm" style="max-width: 20rem"
+             placeholder="{% translate 'Search reference, subject or section…' %}"
+             aria-label="{% translate 'Search notices' %}">
+      <select name="status" class="form-select form-select-sm" style="max-width: 14rem"
+              aria-label="{% translate 'Filter by status' %}">
+        <option value="" {% if not status %}selected{% endif %}>{% translate "Open" %}</option>
+        <option value="mine" {% if status == 'mine' %}selected{% endif %}>{% translate "Assigned to me" %}</option>
+        <option value="overdue" {% if status == 'overdue' %}selected{% endif %}>{% translate "Past the deadline" %}</option>
+        <option value="undated" {% if status == 'undated' %}selected{% endif %}>{% translate "Deadline not set" %}</option>
+        <option value="closed" {% if status == 'closed' %}selected{% endif %}>{% translate "Closed" %}</option>
+        <option value="all" {% if status == 'all' %}selected{% endif %}>{% translate "Everything" %}</option>
+      </select>
+      <select name="type" class="form-select form-select-sm" style="max-width: 14rem"
+              aria-label="{% translate 'Filter by type' %}">
+        <option value="">{% translate "Any type" %}</option>
+        {% for value, label in notice_types %}
+          <option value="{{ value }}" {% if notice_type == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="htmx-indicator align-self-center" id="notice-spinner">
+        <span class="spinner-inline"></span>
+      </span>
+    </form>
+  </div>
+
+  <div class="data-table__scroll" id="notice-rows" aria-live="polite" aria-atomic="false">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>{% translate "Notice" %}</th>
+          <th>{% translate "Entity" %}</th>
+          <th>{% translate "Authority" %}</th>
+          <th>{% translate "Respond by" %}</th>
+          <th class="num">{% translate "Demand" %}</th>
+          <th>{% translate "Status" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for notice in notices %}
+          <tr id="notice-{{ notice.pk }}" class="{% if notice.is_overdue %}row--overdue{% endif %}">
+            <td>
+              <a class="link-strong" href="{% url 'notices:detail' notice.pk %}"
+                 hx-get="{% url 'notices:detail' notice.pk %}"
+                 hx-target="#main" hx-push-url="true">{{ notice.subject }}</a>
+              <div class="text-muted small">
+                {{ notice.reference_number }}
+                {% if notice.statutory_reference %} · {{ notice.statutory_reference }}{% endif %}
+              </div>
+            </td>
+            <td class="text-muted small">{{ notice.entity.name }}</td>
+            <td class="text-muted small">{{ notice.authority.short_name|default:notice.authority.code }}</td>
+            <td>
+              {% if notice.respond_by %}
+                <c-due-badge :date="notice.respond_by" :days="notice.days_remaining" />
+              {% else %}
+                <span class="link-attention small">{% translate "Set a deadline" %}</span>
+              {% endif %}
+            </td>
+            <td class="num">
+              {% if notice.demand_amount %}{{ notice.demand_amount|inr }}{% else %}—{% endif %}
+            </td>
+            <td>
+              <c-status-chip status="{% if notice.is_overdue %}overdue{% elif notice.state == 'CLOSED' %}complete{% elif notice.state == 'RESPONDED' %}complete{% elif notice.state == 'ESCALATED' %}disputed{% elif notice.state == 'INFO_REQUESTED' or notice.state == 'PENDING_APPROVAL' %}waiting{% else %}in-progress{% endif %}"
+                             :label="notice.get_state_display" />
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="p-0">
+              <c-empty-state title="{% translate 'No notices' %}"
+                             body="{% translate 'Record one the day it arrives — the response window is usually shorter than any filing deadline.' %}">
+                <button class="btn btn-sm btn-primary"
+                        hx-get="{% url 'notices:create' %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                  {% translate "Record a notice" %}
+                </button>
+              </c-empty-state>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

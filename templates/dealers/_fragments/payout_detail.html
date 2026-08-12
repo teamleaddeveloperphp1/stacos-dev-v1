@@ -1,0 +1,81 @@
+{% load i18n %}
+{% comment %}
+  One payout, line by line.
+
+  The lines are the point. A dealer disputing a payout needs to see which invoice
+  each rupee came from, which is why commission is a ledger rather than a balance.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="payout-modal-title">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content" id="payout-panel" aria-live="polite" aria-atomic="true">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="payout-modal-title">
+          {{ payout.period_start|date:"j M Y" }} – {{ payout.period_end|date:"j M Y" }}
+        </h2>
+        <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                @click="$dispatch('stacos:modal-close')"></button>
+      </div>
+
+      <div class="modal-body">
+        {% if error %}
+          <p class="callout callout--danger" role="alert">{{ error }}</p>
+        {% endif %}
+
+        <dl class="key-values small">
+          <dt>{% translate "Status" %}</dt><dd>{{ payout.get_status_display }}</dd>
+          <dt>{% translate "Total" %}</dt><dd>{{ total|inr }}</dd>
+          {% if payout.paid_on %}
+            <dt>{% translate "Paid" %}</dt>
+            <dd>{{ payout.paid_on|date:"j M Y" }} · {{ payout.payment_reference }}</dd>
+          {% endif %}
+        </dl>
+
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>{% translate "Invoice" %}</th>
+              <th>{% translate "Client" %}</th>
+              <th class="num">{% translate "Commission" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+              <tr>
+                <td>{{ entry.invoice_number|default:"—" }}</td>
+                <td class="text-muted small">{{ entry.client_tenant.name }}</td>
+                <td class="num">{{ entry.amount_minor|minor|inr }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-muted small">{% translate "No lines." %}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="modal-footer">
+        {% if can_approve and payout.status == "DRAFT" %}
+          <form hx-post="{% url 'dealers:payout_approve' payout.pk %}"
+                hx-target="#payout-panel" hx-swap="outerHTML">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit">{% translate "Approve" %}</button>
+          </form>
+        {% endif %}
+
+        {% if can_pay and payout.status == "APPROVED" %}
+          <form hx-post="{% url 'dealers:payout_pay' payout.pk %}"
+                hx-target="#payout-panel" hx-swap="outerHTML"
+                class="d-flex gap-2 align-items-end">
+            {% csrf_token %}
+            <label class="visually-hidden" for="payout-reference">
+              {% translate "Bank reference" %}
+            </label>
+            <input class="form-control form-control-sm" id="payout-reference" name="reference"
+                   required placeholder="{% translate 'Bank reference' %}">
+            <button class="btn btn-primary" type="submit">{% translate "Mark paid" %}</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,78 @@
+{% load i18n %}
+{% comment %}
+  The work board.
+
+  One query for the cards, grouped in Python. A query per column would be six
+  round trips to draw one screen, and the whole board is a few hundred rows even
+  for a large firm.
+{% endcomment %}
+
+<c-page-header title="{% translate 'Work board' %}"
+               subtitle="{% translate 'What the firm owes, who has it, and what is stuck.' %}">
+  <a class="btn btn-sm btn-outline-secondary {% if mine %}active{% endif %}"
+     href="?{% if not mine %}mine=1{% endif %}"
+     hx-get="?{% if not mine %}mine=1{% endif %}" hx-target="#main" hx-push-url="true">
+    {% if mine %}{% translate "Everyone" %}{% else %}{% translate "Just mine" %}{% endif %}
+  </a>
+  {% if can_manage %}
+    <button class="btn btn-sm btn-primary"
+            hx-get="{% url 'practice:work_create' %}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+      <c-icon name="plus" size="14" /> {% translate "New work item" %}
+    </button>
+  {% endif %}
+</c-page-header>
+
+{% if overdue %}
+  <p class="callout callout--danger small">
+    {% blocktranslate count counter=overdue %}
+      {{ counter }} item is past its date.
+    {% plural %}
+      {{ counter }} items are past their date.
+    {% endblocktranslate %}
+  </p>
+{% endif %}
+
+<div class="board" id="work-board" aria-live="polite" aria-atomic="false">
+  {% for column in columns %}
+    <section class="board__column" aria-label="{{ column.label }}">
+      <header class="board__column-header">
+        <span>{{ column.label }}</span>
+        <span class="board__count">{{ column.cards|length }}</span>
+      </header>
+
+      <ul class="board__cards">
+        {% for card in column.cards %}
+          <li class="board-card {% if card.is_overdue %}board-card--overdue{% endif %}">
+            <a class="board-card__title" href="{% url 'practice:work_detail' card.pk %}"
+               hx-get="{% url 'practice:work_detail' card.pk %}"
+               hx-target="#main" hx-push-url="true">{{ card.title }}</a>
+
+            {% if card.client_tenant %}
+              <div class="board-card__client">{{ card.client_tenant.name }}</div>
+            {% endif %}
+
+            <div class="board-card__meta">
+              {% if card.due_on %}
+                <time datetime="{{ card.due_on|date:'Y-m-d' }}">{{ card.due_on|date:"j M" }}</time>
+              {% endif %}
+              {% if card.assigned_to %}
+                <span class="avatar avatar--xs">{{ card.assigned_to|stringformat:"s"|slice:":1"|upper }}</span>
+              {% endif %}
+              {% if card.is_over_estimate %}
+                {# Over the estimate is the number a partner wants to see early. #}
+                <span class="badge-soft badge-soft--attention">{% translate "Over estimate" %}</span>
+              {% endif %}
+            </div>
+
+            {% if card.state == "BLOCKED" and card.blocked_reason %}
+              <p class="board-card__blocked">{{ card.blocked_reason }}</p>
+            {% endif %}
+          </li>
+        {% empty %}
+          <li class="board__empty">{% translate "Nothing here." %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endfor %}
+</div>

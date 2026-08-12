@@ -1,0 +1,44 @@
+{% load i18n %}
+{% comment %}
+  Resolutions, with the ones needing an MGT-14 filing surfaced. The filing is
+  easy to forget because passing the resolution felt like the end of the task.
+{% endcomment %}
+<section class="card" id="resolution-list" aria-live="polite" aria-atomic="false">
+  <h2 class="card__title">{% translate "Resolutions" %}</h2>
+  <table class="table table-sm mb-0">
+    <thead>
+      <tr>
+        <th>{% translate "Subject" %}</th>
+        <th>{% translate "Entity" %}</th>
+        <th>{% translate "Kind" %}</th>
+        <th>{% translate "Passed" %}</th>
+        <th>{% translate "MGT-14" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for resolution in resolutions %}
+        <tr>
+          <td>{{ resolution.subject }}</td>
+          <td class="text-muted small">{{ resolution.entity.name }}</td>
+          <td class="text-muted small">{{ resolution.get_kind_display }}</td>
+          <td>{{ resolution.passed_on|date:"j M Y" }}</td>
+          <td>
+            {% if not resolution.requires_mgt14 %}
+              <span class="text-muted small">{% translate "Not required" %}</span>
+            {% elif resolution.mgt14_filed_on %}
+              <span class="status-text--on-track">{{ resolution.mgt14_srn|default:"Filed" }}</span>
+            {% elif resolution.mgt14_is_overdue %}
+              <span class="status-text--overdue">{% translate "Overdue" %}</span>
+            {% else %}
+              <span class="status-text--due-soon">{% translate "Due" %}</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5" class="text-muted small">{% translate "No resolutions recorded." %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>

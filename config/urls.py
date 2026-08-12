@@ -48,6 +48,14 @@ urlpatterns = [
     # Compliance first: `stacos.tenancy.urls` owns the bare `app/` route, so a
     # more specific prefix has to be registered before it to be reachable.
     path("app/compliance/", include("stacos.obligations.urls", namespace="compliance")),
+    path("app/requests/", include("stacos.requests.urls", namespace="rfi")),
+    path("app/notices/", include("stacos.notices.urls", namespace="notices")),
+    path("app/documents/", include("stacos.vault.urls", namespace="vault")),
+    path("app/returns/", include("stacos.returns.urls", namespace="returns")),
+    path("app/secretarial/", include("stacos.secretarial.urls", namespace="secretarial")),
+    path("app/practice/", include("stacos.practice.urls", namespace="practice")),
+    path("app/billing/", include("stacos.billing.urls", namespace="billing")),
+    path("app/channel/", include("stacos.dealers.urls", namespace="dealers")),
     path("app/", include("stacos.tenancy.urls", namespace="app")),
     # --- API (mobile and webhooks only) ---
     path("api/v1/", include("stacos.api.urls", namespace="api")),

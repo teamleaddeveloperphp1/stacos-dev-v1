@@ -1,0 +1,109 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Meetings' %}"
+               subtitle="{% translate 'Board, committee and general meetings — and the minute book behind them.' %}">
+  <button class="btn btn-sm btn-primary"
+          hx-get="{% url 'secretarial:meeting_create' %}"
+          hx-target="#modal-container" hx-swap="innerHTML">
+    <c-icon name="plus" size="14" /> {% translate "Schedule a meeting" %}
+  </button>
+</c-page-header>
+
+<div class="data-table">
+  <div class="data-table__toolbar">
+    <form class="d-flex gap-2 flex-grow-1"
+          hx-get="{% url 'secretarial:meetings' %}"
+          hx-target="#meeting-rows"
+          hx-select="#meeting-rows"
+          hx-swap="morph"
+          hx-push-url="true"
+          hx-trigger="change from:find select"
+          hx-indicator="#meeting-spinner">
+      <select name="state" class="form-select form-select-sm" style="max-width: 16rem"
+              aria-label="{% translate 'Filter by state' %}">
+        <option value="" {% if not state %}selected{% endif %}>{% translate "Everything" %}</option>
+        <option value="upcoming" {% if state == 'upcoming' %}selected{% endif %}>{% translate "Upcoming" %}</option>
+        {% comment %}
+          "Held but not minuted" is its own filter because it is the gap that
+          turns into a diligence finding — the meeting happened and nobody wrote
+          it up.
+        {% endcomment %}
+        <option value="unminuted" {% if state == 'unminuted' %}selected{% endif %}>{% translate "Held, not yet minuted" %}</option>
+      </select>
+      <select name="kind" class="form-select form-select-sm" style="max-width: 16rem"
+              aria-label="{% translate 'Filter by kind' %}">
+        <option value="">{% translate "Any kind" %}</option>
+        {% for value, label in kinds %}
+          <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="htmx-indicator align-self-center" id="meeting-spinner">
+        <span class="spinner-inline"></span>
+      </span>
+    </form>
+  </div>
+
+  <div class="data-table__scroll" id="meeting-rows" aria-live="polite" aria-atomic="false">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>{% translate "Meeting" %}</th>
+          <th>{% translate "Entity" %}</th>
+          <th>{% translate "Date" %}</th>
+          <th>{% translate "Quorum" %}</th>
+          <th>{% translate "State" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for meeting in meetings %}
+          <tr id="meeting-{{ meeting.pk }}">
+            <td>
+              <a class="link-strong" href="{% url 'secretarial:meeting_detail' meeting.pk %}"
+                 hx-get="{% url 'secretarial:meeting_detail' meeting.pk %}"
+                 hx-target="#main" hx-push-url="true">
+                {{ meeting.get_kind_display }}
+              </a>
+              {% if meeting.serial_number %}
+                <div class="text-muted small">{{ meeting.serial_number }}</div>
+              {% endif %}
+            </td>
+            <td class="text-muted small">{{ meeting.entity.name }}</td>
+            <td>
+              <time datetime="{{ meeting.held_on|default:meeting.scheduled_for|date:'Y-m-d' }}">
+                {{ meeting.held_on|default:meeting.scheduled_for|date:"j M Y" }}
+              </time>
+            </td>
+            <td>
+              {% if meeting.has_quorum is None %}
+                <span class="text-muted small">{% translate "Not recorded" %}</span>
+              {% elif meeting.has_quorum %}
+                {{ meeting.quorum_present }}/{{ meeting.quorum_required }}
+              {% else %}
+                <span class="status-text--overdue">
+                  {{ meeting.quorum_present }}/{{ meeting.quorum_required }}
+                </span>
+              {% endif %}
+            </td>
+            <td>
+              <c-status-chip status="{% if meeting.state == 'MINUTED' %}complete{% elif meeting.state == 'HELD' %}in-progress{% elif meeting.state == 'CANCELLED' %}na{% else %}waiting{% endif %}"
+                             :label="meeting.get_state_display" />
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="p-0">
+              <c-empty-state title="{% translate 'No meetings recorded' %}"
+                             body="{% translate 'Recording an AGM here is what unblocks AOC-4, MGT-7 and ADT-1 on the compliance calendar.' %}">
+                <button class="btn btn-sm btn-primary"
+                        hx-get="{% url 'secretarial:meeting_create' %}"
+                        hx-target="#modal-container" hx-swap="innerHTML">
+                  {% translate "Schedule a meeting" %}
+                </button>
+              </c-empty-state>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

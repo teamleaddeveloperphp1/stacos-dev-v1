@@ -38,6 +38,10 @@ with tenant_context(tenant_ids={tenant.id}, reason="backfill"):
 
 `Model.objects_unscoped` and `platform_scope()` exist, are deliberately ugly, are individually allowlisted in `tests/unscoped_allowlist.txt`, and write an audit row. If you reach for one, you are probably solving the wrong problem.
 
+**Scopes nest, and the inner one restores the outer on exit.** Billing opens a platform scope to write a commission row into a dealer's tenant while already inside the client's. An earlier version cleared PostgreSQL's RLS settings unconditionally on the inner exit, and because RLS fails closed the symptom was a query in the *caller* silently returning nothing — no error, no log. `tests/security/test_scope_nesting.py` is the regression suite; do not "simplify" `_restore_rls`.
+
+**A `ModelForm` with a foreign key to a tenant-scoped model breaks at import time**, because Django builds the field's queryset when the class is defined and no scope is bound then. Use `stacos.core.forms.ScopedModelChoiceField`, which resolves its queryset when the field is rendered or validated — inside a request, and therefore also re-checking a forged id against the caller's scope.
+
 Celery tasks take `tenant_id` as an **explicit argument** and re-derive scope inside the task. A queued task must never inherit ambient authority.
 
 ### 2. Every view declares a permission
@@ -74,15 +78,31 @@ Verification codes go by **email and WhatsApp**, together, in one step. `stacos/
 
 Business-initiated WhatsApp messages need templates pre-approved by Meta, and one-time passcodes must use the **AUTHENTICATION** category. Approval takes days to weeks — treat it like DLT registration for SMS and start it early.
 
-A number with no WhatsApp account cannot be reached. `WhatsAppResult.not_on_whatsapp` reports that separately from a delivery failure, so a fallback can be added without changing callers. No fallback exists yet.
+A number with no WhatsApp account cannot be reached, and **WhatsApp is a hard requirement for sign-up** — decided, not deferred. `PendingVerification.phone_unreachable` persists the `not_on_whatsapp` outcome and the verification screen tells the user that resending will not help. `WhatsAppResult.not_on_whatsapp` stays a distinct outcome from a delivery failure so an SMS fallback can be added later without changing a caller.
 
 ### 6. Audit every state change
 
 `record_event()` on every transition, with actor, timestamp, IP, and before/after. `AuditLog` is append-only — a database trigger denies `UPDATE` and `DELETE`. This is what a business shows a regulator during due diligence; it is a feature, not plumbing.
 
+## The modules, and what each one refuses to do
+
+| App | What it owns | The line it will not cross |
+|---|---|---|
+| `catalog` | ~140 versioned compliance definitions, loaded from YAML | A published version is immutable; correcting a rule means a new one with a new effective window |
+| `obligations` | The register: what each entity owes, and where it has got to | Never destroys an instance carrying history; suppressions are an input to the planner |
+| `vault` | Documents, content-addressed and linked from anywhere | Bytes never leave without a permission check, a scan, and a download row |
+| `requests` | Information requests, as a checklist rather than a message | State is derived from the items, never set by hand |
+| `notices` | The notice tracker and its correspondence trail | No portal scraping. The adapter interface exists and is empty — see `docs/decisions.md` |
+| `returns` | Working papers, reconciliations, maker-checker | The preparer cannot be the checker, enforced by a database constraint |
+| `secretarial` | Meetings, resolutions, registers, cap table | Holdings are replayed from the ledger, never stored as a balance |
+| `practice` | The firm's work board, time and profitability | Scoped to the practice tenant, so a client never sees an estimate or a margin |
+| `billing` | Plans, subscriptions, invoices, payments | Amounts are integer paise; an issued invoice is never edited; payments are idempotent on the gateway reference |
+| `dealers` | Commission plans, ledger, payouts | A dealer sees no compliance data at all. Naming a client on a commission row is not access to that client |
+
 ## Conventions
 
 - **UUIDv7 primary keys** via `stacos.core.ids.uuid7`. Keep that function at module scope forever — migrations serialise the reference by path.
+- **Money is stored in integer minor units** (paise), never as a decimal or float. Render with `|minor|inr`; rates are basis points, rendered with `|bps`.
 - **crispy-forms renders form fields; django-cotton renders everything else.** Ambiguity here produces two design systems.
 - **Status vocabulary is universal**: same colour, icon and word for "overdue" everywhere. Never encode status by colour alone.
 - **Indian number formatting** (₹1,23,45,678) via the template filter, never hand-rolled.

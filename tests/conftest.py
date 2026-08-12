@@ -410,6 +410,30 @@ def _make_engagement(practice: Tenant, entity_a: Entity) -> Engagement:
     )
 
 
+def sign_in(client: Any, user: User, *, step_up: bool = False) -> Any:
+    """A verified session for ``user``.
+
+    ``step_up=True`` also marks re-authentication fresh. Sensitive permissions —
+    recording a filing, responding to a notice, approving a return — demand it,
+    and a test that omits it gets a redirect rather than the action, which is the
+    correct behaviour and a confusing failure. Asking for it explicitly keeps the
+    step-up requirement visible in the test rather than silently satisfied for
+    everything.
+    """
+    from django.utils import timezone as django_timezone
+
+    from stacos.accounts.middleware import SESSION_VERIFIED_KEY
+    from stacos.accounts.stepup import SESSION_KEY as STEP_UP_KEY
+
+    client.force_login(user)
+    session = client.session
+    session[SESSION_VERIFIED_KEY] = True
+    if step_up:
+        session[STEP_UP_KEY] = django_timezone.now().isoformat()
+    session.save()
+    return client
+
+
 # ---------------------------------------------------------------------------
 # Scope helpers
 # ---------------------------------------------------------------------------

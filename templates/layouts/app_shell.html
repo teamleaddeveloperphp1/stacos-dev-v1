@@ -89,13 +89,76 @@
               {{ overdue_count|default:"" }}
             </span>
           </a>
-          <c-nav-placeholder icon="inbox" label="{% translate 'Information requests' %}" />
-          <c-nav-placeholder icon="alert" label="{% translate 'Notices' %}" />
-          <c-nav-placeholder icon="folder" label="{% translate 'Documents' %}" />
+          <a class="app-nav__link" href="{% url 'rfi:list' %}" preload
+             {% if request.resolver_match.namespace == 'rfi' %}aria-current="page"{% endif %}>
+            <c-icon name="inbox" />
+            <span>{% translate "Information requests" %}</span>
+          </a>
+          <a class="app-nav__link" href="{% url 'notices:list' %}" preload
+             {% if request.resolver_match.namespace == 'notices' %}aria-current="page"{% endif %}>
+            <c-icon name="alert" />
+            <span>{% translate "Notices" %}</span>
+          </a>
+          <a class="app-nav__link" href="{% url 'vault:list' %}" preload
+             {% if request.resolver_match.namespace == 'vault' %}aria-current="page"{% endif %}>
+            <c-icon name="folder" />
+            <span>{% translate "Documents" %}</span>
+          </a>
+          <a class="app-nav__link" href="{% url 'returns:list' %}" preload
+             {% if request.resolver_match.namespace == 'returns' %}aria-current="page"{% endif %}>
+            <c-icon name="document" />
+            <span>{% translate "Returns" %}</span>
+          </a>
+          <a class="app-nav__link" href="{% url 'secretarial:meetings' %}" preload
+             {% if request.resolver_match.namespace == 'secretarial' %}aria-current="page"{% endif %}>
+            <c-icon name="briefcase" />
+            <span>{% translate "Secretarial" %}</span>
+          </a>
         </div>
+
+        {% comment %}
+          The practice section is shown only to a firm. An organisation user has
+          no work board, and a menu entry that 403s is worse than one that is
+          absent — `access_scope.permissions` is already resolved, so this costs
+          no query.
+        {% endcomment %}
+        {% if "practice.work.view" in access_scope.permissions %}
+          <div class="app-nav__group">
+            <div class="app-nav__label">{% translate "Practice" %}</div>
+            <a class="app-nav__link" href="{% url 'practice:board' %}" preload
+               {% if request.resolver_match.namespace == 'practice' %}aria-current="page"{% endif %}>
+              <c-icon name="briefcase" />
+              <span>{% translate "Work board" %}</span>
+            </a>
+            {% if "practice.wip.view" in access_scope.permissions %}
+              <a class="app-nav__link" href="{% url 'practice:profitability' %}" preload>
+                <c-icon name="history" />
+                <span>{% translate "Profitability" %}</span>
+              </a>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {% if "dealers.commission.view" in access_scope.permissions %}
+          <div class="app-nav__group">
+            <div class="app-nav__label">{% translate "Channel" %}</div>
+            <a class="app-nav__link" href="{% url 'dealers:statement' %}" preload
+               {% if request.resolver_match.namespace == 'dealers' %}aria-current="page"{% endif %}>
+              <c-icon name="link" />
+              <span>{% translate "Commission" %}</span>
+            </a>
+          </div>
+        {% endif %}
 
         <div class="app-nav__group">
           <div class="app-nav__label">{% translate "Settings" %}</div>
+          {% if "billing.view" in access_scope.permissions %}
+            <a class="app-nav__link" href="{% url 'billing:overview' %}" preload
+               {% if request.resolver_match.namespace == 'billing' %}aria-current="page"{% endif %}>
+              <c-icon name="briefcase" />
+              <span>{% translate "Billing" %}</span>
+            </a>
+          {% endif %}
           <a class="app-nav__link" href="{% url 'accounts:security' %}" preload>
             <c-icon name="shield" />
             <span>{% translate "Security" %}</span>

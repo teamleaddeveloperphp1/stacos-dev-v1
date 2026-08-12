@@ -1,0 +1,104 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Billing' %}"
+               subtitle="{% translate 'Your plan, your invoices, and what is outstanding.' %}" />
+
+{% if subscription %}
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title mb-1">{% translate "Plan" %}</div>
+          <div class="figure-value fs-4 fw-semibold">{{ subscription.plan.name }}</div>
+          <div class="text-muted small">
+            {{ subscription.plan.amount|inr }} / {{ subscription.plan.get_interval_display|lower }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title mb-1">{% translate "Renews" %}</div>
+          <div class="figure-value fs-4 fw-semibold">
+            {{ subscription.current_period_end|date:"j M Y" }}
+          </div>
+          <div class="text-muted small">{{ subscription.get_status_display }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title mb-1">{% translate "Outstanding" %}</div>
+          <div class="figure-value fs-4 fw-semibold {% if outstanding %}status-text--overdue{% endif %}">
+            {{ outstanding|inr }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if subscription.status == "PAST_DUE" %}
+    {% comment %}
+      Said plainly, and without threatening deletion: data is never removed for
+      non-payment. An account goes read-only, which is a separate and later
+      decision.
+    {% endcomment %}
+    <p class="callout callout--warning small">
+      {% translate "There is an overdue invoice on this account. Nothing has been restricted and no data is ever deleted for non-payment — but please settle it when you can." %}
+    </p>
+  {% endif %}
+{% else %}
+  <c-empty-state title="{% translate 'No subscription yet' %}"
+                 body="{% translate 'This account is not on a plan. Choose one to continue after the trial.' %}" />
+{% endif %}
+
+<div class="data-table">
+  <div class="data-table__scroll" id="invoice-rows" aria-live="polite" aria-atomic="false">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>{% translate "Invoice" %}</th>
+          <th>{% translate "Period" %}</th>
+          <th>{% translate "Issued" %}</th>
+          <th>{% translate "Due" %}</th>
+          <th class="num">{% translate "Total" %}</th>
+          <th>{% translate "Status" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for invoice in invoices %}
+          <tr id="invoice-{{ invoice.pk }}">
+            <td>
+              <button class="link-strong btn btn-link p-0"
+                      hx-get="{% url 'billing:invoice_detail' invoice.pk %}"
+                      hx-target="#modal-container" hx-swap="innerHTML">
+                {{ invoice.number|default:"—" }}
+              </button>
+            </td>
+            <td class="text-muted small">
+              {% if invoice.period_start %}
+                {{ invoice.period_start|date:"j M" }} – {{ invoice.period_end|date:"j M Y" }}
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ invoice.issued_on|date:"j M Y"|default:"—" }}</td>
+            <td>{{ invoice.due_on|date:"j M Y"|default:"—" }}</td>
+            <td class="num">{{ invoice.total|inr }}</td>
+            <td>
+              <c-status-chip status="{% if invoice.status == 'PAID' %}complete{% elif invoice.is_overdue %}overdue{% elif invoice.status == 'VOID' %}na{% elif invoice.status == 'PARTIALLY_PAID' %}in-progress{% else %}waiting{% endif %}"
+                             :label="invoice.get_status_display" />
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" class="p-0">
+              <c-empty-state title="{% translate 'No invoices yet' %}"
+                             body="{% translate 'The first invoice is raised when the trial ends.' %}" />
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
