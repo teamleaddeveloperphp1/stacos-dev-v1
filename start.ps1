@@ -273,3 +273,8 @@ Write-Host @"
   Status           .\start.ps1 -Status
   Stop everything  .\stop.ps1
 "@ -ForegroundColor Gray
+
+# Explicit, so the exit code reflects the stack rather than whatever native
+# command ran last.
+if ($failures -gt 0) { exit 1 }
+exit 0
