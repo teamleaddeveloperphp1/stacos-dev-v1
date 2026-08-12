@@ -1,0 +1,116 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Entities' %}"
+               subtitle="{% translate 'Every legal person you keep compliant. Obligations attach here, not to the account.' %}">
+  <a class="btn btn-sm btn-primary" href="#">
+    <c-icon name="plus" size="14" /> {% translate "Add entity" %}
+  </a>
+</c-page-header>
+
+<div class="data-table">
+  <div class="data-table__toolbar">
+    {#
+      Filters swap only the table body, debounced at 250ms. Typing must never
+      cost a page navigation, and it must never fire a request per keystroke.
+    #}
+    <form class="d-flex gap-2 flex-grow-1"
+          hx-get="{% url 'app:entity_list' %}"
+          hx-target="#entity-rows"
+          hx-select="#entity-rows"
+          hx-swap="morph"
+          hx-push-url="true"
+          hx-trigger="keyup changed delay:250ms from:find input, change from:find select"
+          hx-indicator="#entity-filter-spinner">
+      <input type="search" name="q" value="{{ search }}" class="form-control form-control-sm"
+             style="max-width: 20rem"
+             placeholder="{% translate 'Search entities…' %}"
+             aria-label="{% translate 'Search entities' %}">
+      <select name="status" class="form-select form-select-sm" style="max-width: 12rem"
+              aria-label="{% translate 'Filter by status' %}">
+        <option value="">{% translate "Any status" %}</option>
+        {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="htmx-indicator align-self-center" id="entity-filter-spinner">
+        <span class="spinner-inline"></span>
+      </span>
+    </form>
+  </div>
+
+  <div class="data-table__scroll" id="entity-rows" aria-live="polite" aria-atomic="false">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>{% translate "Entity" %}</th>
+          <th>{% translate "Type" %}</th>
+          <th>{% translate "State" %}</th>
+          <th class="num">{% translate "Registrations" %}</th>
+          <th>{% translate "Status" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entity in entities %}
+          <tr id="entity-row-{{ entity.pk }}">
+            <td>
+              <a href="{% url 'app:entity_detail' entity.pk %}" preload
+                 class="fw-medium text-decoration-none">{{ entity.name }}</a>
+              {% if entity.short_code %}
+                <span class="text-muted ms-1" style="font-size:.75rem">{{ entity.short_code }}</span>
+              {% endif %}
+            </td>
+            <td class="text-muted">{{ entity.entity_type }}</td>
+            <td class="text-muted">{{ entity.registered_office_state|default:"—" }}</td>
+            <td class="num">{{ entity.registration_count|num }}</td>
+            <td>
+              <c-status-chip status="{% if entity.status == 'ACTIVE' %}on-track{% elif entity.status == 'DORMANT' %}waiting{% else %}na{% endif %}"
+                             label="{{ entity.get_status_display }}" />
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="p-0">
+              {% if search or status %}
+                <c-empty-state title="{% translate 'No entities match that filter' %}"
+                               body="{% translate 'Try a different search term, or clear the status filter.' %}">
+                  <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:entity_list' %}">
+                    {% translate "Clear filters" %}
+                  </a>
+                </c-empty-state>
+              {% else %}
+                <c-empty-state title="{% translate 'No entities yet' %}"
+                               body="{% translate 'Add the first company, LLP or firm and we will build its compliance calendar automatically.' %}">
+                  <a class="btn btn-sm btn-primary" href="#">{% translate "Add an entity" %}</a>
+                </c-empty-state>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if is_paginated %}
+    <div class="data-table__footer">
+      <span>
+        {% blocktranslate with start=page_obj.start_index end=page_obj.end_index total=paginator.count %}
+          {{ start }}–{{ end }} of {{ total }}
+        {% endblocktranslate %}
+      </span>
+      <span class="d-flex gap-2">
+        {% if page_obj.has_previous %}
+          <a class="btn btn-sm btn-outline-secondary"
+             href="?page={{ page_obj.previous_page_number }}{% if search %}&q={{ search }}{% endif %}">
+            {% translate "Previous" %}
+          </a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a class="btn btn-sm btn-outline-secondary"
+             href="?page={{ page_obj.next_page_number }}{% if search %}&q={{ search }}{% endif %}">
+            {% translate "Next" %}
+          </a>
+        {% endif %}
+      </span>
+    </div>
+  {% endif %}
+</div>

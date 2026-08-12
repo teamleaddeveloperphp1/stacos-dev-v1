@@ -1,0 +1,107 @@
+// =============================================================================
+// The status vocabulary.
+//
+// One colour, one icon, one word per state — identical in every module and on
+// every surface. Status is never encoded by colour alone: each chip carries an
+// icon and a text label, which is a WCAG requirement and also the only reason a
+// dense table remains readable at a glance.
+// =============================================================================
+
+$stacos-statuses: (
+  "overdue":     (var(--stacos-status-overdue),     var(--stacos-status-overdue-bg)),
+  "due-soon":    (var(--stacos-status-due-soon),    var(--stacos-status-due-soon-bg)),
+  "on-track":    (var(--stacos-status-on-track),    var(--stacos-status-on-track-bg)),
+  "in-progress": (var(--stacos-status-in-progress), var(--stacos-status-in-progress-bg)),
+  "waiting":     (var(--stacos-status-waiting),     var(--stacos-status-waiting-bg)),
+  "complete":    (var(--stacos-status-complete),    var(--stacos-status-complete-bg)),
+  "na":          (var(--stacos-status-na),          var(--stacos-status-na-bg)),
+  "disputed":    (var(--stacos-status-disputed),    var(--stacos-status-disputed-bg)),
+);
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: $stacos-space-1;
+  padding: 0.125rem 0.5rem;
+  border-radius: $stacos-radius-pill;
+  font-size: $stacos-text-xs;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  border: 1px solid transparent;
+
+  .status-chip__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: none;
+  }
+
+  .status-chip__icon {
+    width: 12px;
+    height: 12px;
+    flex: none;
+  }
+}
+
+@each $name, $pair in $stacos-statuses {
+  .status-chip--#{$name} {
+    color: nth($pair, 1);
+    background: nth($pair, 2);
+    border-color: color-mix(in srgb, currentColor 22%, transparent);
+  }
+
+  .status-bar--#{$name} { background: nth($pair, 1); }
+  .status-text--#{$name} { color: nth($pair, 1); }
+}
+
+// -----------------------------------------------------------------------------
+// Due-date badge with countdown
+// -----------------------------------------------------------------------------
+.due-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: $stacos-space-2;
+  font-size: $stacos-text-sm;
+  font-variant-numeric: tabular-nums;
+
+  &__date { color: var(--stacos-text); }
+
+  &__count {
+    font-size: $stacos-text-xs;
+    font-weight: 600;
+  }
+
+  // An extended due date keeps the original visible, struck through. Indian
+  // due dates are extended by notification several times a year, and a client
+  // needs to see both what the law said and what it now says.
+  &__original {
+    text-decoration: line-through;
+    color: var(--stacos-text-subtle);
+    font-size: $stacos-text-xs;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// A left edge marking a row's state — cheap to scan down a long list.
+// -----------------------------------------------------------------------------
+.status-edge {
+  position: relative;
+  padding-left: $stacos-space-3;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--stacos-border-strong);
+  }
+
+  @each $name, $pair in $stacos-statuses {
+    &.status-edge--#{$name}::before { background: nth($pair, 1); }
+  }
+}

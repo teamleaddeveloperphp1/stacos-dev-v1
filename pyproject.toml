@@ -1,0 +1,224 @@
+[project]
+name = "stacos"
+version = "0.1.0"
+description = "STACOS — Skorydov Tax and Compliance Software"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+
+dependencies = [
+    # --- Framework ---
+    # Pinned to the 5.2 LTS series (security support to April 2028) rather than
+    # tracking the latest feature release. A compliance product does not chase Django.
+    "django>=5.2.17,<6.0",
+    "django-environ>=0.14.0",
+
+    # --- Database ---
+    "psycopg[binary,pool]>=3.3.4",
+
+    # --- Server-rendered interactivity ---
+    "django-htmx>=1.29.0",
+    "django-cotton>=2.7.2",
+    "django-crispy-forms>=2.7",
+    "crispy-bootstrap5>=2026.3",
+
+    # --- Auth ---
+    "django-allauth[socialaccount]>=65.19.0",
+    "argon2-cffi>=25.1.0",
+    "phonenumbers>=9.0.36",
+    "django-otp>=1.7.0",
+
+    # --- API (mobile + webhooks only) ---
+    "djangorestframework>=3.18.0",
+    "djangorestframework-simplejwt>=5.5.1",
+    "drf-spectacular>=0.30.0",
+
+    # --- Async work ---
+    "celery[redis]>=5.6.3",
+    "django-celery-beat>=2.9.0",
+    # Upper bound is celery/kombu's, not ours — kombu 5.6.x requires redis<6.5.
+    "redis>=5.0,<6.5",
+
+    # --- Real-time (one-way SSE; see §1.17.1) ---
+    "django-eventstream>=5.3.4",
+
+    # --- Storage ---
+    "django-storages[s3]>=1.14.6",
+
+    # Makes Django's generic classes (ListView[Model], QuerySet[Model]) subscriptable
+    # at runtime, so the annotations django-stubs wants are also valid Python.
+    "django-stubs-ext>=5.2.0",
+
+    # --- Ops ---
+    "django-waffle>=5.0.0",
+    "structlog>=26.1.0",
+    "django-structlog>=10.1.0",
+    "sentry-sdk>=2.67.1",
+    "whitenoise>=6.12.0",
+    "gunicorn>=26.0.0",
+    "uvicorn[standard]>=0.52.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.2",
+    "mypy>=2.3.0",
+    "django-stubs>=5.2.0",
+    "djangorestframework-stubs>=3.16.0",
+    "types-python-dateutil",
+
+    "pytest>=8.3",
+    "pytest-django>=4.14.0",
+    "pytest-cov>=6.0",
+    "pytest-xdist>=3.6",
+    "factory-boy>=3.3.3",
+    "hypothesis>=6.165.3",
+    "time-machine>=2.16",
+
+    "playwright>=1.62.0",
+    "pytest-playwright>=0.7",
+
+    "django-debug-toolbar>=7.1.0",
+    "flower>=2.0.1",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff — lint + format. One tool, no black/isort/flake8 stack.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [
+    "*/migrations/*",
+    "mobile",
+    ".venv",
+]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # isort
+    "UP",          # pyupgrade
+    "B",           # bugbear
+    "C4",          # comprehensions
+    "DJ",          # flake8-django
+    "S",           # bandit
+    "T20",         # no print()
+    "SIM",         # simplify
+    "RUF",
+    "TID252",      # no relative imports beyond one level
+    "PTH",         # use pathlib
+    "ARG",         # unused arguments
+    "DTZ",         # naive datetime usage
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "S101",    # assert is fine in tests and in internal invariants
+    "B008",    # Django/DRF idiom: callables in argument defaults
+    "RUF012",  # Django class attrs are conventionally mutable
+    # Prose in this codebase uses en dashes and typographic quotes deliberately;
+    # the docstrings are meant to be read.
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "ARG", "DTZ"]
+"**/tests/**" = ["S", "ARG", "DTZ"]
+"config/settings/*.py" = ["F403", "F405", "S104"]
+"scripts/**" = ["T20"]
+# Django dictates these signatures: signal receivers take `sender`/`**kwargs`,
+# system checks take `app_configs`, management commands take `*args`, and
+# allauth adapter overrides take `request` whether or not they use it. Silencing
+# them here beats scattering `noqa` across every one.
+"**/signals.py" = ["ARG001"]
+"**/checks.py" = ["ARG001"]
+"**/adapters.py" = ["ARG002"]
+"**/management/commands/*.py" = ["ARG002"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["stacos", "config"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ---------------------------------------------------------------------------
+# mypy — strict on the packages where correctness is load-bearing.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+exclude = ['migrations/', 'mobile/']
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# The load-bearing packages: tenancy scoping, permissions, and (later) the pure engine.
+module = ["stacos.core.*", "stacos.tenancy.*", "stacos.engagements.*", "stacos.engine.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = ["*.migrations.*", "*.tests.*", "tests.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# Settings modules use `from .base import *` by necessity, which mypy cannot
+# follow. `manage.py check --deploy` in CI is what actually validates these.
+module = ["config.settings.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# Third-party packages that ship no type information. Nothing we can do about
+# these, and failing the build over someone else's missing py.typed marker is
+# noise rather than signal.
+module = [
+    "allauth.*",
+    "celery.*",
+    "crispy_forms.*",
+    "django_celery_beat.*",
+    "django_cotton.*",
+    "environ.*",
+    "phonenumbers.*",
+    "waffle.*",
+    "storages.*",
+]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py", "*_test.py"]
+testpaths = ["tests", "stacos"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "e2e: Playwright end-to-end tests (slow; require a running server)",
+    "isolation: adversarial cross-tenant leakage tests",
+]
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["stacos"]
+omit = ["*/migrations/*", "*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

@@ -1,0 +1,23 @@
+{% extends "layouts/auth.html" %}
+{% load i18n crispy_forms_tags %}
+
+{% block title %}{% translate "Create your account" %} · STACOS{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <h1 class="auth-card__title">{% translate "Create your account" %}</h1>
+  <p class="auth-card__lede">
+    {% blocktranslate %}Both your email and your mobile number are verified during sign-up — compliance records need an identity that holds up later.{% endblocktranslate %}
+  </p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% crispy form %}
+  </form>
+
+  <p class="text-center text-muted mt-4 mb-0" style="font-size:.8125rem">
+    {% translate "Already have an account?" %}
+    <a href="{% url 'accounts:login' %}">{% translate "Sign in" %}</a>
+  </p>
+</div>
+{% endblock %}

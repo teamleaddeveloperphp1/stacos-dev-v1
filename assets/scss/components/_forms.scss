@@ -1,0 +1,93 @@
+// Form presentation. crispy-forms renders the fields; this styles them.
+// The boundary matters: cotton renders everything else, and mixing the two
+// produces two design systems inside one product.
+
+.form-label {
+  font-size: $stacos-text-sm;
+  font-weight: 500;
+  color: var(--stacos-text);
+  margin-bottom: 0.25rem;
+}
+
+.form-text {
+  font-size: $stacos-text-xs;
+  color: var(--stacos-text-muted);
+}
+
+.form-control,
+.form-select {
+  font-size: $stacos-text-base;
+  background: var(--stacos-surface);
+  border-color: var(--stacos-border-strong);
+
+  &::placeholder { color: var(--stacos-text-subtle); }
+}
+
+.invalid-feedback { font-size: $stacos-text-xs; }
+
+// The dual-OTP screen. Two codes, one submission — the inputs are deliberately
+// large and monospaced because they are typed from a phone in a hurry.
+.otp-field {
+  input {
+    font-family: $stacos-font-mono;
+    font-size: $stacos-text-2xl;
+    letter-spacing: 0.35em;
+    text-align: center;
+    padding: $stacos-space-3;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.auth-card {
+  max-width: 26rem;
+  margin: 0 auto;
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-xl);
+  box-shadow: var(--stacos-shadow-md);
+  padding: $stacos-space-6;
+
+  &__title {
+    font-size: $stacos-text-xl;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    margin-bottom: $stacos-space-2;
+  }
+
+  &__lede {
+    color: var(--stacos-text-muted);
+    font-size: $stacos-text-base;
+    margin-bottom: $stacos-space-5;
+  }
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-3;
+  margin: $stacos-space-5 0;
+  color: var(--stacos-text-subtle);
+  font-size: $stacos-text-xs;
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--stacos-border);
+  }
+}
+
+.btn-social {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $stacos-space-2;
+  width: 100%;
+  border: 1px solid var(--stacos-border-strong);
+  background: var(--stacos-surface);
+  color: var(--stacos-text);
+  font-weight: 500;
+
+  &:hover { background: var(--stacos-surface-sunken); }
+}

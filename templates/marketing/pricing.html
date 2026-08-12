@@ -1,0 +1,156 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Pricing" %} · STACOS{% endblock %}
+
+{% block content %}
+<section class="py-5">
+  <div class="container">
+    <div class="text-center mb-5">
+      <h1 class="h2 mb-3">{% translate "Pricing" %}</h1>
+      <p class="text-muted mb-4">
+        {% translate "Priced per entity and per user. Everything is billed in INR, inclusive of GST at checkout." %}
+      </p>
+
+      {#
+        Annual/monthly is a client-side toggle over figures that are already on
+        the page — no request, no flicker. Alpine holds the state; the server
+        rendered both numbers.
+      #}
+      <div x-data="{ annual: true }" class="d-inline-block">
+        <div class="billing-toggle mb-4">
+          <button type="button" @click="annual = false" :aria-pressed="(!annual).toString()">
+            {% translate "Monthly" %}
+          </button>
+          <button type="button" @click="annual = true" :aria-pressed="annual.toString()">
+            {% translate "Annual" %}
+          </button>
+        </div>
+
+        <div class="row g-4 text-start">
+          {% for plan in plans %}
+            <div class="col-12 col-md-6 col-xl-3">
+              <div class="pricing-card {% if plan.highlight %}pricing-card--highlight{% endif %}">
+                {% if plan.highlight %}
+                  <span class="pricing-card__badge">{% translate "Most popular" %}</span>
+                {% endif %}
+
+                <h2 class="h5 mb-1">{{ plan.name }}</h2>
+                <p class="text-muted small mb-3">{{ plan.tagline }}</p>
+
+                {% if plan.monthly_inr %}
+                  <div class="pricing-card__price">
+                    <span x-show="annual" x-cloak>₹{{ plan.annual_inr|floatformat:0 }}</span>
+                    <span x-show="!annual">₹{{ plan.monthly_inr|floatformat:0 }}</span>
+                    <span class="fs-6 fw-normal text-muted">
+                      <span x-show="annual" x-cloak>{% translate "/ year" %}</span>
+                      <span x-show="!annual">{% translate "/ month" %}</span>
+                    </span>
+                  </div>
+                  {% if plan.annual_saving_pct %}
+                    <div class="small mt-1" style="color: var(--stacos-status-on-track)" x-show="annual" x-cloak>
+                      {% blocktranslate with pct=plan.annual_saving_pct %}Save {{ pct }}% paying annually{% endblocktranslate %}
+                    </div>
+                  {% endif %}
+                  <div class="text-muted small mt-2">
+                    {% blocktranslate with e=plan.included_entities u=plan.included_users %}
+                      {{ e }} entities · {{ u }} users included
+                    {% endblocktranslate %}
+                  </div>
+                {% else %}
+                  <div class="pricing-card__price">{% translate "Let's talk" %}</div>
+                  <div class="text-muted small mt-2">{% translate "Unlimited entities and users" %}</div>
+                {% endif %}
+
+                <ul class="pricing-card__features">
+                  {% for feature in plan.features %}
+                    <li><span style="color: var(--stacos-status-on-track)">✓</span> {{ feature }}</li>
+                  {% endfor %}
+                </ul>
+
+                <a class="btn {% if plan.highlight %}btn-primary{% else %}btn-outline-secondary{% endif %} w-100 mt-4"
+                   href="{% url 'accounts:register' %}">{{ plan.cta }}</a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ #}
+<section class="py-5 border-top">
+  <div class="container">
+    <h2 class="h4 mb-4">{% translate "Compare plans" %}</h2>
+    <div style="overflow-x:auto">
+      <table class="table comparison-table align-middle">
+        <thead>
+          <tr>
+            <th style="min-width: 14rem">{% translate "Feature" %}</th>
+            {% for plan in plans %}<th class="text-center">{{ plan.name }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in comparison_rows %}
+            <tr>
+              {% for cell in row %}
+                {% if forloop.first %}
+                  <th scope="row" class="fw-normal">{{ cell }}</th>
+                {% else %}
+                  <td class="text-center">
+                    {% if cell is True %}<span class="yes" aria-label="{% translate 'Included' %}">✓</span>
+                    {% elif cell is False %}<span class="no" aria-label="{% translate 'Not included' %}">—</span>
+                    {% else %}{{ cell }}{% endif %}
+                  </td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ #}
+<section class="py-5 border-top">
+  <div class="container">
+    <h2 class="h4 mb-4">{% translate "Add-ons" %}</h2>
+    <div class="row g-3">
+      {% for name, price, note in add_ons %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <div class="border rounded p-3 h-100">
+            <div class="d-flex justify-content-between align-items-baseline">
+              <strong class="small">{{ name }}</strong>
+              <span class="small text-muted">{{ price }}</span>
+            </div>
+            <p class="text-muted small mb-0 mt-1">{{ note }}</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------------ #}
+<section class="py-5 border-top" style="background: var(--stacos-surface-sunken)">
+  <div class="container">
+    <h2 class="h4 mb-4">{% translate "Paying" %}</h2>
+    <div class="row g-4">
+      <div class="col-12 col-md-4">
+        <h3 class="h6">{% translate "Cards, UPI and netbanking" %}</h3>
+        <p class="text-muted small">{% translate "Through PayU, including UPI AutoPay and e-mandate for recurring payments." %}</p>
+      </div>
+      <div class="col-12 col-md-4">
+        <h3 class="h6">{% translate "International cards" %}</h3>
+        <p class="text-muted small">{% translate "Through Stripe, for customers billing outside India." %}</p>
+      </div>
+      <div class="col-12 col-md-4">
+        <h3 class="h6">{% translate "Cheque, NEFT and purchase order" %}</h3>
+        <p class="text-muted small">{% translate "We raise a proforma invoice, you record the payment reference, and finance verifies it. Common for larger organisations." %}</p>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

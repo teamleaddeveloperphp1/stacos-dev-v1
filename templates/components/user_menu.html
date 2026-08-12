@@ -1,0 +1,25 @@
+{% load i18n %}
+<div x-data="{ open: false }" @keydown.escape="open = false" class="position-relative">
+  <button type="button" class="btn btn-sm btn-link p-1 d-flex align-items-center gap-2"
+          @click="open = !open" :aria-expanded="open.toString()" aria-haspopup="menu"
+          aria-label="{% translate 'Account menu' %}">
+    <span class="avatar">{{ user.initials }}</span>
+  </button>
+
+  <div x-show="open" x-cloak x-transition.opacity.duration.120ms @click.outside="open = false"
+       class="card p-1 position-absolute end-0 mt-1" style="min-width: 15rem; z-index: 60;" role="menu">
+    <div class="px-2 py-2 border-bottom mb-1">
+      <div class="fw-semibold small">{{ user.full_name|default:user.email }}</div>
+      <div class="text-muted" style="font-size:.75rem">{{ user.email }}</div>
+    </div>
+    <a class="palette__item" href="{% url 'accounts:security' %}" role="menuitem" preload>
+      <c-icon name="shield" size="14" /><span>{% translate "Security and devices" %}</span>
+    </a>
+    <form method="post" action="{% url 'accounts:logout' %}" role="none">
+      {% csrf_token %}
+      <button type="submit" class="palette__item w-100" role="menuitem" hx-boost="false">
+        <c-icon name="logout" size="14" /><span>{% translate "Sign out" %}</span>
+      </button>
+    </form>
+  </div>
+</div>

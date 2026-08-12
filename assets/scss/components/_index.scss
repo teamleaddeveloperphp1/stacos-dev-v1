@@ -1,0 +1,8 @@
+// One partial per pattern. A developer must never hand-write a status chip.
+@import "base";
+@import "shell";
+@import "status";
+@import "table";
+@import "forms";
+@import "palette";
+@import "htmx";

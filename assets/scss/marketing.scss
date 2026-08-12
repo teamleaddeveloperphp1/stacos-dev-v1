@@ -1,0 +1,143 @@
+// Public marketing stylesheet. Shares the token layer with the application, so
+// the pricing page and the product look like one company made both.
+
+@import "bootstrap/scss/functions";
+@import "tokens";
+
+$primary: $stacos-blue-600;
+$font-family-sans-serif: $stacos-font-sans;
+$font-size-base: 1rem;              // roomier than the app: this is read, not worked in
+$border-radius: $stacos-radius-lg;
+$enable-shadows: false;
+$enable-gradients: false;
+
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/variables-dark";
+@import "bootstrap/scss/maps";
+@import "bootstrap/scss/mixins";
+@import "bootstrap/scss/root";
+
+@import "bootstrap/scss/reboot";
+@import "bootstrap/scss/type";
+@import "bootstrap/scss/containers";
+@import "bootstrap/scss/grid";
+@import "bootstrap/scss/tables";
+@import "bootstrap/scss/forms";
+@import "bootstrap/scss/buttons";
+@import "bootstrap/scss/transitions";
+@import "bootstrap/scss/nav";
+@import "bootstrap/scss/navbar";
+@import "bootstrap/scss/card";
+@import "bootstrap/scss/badge";
+@import "bootstrap/scss/close";
+@import "bootstrap/scss/helpers";
+
+body {
+  color: var(--stacos-text);
+  background: var(--stacos-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+.hero {
+  padding: $stacos-space-8 0 $stacos-space-7;
+
+  &__title {
+    font-size: clamp(2rem, 5vw, 3.25rem);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  &__lede {
+    font-size: 1.125rem;
+    color: var(--stacos-text-muted);
+    max-width: 40rem;
+  }
+}
+
+.pricing-card {
+  height: 100%;
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-lg);
+  padding: $stacos-space-5;
+  background: var(--stacos-surface);
+  display: flex;
+  flex-direction: column;
+
+  &--highlight {
+    border-color: var(--stacos-accent);
+    box-shadow: var(--stacos-shadow-md);
+    position: relative;
+  }
+
+  &__badge {
+    position: absolute;
+    top: -0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--stacos-accent);
+    color: #fff;
+    font-size: $stacos-text-xs;
+    font-weight: 600;
+    padding: 0.15rem 0.65rem;
+    border-radius: $stacos-radius-pill;
+    white-space: nowrap;
+  }
+
+  &__price {
+    font-size: 2.25rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__features {
+    list-style: none;
+    padding: 0;
+    margin: $stacos-space-4 0 0;
+    flex: 1 1 auto;
+
+    li {
+      display: flex;
+      gap: $stacos-space-2;
+      padding: 0.3rem 0;
+      font-size: 0.9375rem;
+      color: var(--stacos-text-muted);
+    }
+  }
+}
+
+.comparison-table {
+  font-size: 0.9375rem;
+
+  th, td { vertical-align: middle; }
+  thead th { white-space: nowrap; }
+  .yes { color: var(--stacos-status-on-track); }
+  .no  { color: var(--stacos-text-subtle); }
+}
+
+.billing-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  background: var(--stacos-surface-sunken);
+  border: 1px solid var(--stacos-border);
+  border-radius: $stacos-radius-pill;
+  padding: 0.25rem;
+
+  button {
+    border: 0;
+    background: transparent;
+    border-radius: $stacos-radius-pill;
+    padding: 0.35rem 1rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--stacos-text-muted);
+
+    &[aria-pressed="true"] {
+      background: var(--stacos-surface);
+      color: var(--stacos-text);
+      box-shadow: var(--stacos-shadow-xs);
+    }
+  }
+}

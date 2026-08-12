@@ -1,0 +1,76 @@
+{% load i18n static %}<!doctype html>
+<html lang="{{ LANGUAGE_CODE|default:'en-in' }}" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}STACOS — {% translate "Tax and compliance software" %}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{% translate 'The shared workspace between businesses and the professionals who keep them compliant. Every obligation, every due date, every filing — in one auditable place.' %}{% endblock %}">
+  <link rel="stylesheet" href="{% static 'css/marketing.css' %}">
+  <link rel="canonical" href="{{ request.build_absolute_uri }}">
+  <meta property="og:title" content="{% block og_title %}STACOS{% endblock %}">
+  <meta property="og:type" content="website">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg border-bottom">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="/">
+      <span class="app-brand__mark" style="width:26px;height:26px;border-radius:5px;background:var(--stacos-accent);color:#fff;display:grid;place-items:center;font-size:13px">S</span>
+      STACOS
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+            data-bs-target="#public-nav" aria-controls="public-nav"
+            aria-expanded="false" aria-label="{% translate 'Toggle navigation' %}">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="public-nav">
+      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+        <li class="nav-item"><a class="nav-link" href="{% url 'marketing:pricing' %}">{% translate "Pricing" %}</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'marketing:security' %}">{% translate "Security" %}</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'accounts:login' %}">{% translate "Sign in" %}</a></li>
+        <li class="nav-item">
+          <a class="btn btn-primary btn-sm" href="{% url 'accounts:register' %}">
+            {% translate "Start free trial" %}
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+{% block content %}{% endblock %}
+
+<footer class="border-top py-5 mt-5">
+  <div class="container">
+    <div class="row g-4">
+      <div class="col-12 col-md-4">
+        <div class="fw-bold mb-2">STACOS</div>
+        <p class="text-muted small mb-0">
+          {% translate "Skorydov Tax and Compliance Software. Built for Indian businesses and the professionals who serve them." %}
+        </p>
+      </div>
+      <div class="col-6 col-md-2">
+        <div class="fw-semibold small mb-2">{% translate "Product" %}</div>
+        <ul class="list-unstyled small">
+          <li><a class="text-muted text-decoration-none" href="{% url 'marketing:pricing' %}">{% translate "Pricing" %}</a></li>
+          <li><a class="text-muted text-decoration-none" href="{% url 'marketing:security' %}">{% translate "Security" %}</a></li>
+        </ul>
+      </div>
+      <div class="col-6 col-md-2">
+        <div class="fw-semibold small mb-2">{% translate "Account" %}</div>
+        <ul class="list-unstyled small">
+          <li><a class="text-muted text-decoration-none" href="{% url 'accounts:login' %}">{% translate "Sign in" %}</a></li>
+          <li><a class="text-muted text-decoration-none" href="{% url 'accounts:register' %}">{% translate "Create account" %}</a></li>
+        </ul>
+      </div>
+    </div>
+    <hr class="my-4">
+    <p class="text-muted small mb-0">
+      {% translate "Data for Indian customers is stored in an Indian region." %}
+    </p>
+  </div>
+</footer>
+
+<script defer src="{% static 'js/app.js' %}"></script>
+</body>
+</html>

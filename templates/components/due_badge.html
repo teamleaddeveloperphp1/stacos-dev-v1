@@ -1,0 +1,40 @@
+{% load i18n humanize %}
+{#
+  A due date with its countdown, and — when a government notification has moved
+  it — the original date struck through beside it.
+
+  That last part is not decoration. Indian due dates are extended by notification
+  several times a year, and a client needs to see both what the statute said and
+  what it now says, with the notification reference behind it. Building this into
+  the component means every surface shows it consistently.
+
+  Usage:  <c-due-badge :date="obligation.due_date" :original="obligation.original_due_date" />
+#}
+<span class="due-badge">
+  <time class="due-badge__date" datetime="{{ date|date:'Y-m-d' }}">{{ date|date:"j M Y" }}</time>
+
+  {% if original and original != date %}
+    <time class="due-badge__original" datetime="{{ original|date:'Y-m-d' }}"
+          title="{% translate 'Original statutory date, extended by notification' %}{% if notification %} — {{ notification }}{% endif %}">
+      {{ original|date:"j M" }}
+    </time>
+  {% endif %}
+
+  {#
+    `days` is signed: negative means overdue. It is computed server-side against
+    the entity's jurisdiction, never in the browser — a client whose clock or
+    timezone differs must not see a different answer from the one the platform
+    will act on.
+  #}
+  {% if days != None %}
+    <span class="due-badge__count {% if days < 0 %}status-text--overdue{% elif days <= 7 %}status-text--due-soon{% else %}status-text--on-track{% endif %}">
+      {% if days < 0 %}
+        {% blocktranslate count n=days_late %}{{ n }} day late{% plural %}{{ n }} days late{% endblocktranslate %}
+      {% elif days == 0 %}
+        {% translate "Due today" %}
+      {% else %}
+        {% blocktranslate count n=days %}in {{ n }} day{% plural %}in {{ n }} days{% endblocktranslate %}
+      {% endif %}
+    </span>
+  {% endif %}
+</span>

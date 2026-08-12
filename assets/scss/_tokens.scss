@@ -1,0 +1,231 @@
+// =============================================================================
+// STACOS design tokens
+//
+// The single source of truth for colour, type, spacing, radius, elevation and
+// motion. Defined once as Sass variables (so Bootstrap's maps can read them)
+// and emitted again as CSS custom properties (so components, Alpine and the
+// mobile client read the same values without a recompile).
+//
+// Aesthetic target: a calm, dense, professional tool. Neutral greys with one
+// confident accent; semantic colour reserved strictly for status. Bootstrap's
+// stock radius and shadows read as "prototype" to enterprise buyers, so both
+// are tightened here.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Brand
+// -----------------------------------------------------------------------------
+$stacos-blue-50:   #eff5ff;
+$stacos-blue-100:  #dbe8fe;
+$stacos-blue-200:  #bfd7fe;
+$stacos-blue-300:  #93bbfd;
+$stacos-blue-400:  #6096fa;
+$stacos-blue-500:  #3b76f6;
+$stacos-blue-600:  #1d4ed8;   // the brand accent
+$stacos-blue-700:  #1a3fae;
+$stacos-blue-800:  #1b378c;
+$stacos-blue-900:  #1c3271;
+
+// Neutrals. Slightly cool, so financial tables read as crisp rather than muddy.
+$stacos-grey-0:    #ffffff;
+$stacos-grey-25:   #fcfcfd;
+$stacos-grey-50:   #f8fafc;
+$stacos-grey-100:  #f1f5f9;
+$stacos-grey-200:  #e2e8f0;
+$stacos-grey-300:  #cbd5e1;
+$stacos-grey-400:  #94a3b8;
+$stacos-grey-500:  #64748b;
+$stacos-grey-600:  #475569;
+$stacos-grey-700:  #334155;
+$stacos-grey-800:  #1e293b;
+$stacos-grey-900:  #0f172a;
+$stacos-grey-950:  #020617;
+
+// -----------------------------------------------------------------------------
+// Status vocabulary
+//
+// The same colour, icon and word for a state in every module, on every surface.
+// Never encode status by colour alone — every status component pairs colour with
+// an icon and a text label, which is both a WCAG requirement and the only way a
+// dense table stays readable.
+// -----------------------------------------------------------------------------
+$stacos-status-overdue:    #b42318;  // red    — past its statutory date
+$stacos-status-due-soon:   #b54708;  // amber  — inside the warning window
+$stacos-status-on-track:   #067647;  // green  — comfortably ahead
+$stacos-status-in-progress:#175cd3;  // blue   — someone is working on it
+$stacos-status-waiting:    #6941c6;  // purple — blocked on someone else
+$stacos-status-complete:   #475569;  // grey   — done, deliberately quiet
+$stacos-status-na:         #94a3b8;  // muted  — not applicable
+$stacos-status-disputed:   #c11574;  // pink   — under challenge
+
+$stacos-status-overdue-bg:     #fef3f2;
+$stacos-status-due-soon-bg:    #fffaeb;
+$stacos-status-on-track-bg:    #ecfdf3;
+$stacos-status-in-progress-bg: #eff8ff;
+$stacos-status-waiting-bg:     #f4f3ff;
+$stacos-status-complete-bg:    #f1f5f9;
+$stacos-status-na-bg:          #f8fafc;
+$stacos-status-disputed-bg:    #fdf2fa;
+
+// -----------------------------------------------------------------------------
+// Typography
+//
+// One clean sans. Tabular numerals everywhere a figure appears: without them,
+// a column of rupee amounts fails to align and the table stops being scannable.
+// -----------------------------------------------------------------------------
+$stacos-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, sans-serif;
+$stacos-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+                   Menlo, Consolas, monospace;
+
+$stacos-text-xs:   0.75rem;    // 12px — metadata, table captions
+$stacos-text-sm:   0.8125rem;  // 13px — the dense table default
+$stacos-text-base: 0.875rem;   // 14px — body. 16px is too loose for this density
+$stacos-text-md:   1rem;       // 16px — emphasis
+$stacos-text-lg:   1.125rem;   // 18px — card titles
+$stacos-text-xl:   1.375rem;   // 22px — page titles
+$stacos-text-2xl:  1.75rem;    // 28px — dashboard figures
+$stacos-text-3xl:  2.25rem;    // 36px — marketing
+
+$stacos-leading-tight:  1.25;
+$stacos-leading-normal: 1.5;
+$stacos-leading-loose:  1.7;
+
+// -----------------------------------------------------------------------------
+// Spacing — generous between sections, tight within rows.
+// -----------------------------------------------------------------------------
+$stacos-space-1:  0.25rem;
+$stacos-space-2:  0.5rem;
+$stacos-space-3:  0.75rem;
+$stacos-space-4:  1rem;
+$stacos-space-5:  1.5rem;
+$stacos-space-6:  2rem;
+$stacos-space-7:  3rem;
+$stacos-space-8:  4rem;
+
+// -----------------------------------------------------------------------------
+// Radius and elevation — deliberately restrained.
+// -----------------------------------------------------------------------------
+$stacos-radius-sm: 0.1875rem;
+$stacos-radius-md: 0.3125rem;
+$stacos-radius-lg: 0.5rem;
+$stacos-radius-xl: 0.75rem;
+$stacos-radius-pill: 999px;
+
+$stacos-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+$stacos-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+$stacos-shadow-md: 0 4px 8px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+$stacos-shadow-lg: 0 12px 16px -4px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.03);
+
+// -----------------------------------------------------------------------------
+// Motion
+//
+// Fast enough to feel instant, slow enough to be followed. Anything above ~200ms
+// on a swap reads as lag on a mid-range Android over 4G.
+// -----------------------------------------------------------------------------
+$stacos-duration-fast:   120ms;
+$stacos-duration-normal: 180ms;
+$stacos-duration-slow:   260ms;
+$stacos-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+// -----------------------------------------------------------------------------
+// Layout
+// -----------------------------------------------------------------------------
+$stacos-shell-nav-width: 244px;
+$stacos-shell-nav-collapsed: 60px;
+$stacos-shell-header-height: 52px;
+$stacos-row-height: 42px;
+
+// =============================================================================
+// CSS custom properties
+//
+// Emitted so that runtime theming, Alpine components and the Framework7 mobile
+// client all read the same values. Dark mode redefines only what changes, under
+// Bootstrap 5.3's `[data-bs-theme]` — not as a second stylesheet.
+// =============================================================================
+:root {
+  --stacos-accent:        #{$stacos-blue-600};
+  --stacos-accent-hover:  #{$stacos-blue-700};
+  --stacos-accent-subtle: #{$stacos-blue-50};
+
+  --stacos-surface:        #{$stacos-grey-0};
+  --stacos-surface-sunken: #{$stacos-grey-50};
+  --stacos-surface-raised: #{$stacos-grey-0};
+  --stacos-border:         #{$stacos-grey-200};
+  --stacos-border-strong:  #{$stacos-grey-300};
+
+  --stacos-text:        #{$stacos-grey-900};
+  --stacos-text-muted:  #{$stacos-grey-500};
+  --stacos-text-subtle: #{$stacos-grey-400};
+
+  --stacos-status-overdue:     #{$stacos-status-overdue};
+  --stacos-status-due-soon:    #{$stacos-status-due-soon};
+  --stacos-status-on-track:    #{$stacos-status-on-track};
+  --stacos-status-in-progress: #{$stacos-status-in-progress};
+  --stacos-status-waiting:     #{$stacos-status-waiting};
+  --stacos-status-complete:    #{$stacos-status-complete};
+  --stacos-status-na:          #{$stacos-status-na};
+  --stacos-status-disputed:    #{$stacos-status-disputed};
+
+  --stacos-status-overdue-bg:     #{$stacos-status-overdue-bg};
+  --stacos-status-due-soon-bg:    #{$stacos-status-due-soon-bg};
+  --stacos-status-on-track-bg:    #{$stacos-status-on-track-bg};
+  --stacos-status-in-progress-bg: #{$stacos-status-in-progress-bg};
+  --stacos-status-waiting-bg:     #{$stacos-status-waiting-bg};
+  --stacos-status-complete-bg:    #{$stacos-status-complete-bg};
+  --stacos-status-na-bg:          #{$stacos-status-na-bg};
+  --stacos-status-disputed-bg:    #{$stacos-status-disputed-bg};
+
+  --stacos-radius-sm: #{$stacos-radius-sm};
+  --stacos-radius-md: #{$stacos-radius-md};
+  --stacos-radius-lg: #{$stacos-radius-lg};
+
+  --stacos-shadow-xs: #{$stacos-shadow-xs};
+  --stacos-shadow-sm: #{$stacos-shadow-sm};
+  --stacos-shadow-md: #{$stacos-shadow-md};
+  --stacos-shadow-lg: #{$stacos-shadow-lg};
+
+  --stacos-duration-fast:   #{$stacos-duration-fast};
+  --stacos-duration-normal: #{$stacos-duration-normal};
+  --stacos-ease: #{$stacos-ease};
+
+  --stacos-nav-width: #{$stacos-shell-nav-width};
+  --stacos-header-height: #{$stacos-shell-header-height};
+  --stacos-row-height: #{$stacos-row-height};
+}
+
+[data-bs-theme="dark"] {
+  --stacos-accent:        #{$stacos-blue-400};
+  --stacos-accent-hover:  #{$stacos-blue-300};
+  --stacos-accent-subtle: #{rgba($stacos-blue-400, 0.14)};
+
+  --stacos-surface:        #{$stacos-grey-900};
+  --stacos-surface-sunken: #{$stacos-grey-950};
+  --stacos-surface-raised: #{$stacos-grey-800};
+  --stacos-border:         #{$stacos-grey-700};
+  --stacos-border-strong:  #{$stacos-grey-600};
+
+  --stacos-text:        #{$stacos-grey-100};
+  --stacos-text-muted:  #{$stacos-grey-400};
+  --stacos-text-subtle: #{$stacos-grey-500};
+
+  // Status hues lighten so they hold contrast on a dark ground; the vocabulary
+  // itself — which colour means which state — never changes.
+  --stacos-status-overdue:     #fda29b;
+  --stacos-status-due-soon:    #fec84b;
+  --stacos-status-on-track:    #75e0a7;
+  --stacos-status-in-progress: #84caff;
+  --stacos-status-waiting:     #bdb4fe;
+  --stacos-status-complete:    #94a3b8;
+  --stacos-status-na:          #64748b;
+  --stacos-status-disputed:    #f670c7;
+
+  --stacos-status-overdue-bg:     #{rgba(#fda29b, 0.12)};
+  --stacos-status-due-soon-bg:    #{rgba(#fec84b, 0.12)};
+  --stacos-status-on-track-bg:    #{rgba(#75e0a7, 0.12)};
+  --stacos-status-in-progress-bg: #{rgba(#84caff, 0.12)};
+  --stacos-status-waiting-bg:     #{rgba(#bdb4fe, 0.12)};
+  --stacos-status-complete-bg:    #{rgba(#94a3b8, 0.12)};
+  --stacos-status-na-bg:          #{rgba(#64748b, 0.12)};
+  --stacos-status-disputed-bg:    #{rgba(#f670c7, 0.12)};
+}

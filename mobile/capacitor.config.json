@@ -1,0 +1,22 @@
+{
+  "appId": "com.skorydov.stacos",
+  "appName": "STACOS",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Camera": {
+      "androidxExifInterfaceVersion": "1.3.7"
+    }
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}

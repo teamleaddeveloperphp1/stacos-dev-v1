@@ -1,0 +1,94 @@
+{% extends "layouts/auth.html" %}
+{% load i18n crispy_forms_tags %}
+
+{% block title %}{% translate "Verify your identity" %} · STACOS{% endblock %}
+
+{#
+  The dual-OTP screen.
+
+  One screen, two codes, one submission, one rate limit. Both channels are
+  satisfied together or neither is — never one now and the other later.
+
+  The two codes are shown side by side rather than in sequence because a user
+  reading them off two devices needs to see what is being asked of them before
+  they start, and because a two-step flow invites abandoning after the first.
+#}
+
+{% block content %}
+<div class="auth-card">
+  <h1 class="auth-card__title">{% translate "Verify it's you" %}</h1>
+  <p class="auth-card__lede">
+    {% blocktranslate %}We've sent a code to each of your two channels. Enter both to continue.{% endblocktranslate %}
+  </p>
+
+  <div class="d-flex flex-column gap-2 mb-4 p-3 rounded"
+       style="background: var(--stacos-surface-sunken); font-size: .8125rem;">
+    <div class="d-flex align-items-center gap-2">
+      <c-icon name="mail" size="14" />
+      <span class="text-muted">{% translate "Email" %}</span>
+      <span class="ms-auto fw-medium">{{ masked_email }}</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <c-icon name="phone" size="14" />
+      <span class="text-muted">{% translate "Mobile" %}</span>
+      <span class="ms-auto fw-medium">{{ masked_phone }}</span>
+    </div>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger py-2 small" role="alert">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="otp-field mb-3">
+      <label class="form-label" for="{{ form.email_code.id_for_label }}">
+        {{ form.email_code.label }}
+      </label>
+      {{ form.email_code }}
+      {% for error in form.email_code.errors %}
+        <div class="invalid-feedback d-block" role="alert">{{ error }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="otp-field mb-3">
+      <label class="form-label" for="{{ form.phone_code.id_for_label }}">
+        {{ form.phone_code.label }}
+      </label>
+      {{ form.phone_code }}
+      {% for error in form.phone_code.errors %}
+        <div class="invalid-feedback d-block" role="alert">{{ error }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="form-check mb-4">
+      {{ form.remember_device }}
+      <label class="form-check-label small" for="{{ form.remember_device.id_for_label }}">
+        {{ form.remember_device.label }}
+        <span class="d-block text-muted" style="font-size:.75rem">
+          {{ form.remember_device.help_text }}
+        </span>
+      </label>
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100" hx-disabled-elt="this">
+      {% translate "Verify and continue" %}
+    </button>
+  </form>
+
+  <div class="d-flex align-items-center justify-content-between mt-4 pt-3 border-top">
+    <span class="text-muted" style="font-size:.75rem">
+      {% blocktranslate with n=verification.attempts_remaining %}{{ n }} attempts remaining{% endblocktranslate %}
+    </span>
+    <form method="post" action="{% url 'accounts:resend' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-link p-0" style="font-size:.75rem">
+        {% translate "Send new codes" %}
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

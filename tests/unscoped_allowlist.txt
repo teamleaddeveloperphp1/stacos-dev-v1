@@ -1,0 +1,14 @@
+# Every legitimate use of `objects_unscoped` in the project.
+#
+# `objects_unscoped` bypasses tenant filtering entirely. It is named unpleasantly
+# on purpose, and every call site is counted against this file by
+# `tests/security/test_unscoped_allowlist.py`. Adding a use requires adding a
+# line here with a reason — which is the point: the reason has to survive review.
+#
+# Format:  <module path>:<count>  # why this is safe
+#
+# ---------------------------------------------------------------------------
+
+stacos/tenancy/scope_resolver.py:2  # Bootstrap. These ARE the queries that establish the scope, so nothing is bound yet to filter by. Both are anchored on a tenant the user is already an active member of.
+stacos/tenancy/views.py:1           # Tenant switcher. Filtered by `user`, so a forged tenant id cannot reach a tenant the user is not in.
+stacos/api/views.py:1               # Mobile /me/ endpoint listing the caller's own memberships, filtered by `user`.

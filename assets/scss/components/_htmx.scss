@@ -1,0 +1,88 @@
+// =============================================================================
+// Interaction feedback.
+//
+// The target is acknowledgement within 100ms of every click and no spinner
+// visible for longer than 200ms. Full-page loading overlays are banned: they
+// make a fast application feel slow by drawing attention to the wait.
+// =============================================================================
+
+// hx-indicator: hidden until the request is in flight.
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity var(--stacos-duration-fast) var(--stacos-ease);
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+// A subtle inline spinner, never a modal one.
+.spinner-inline {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: stacos-spin 0.6s linear infinite;
+  vertical-align: -2px;
+}
+
+@keyframes stacos-spin {
+  to { transform: rotate(360deg); }
+}
+
+// While a swap target is loading, dim it slightly rather than blanking it —
+// keeping the stale content visible reads as faster than an empty box.
+.htmx-request > .swap-target,
+.swap-target.htmx-request {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity var(--stacos-duration-fast) var(--stacos-ease);
+}
+
+// A thin progress bar at the top of the viewport for longer navigations.
+.route-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--stacos-accent);
+  z-index: 1080;
+  transition: width var(--stacos-duration-slow) var(--stacos-ease),
+              opacity var(--stacos-duration-fast) var(--stacos-ease);
+
+  &.is-active { width: 70%; }
+  &.is-done { width: 100%; opacity: 0; }
+}
+
+// Freshly inserted rows flash briefly, so an out-of-band update is noticed.
+@keyframes stacos-settle {
+  from { background: var(--stacos-accent-subtle); }
+  to { background: transparent; }
+}
+
+.htmx-added {
+  animation: stacos-settle var(--stacos-duration-slow) var(--stacos-ease);
+}
+
+// View Transitions, where the browser supports them. A no-op elsewhere.
+@view-transition {
+  navigation: auto;
+}
+
+// Toasts are stacked bottom-right and never block interaction.
+.toast-stack {
+  position: fixed;
+  right: $stacos-space-4;
+  bottom: $stacos-space-4;
+  z-index: 1090;
+  display: flex;
+  flex-direction: column;
+  gap: $stacos-space-2;
+  pointer-events: none;
+
+  .toast { pointer-events: auto; }
+}

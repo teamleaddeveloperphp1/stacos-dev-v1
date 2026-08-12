@@ -1,0 +1,22 @@
+{% extends "layouts/auth.html" %}
+{% load i18n crispy_forms_tags %}
+
+{% block title %}{% translate "Confirm your identity" %} · STACOS{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <div class="d-flex justify-content-center mb-3" style="color: var(--stacos-accent)">
+    <c-icon name="lock" size="28" />
+  </div>
+  <h1 class="auth-card__title text-center">{% translate "Confirm your identity" %}</h1>
+  <p class="auth-card__lede text-center">
+    {% blocktranslate %}This action affects filings, access or money, so we ask you to confirm it's still you at the keyboard.{% endblocktranslate %}
+  </p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {% crispy form %}
+  </form>
+</div>
+{% endblock %}

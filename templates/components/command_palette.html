@@ -1,0 +1,64 @@
+{% load i18n %}
+{#
+  Command palette, opened with Ctrl/Cmd-K or `/`.
+
+  The single feature that makes power users describe an application as fast, and
+  a CA carrying three hundred clients is a power user by definition. Search runs
+  server-side against PostgreSQL full-text plus trigram, debounced at 250ms, and
+  returns a fragment — there is no client-side index to build or keep fresh.
+#}
+<div x-data="{
+       open: false,
+       init() {
+         document.addEventListener('stacos:palette-open', () => this.show());
+       },
+       show() {
+         this.open = true;
+         this.$nextTick(() => this.$refs.input?.focus());
+       }
+     }"
+     @keydown.escape.window="open = false"
+     x-cloak>
+
+  <div x-show="open" x-transition.opacity.duration.120ms
+       class="palette-backdrop" @click.self="open = false"
+       role="dialog" aria-modal="true" aria-label="{% translate 'Search and commands' %}">
+    <div class="palette">
+      <input type="search"
+             x-ref="input"
+             class="palette__input"
+             placeholder="{% translate 'Search clients, entities, obligations, notices…' %}"
+             autocomplete="off"
+             aria-label="{% translate 'Search' %}"
+             hx-get="{% url 'app:dashboard' %}"
+             hx-trigger="keyup changed delay:250ms, search"
+             hx-target="#palette-results"
+             hx-indicator="#palette-spinner"
+             name="q">
+
+      <div id="palette-results" class="palette__results" role="listbox" aria-live="polite">
+        <div class="palette__group-label">{% translate "Jump to" %}</div>
+        <a class="palette__item" href="{% url 'app:dashboard' %}" role="option">
+          <c-icon name="home" size="14" /><span>{% translate "Dashboard" %}</span>
+          <span class="palette__hint"><kbd>g</kbd> <kbd>o</kbd></span>
+        </a>
+        <a class="palette__item" href="{% url 'app:entity_list' %}" role="option">
+          <c-icon name="building" size="14" /><span>{% translate "Entities" %}</span>
+          <span class="palette__hint"><kbd>g</kbd> <kbd>e</kbd></span>
+        </a>
+        <a class="palette__item" href="{% url 'accounts:security' %}" role="option">
+          <c-icon name="shield" size="14" /><span>{% translate "Security and devices" %}</span>
+        </a>
+      </div>
+
+      <div class="palette__footer">
+        <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> {% translate "navigate" %}</span>
+        <span><kbd>&crarr;</kbd> {% translate "open" %}</span>
+        <span><kbd>esc</kbd> {% translate "close" %}</span>
+        <span class="ms-auto htmx-indicator" id="palette-spinner">
+          <span class="spinner-inline"></span>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>

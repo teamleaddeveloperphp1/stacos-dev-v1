@@ -1,0 +1,119 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Security" %} · STACOS{% endblock %}
+
+{#
+  The page an enterprise procurement team asks for. Written to be handed over
+  directly, so it states what is true today rather than what is planned.
+#}
+
+{% block content %}
+<section class="py-5">
+  <div class="container" style="max-width: 52rem">
+    <h1 class="h2 mb-3">{% translate "Security and privacy" %}</h1>
+    <p class="text-muted mb-5">
+      {% blocktranslate %}
+      STACOS holds tax identifiers, filings, statutory registers and board
+      minutes. This page describes how that data is separated, protected and
+      accounted for.
+      {% endblocktranslate %}
+    </p>
+
+    <h2 class="h5 mt-5">{% translate "Tenant isolation" %}</h2>
+    <p class="text-muted">
+      {% blocktranslate %}
+      Every customer-owned record carries the identifier of the account that owns
+      it. The application's default database manager refuses to run a query that
+      has not been scoped to an account — an unscoped query raises an error
+      rather than returning data. PostgreSQL row-level security enforces the same
+      boundary independently at the database, using a role that cannot bypass it.
+      A dedicated test suite attempts cross-account reads and writes against every
+      model on every build and fails the build if any of them succeeds.
+      {% endblocktranslate %}
+    </p>
+
+    <h2 class="h5 mt-5">{% translate "Access between organisations" %}</h2>
+    <p class="text-muted">
+      {% blocktranslate %}
+      A professional firm can only see a client's records through an engagement:
+      a record the client approves, scoped to named entities and named compliance
+      categories, with a start date and an end date. There is no other route.
+      Ending an engagement removes access on the same request — not on a nightly
+      job — and the organisation keeps everything.
+      {% endblocktranslate %}
+    </p>
+
+    <h2 class="h5 mt-5">{% translate "Authentication" %}</h2>
+    <p class="text-muted">
+      {% blocktranslate %}
+      Registering, and signing in from a device we do not recognise, requires a
+      code sent to your email address and a code sent to your mobile number,
+      entered together as one step. Signing in with Google, Microsoft or Apple
+      does not substitute for either — it proves the provider knows you, not that
+      you control those two channels.
+      {% endblocktranslate %}
+    </p>
+    <p class="text-muted">
+      {% blocktranslate %}
+      Approving a return, changing someone's role, changing a payment method,
+      exporting data and granting access all require re-authentication at the
+      moment you do them. Passwords are hashed with Argon2. Every trusted device
+      and active session is listed in your account, and can be ended remotely —
+      which takes effect immediately, including on the mobile app.
+      {% endblocktranslate %}
+    </p>
+
+    <h2 class="h5 mt-5">{% translate "Audit trail" %}</h2>
+    <p class="text-muted">
+      {% blocktranslate %}
+      Every state change is recorded with the person who made it, the time, the
+      network address and what changed. The audit table is append-only: the
+      database rejects attempts to update or delete a row, so the record cannot be
+      quietly revised. You can export the full trail for your account at any time.
+      {% endblocktranslate %}
+    </p>
+
+    <h2 class="h5 mt-5">{% translate "Support access" %}</h2>
+    <p class="text-muted">
+      {% blocktranslate %}
+      Our staff cannot browse your data. Support access requires your consent, is
+      time-boxed, is shown to you in the interface while it is active, and is
+      logged. There is no silent impersonation.
+      {% endblocktranslate %}
+    </p>
+
+    <h2 class="h5 mt-5">{% translate "Data residency and the DPDP Act" %}</h2>
+    <p class="text-muted">
+      {% blocktranslate %}
+      Data belonging to Indian customers is stored in an Indian region. Consent
+      records, purpose limitation, and the data-principal rights of access,
+      correction and erasure are product features rather than policy statements.
+      A documented retention schedule applies per class of data.
+      {% endblocktranslate %}
+    </p>
+
+    <h2 class="h5 mt-5">{% translate "Encryption" %}</h2>
+    <p class="text-muted">
+      {% blocktranslate %}
+      Traffic is encrypted in transit. Storage is encrypted at rest. Tax
+      identifiers, bank details and any credentials held for government portals
+      receive additional field-level encryption. We would rather not hold
+      Aadhaar-adjacent data at all, and store only what a filing genuinely
+      requires.
+      {% endblocktranslate %}
+    </p>
+
+    <div class="border rounded p-4 mt-5" style="background: var(--stacos-surface-sunken)">
+      <strong>{% translate "Procurement questions" %}</strong>
+      <p class="text-muted small mb-0 mt-2">
+        {% blocktranslate %}
+        For a data processing agreement, penetration test summary, or completed
+        security questionnaire, contact us through your account manager or from
+        the address on your invoice.
+        {% endblocktranslate %}
+      </p>
+    </div>
+  </div>
+</section>
+{% endblock %}

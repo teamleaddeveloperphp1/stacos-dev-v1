@@ -1,0 +1,16 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Dashboard" %} · STACOS{% endblock %}
+
+{#
+  The dual-render pattern, stated once:
+
+    * this page template extends the shell and its {% block main %} contains
+      NOTHING but an include of the fragment;
+    * the fragment is what an HTMX request receives.
+
+  Because both paths render the same partial, a deep link and a boosted
+  navigation can never drift apart.
+#}
+{% block main %}{% include "tenancy/_fragments/dashboard_body.html" %}{% endblock %}

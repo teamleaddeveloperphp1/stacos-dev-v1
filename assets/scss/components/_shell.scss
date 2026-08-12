@@ -1,0 +1,239 @@
+// =============================================================================
+// The persistent application shell.
+//
+// The chrome — left nav, tenant switcher, header — renders once and never
+// re-renders. Navigation swaps only `#main`. That is what stops the app
+// blinking on every click, and it is the single biggest contributor to a
+// server-rendered product feeling like a native one.
+// =============================================================================
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--stacos-nav-width) 1fr;
+  grid-template-rows: var(--stacos-header-height) 1fr;
+  grid-template-areas:
+    "sidebar header"
+    "sidebar main";
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.app-sidebar {
+  grid-area: sidebar;
+  background: var(--stacos-surface);
+  border-right: 1px solid var(--stacos-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.app-header {
+  grid-area: header;
+  background: var(--stacos-surface);
+  border-bottom: 1px solid var(--stacos-border);
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-3;
+  padding: 0 $stacos-space-4;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.app-main {
+  grid-area: main;
+  padding: $stacos-space-5;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+// -----------------------------------------------------------------------------
+// Brand and tenant switcher
+// -----------------------------------------------------------------------------
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  height: var(--stacos-header-height);
+  padding: 0 $stacos-space-4;
+  border-bottom: 1px solid var(--stacos-border);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--stacos-text);
+  text-decoration: none;
+  flex: none;
+
+  &__mark {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--stacos-radius-sm);
+    background: var(--stacos-accent);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: $stacos-text-xs;
+    font-weight: 800;
+  }
+}
+
+.tenant-switcher {
+  padding: $stacos-space-3 $stacos-space-3 $stacos-space-2;
+  flex: none;
+
+  &__button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    padding: $stacos-space-2;
+    border: 1px solid var(--stacos-border);
+    border-radius: var(--stacos-radius-md);
+    background: var(--stacos-surface);
+    text-align: left;
+    font-size: $stacos-text-sm;
+    transition: border-color var(--stacos-duration-fast) var(--stacos-ease);
+
+    &:hover { border-color: var(--stacos-border-strong); }
+  }
+
+  &__name {
+    font-weight: 600;
+    color: var(--stacos-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__type {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Navigation
+// -----------------------------------------------------------------------------
+.app-nav {
+  padding: $stacos-space-2 $stacos-space-3 $stacos-space-5;
+  flex: 1 1 auto;
+
+  &__group + &__group { margin-top: $stacos-space-4; }
+
+  &__label {
+    font-size: $stacos-text-xs;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--stacos-text-subtle);
+    padding: 0 $stacos-space-2;
+    margin-bottom: $stacos-space-1;
+  }
+
+  &__link {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    padding: 0.4rem $stacos-space-2;
+    border-radius: var(--stacos-radius-md);
+    color: var(--stacos-text-muted);
+    font-size: $stacos-text-base;
+    text-decoration: none;
+    transition: background var(--stacos-duration-fast) var(--stacos-ease),
+                color var(--stacos-duration-fast) var(--stacos-ease);
+
+    &:hover {
+      background: var(--stacos-surface-sunken);
+      color: var(--stacos-text);
+    }
+
+    &[aria-current="page"] {
+      background: var(--stacos-accent-subtle);
+      color: var(--stacos-accent);
+      font-weight: 600;
+    }
+  }
+
+  &__count {
+    margin-left: auto;
+    font-size: $stacos-text-xs;
+    font-variant-numeric: tabular-nums;
+    color: var(--stacos-text-subtle);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Page header inside #main
+// -----------------------------------------------------------------------------
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: $stacos-space-4;
+  margin-bottom: $stacos-space-5;
+
+  &__title {
+    font-size: $stacos-text-xl;
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+
+  &__subtitle {
+    color: var(--stacos-text-muted);
+    font-size: $stacos-text-base;
+    margin: $stacos-space-1 0 0;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Empty state — always one clear action, never a dead end.
+// -----------------------------------------------------------------------------
+.empty-state {
+  text-align: center;
+  padding: $stacos-space-7 $stacos-space-4;
+  color: var(--stacos-text-muted);
+
+  &__icon {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto $stacos-space-3;
+    color: var(--stacos-text-subtle);
+  }
+
+  &__title {
+    font-size: $stacos-text-md;
+    font-weight: 600;
+    color: var(--stacos-text);
+    margin-bottom: $stacos-space-1;
+  }
+
+  &__body { max-width: 26rem; margin: 0 auto $stacos-space-4; }
+}
+
+// -----------------------------------------------------------------------------
+// Narrow screens: the sidebar becomes an off-canvas drawer.
+// -----------------------------------------------------------------------------
+@media (max-width: 991.98px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas: "header" "main";
+  }
+
+  .app-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--stacos-nav-width);
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform var(--stacos-duration-normal) var(--stacos-ease);
+    box-shadow: var(--stacos-shadow-lg);
+
+    &.is-open { transform: none; }
+  }
+
+  .app-main { padding: $stacos-space-4 $stacos-space-3; }
+}

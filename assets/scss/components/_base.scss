@@ -1,0 +1,79 @@
+// Foundational rules that apply everywhere.
+
+body {
+  -webkit-font-smoothing: antialiased;
+  background: var(--stacos-surface-sunken);
+  color: var(--stacos-text);
+}
+
+// Tabular numerals for every figure. Without them a column of rupee amounts
+// does not align, and an unaligned financial column is unscannable.
+.num,
+.table td.num,
+.table th.num,
+.figure-value,
+time {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.num,
+.table td.num,
+.table th.num {
+  text-align: right;
+}
+
+// Visible focus, always. Removing focus rings makes the product unusable by
+// keyboard, which is both an accessibility failure and a power-user failure.
+:focus-visible {
+  outline: 2px solid var(--stacos-accent);
+  outline-offset: 2px;
+  border-radius: var(--stacos-radius-sm);
+}
+
+// Touch targets stay at 44px on coarse pointers even though the desktop UI is
+// dense — a factory-floor Android is a first-class client here.
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .dropdown-item,
+  .form-check-input {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.text-muted-subtle { color: var(--stacos-text-subtle); }
+
+.card {
+  box-shadow: var(--stacos-shadow-xs);
+  background: var(--stacos-surface);
+}
+
+.section-title {
+  font-size: $stacos-text-xs;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--stacos-text-subtle);
+  margin-bottom: $stacos-space-3;
+}
+
+// Screen-reader-only, but revealed on focus — used by the skip link.
+.visually-hidden-focusable:not(:focus):not(:focus-within) {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}

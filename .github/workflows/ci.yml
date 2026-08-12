@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  DJANGO_SETTINGS_MODULE: config.settings.test
+  DJANGO_SECRET_KEY: ci-secret-not-used-in-production
+  OTP_PEPPER: ci-pepper
+  # Migrations run as the schema owner; the application connects as a role that
+  # cannot bypass row-level security. CI mirrors that split so the RLS tests
+  # mean something.
+  DATABASE_MIGRATE_URL: postgres://stacos_migrator:ci@localhost:5432/stacos
+  DATABASE_URL: postgres://stacos_app:ci@localhost:5432/stacos
+  REDIS_URL: redis://localhost:6379/0
+  STACOS_RLS_ENABLED: "True"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+
+      - name: ruff format
+        run: uv run ruff format --check .
+
+      - name: mypy
+        run: uv run mypy stacos config
+
+  # ---------------------------------------------------------------------------
+  assets:
+    name: Front-end build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      # A Sass error must fail the build here rather than produce an unstyled
+      # page in production.
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-assets
+          path: static/
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: [assets]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: static-assets
+          path: static/
+
+      - name: Create database roles
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+            CREATE ROLE stacos_migrator LOGIN PASSWORD 'ci' CREATEDB;
+            CREATE ROLE stacos_app LOGIN PASSWORD 'ci' NOSUPERUSER NOBYPASSRLS;
+            CREATE DATABASE stacos OWNER stacos_migrator;
+          SQL
+          psql -h localhost -U postgres -d stacos -v ON_ERROR_STOP=1 <<'SQL'
+            CREATE EXTENSION IF NOT EXISTS pg_trgm;
+            CREATE EXTENSION IF NOT EXISTS unaccent;
+            CREATE EXTENSION IF NOT EXISTS btree_gist;
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+            GRANT CONNECT ON DATABASE stacos TO stacos_app;
+            GRANT USAGE ON SCHEMA public TO stacos_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE stacos_migrator IN SCHEMA public
+              GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO stacos_app;
+            ALTER DEFAULT PRIVILEGES FOR ROLE stacos_migrator IN SCHEMA public
+              GRANT USAGE, SELECT ON SEQUENCES TO stacos_app;
+          SQL
+
+      - name: Migrate
+        run: uv run python manage.py migrate --noinput
+
+      # -- The gates ---------------------------------------------------------
+
+      - name: No migration drift
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Every view declares a permission
+        run: uv run python manage.py check_view_permissions
+
+      - name: Every scoped table is protected by row-level security
+        run: uv run python manage.py ensure_rls
+
+      - name: Production settings are sane
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          DJANGO_ALLOWED_HOSTS: example.com
+          EMAIL_HOST: smtp.example.com
+          AWS_STORAGE_BUCKET_NAME: ci-bucket
+          USE_S3: "False"
+        # Catches the class of bug that only appears once DEBUG=False —
+        # notably the django-cotton loader sitting outside the cached loader.
+        run: uv run python manage.py check --deploy --fail-level WARNING
+
+      - name: Tests
+        run: uv run pytest --cov=stacos --cov-report=term-missing --cov-fail-under=70
+
+      - name: Tenant isolation (adversarial)
+        # Run again on its own so a failure here is unmissable in the log: this
+        # suite is the specification of the tenancy design.
+        run: uv run pytest tests/security -v

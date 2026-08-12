@@ -1,0 +1,41 @@
+{% extends "layouts/auth.html" %}
+{% load i18n crispy_forms_tags %}
+
+{% block title %}{% translate "Sign in" %} · STACOS{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <h1 class="auth-card__title">{% translate "Sign in to STACOS" %}</h1>
+  <p class="auth-card__lede">{% translate "Your compliance calendar, in one place." %}</p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {% crispy form %}
+  </form>
+
+  <div class="auth-divider">{% translate "or continue with" %}</div>
+
+  {#
+    Social sign-in proves the provider knows this person. It proves nothing about
+    control of the email address and phone number STACOS holds, so it lands in
+    the same dual-OTP gate as a password sign-in from a new device.
+  #}
+  <div class="d-grid gap-2">
+    <a class="btn btn-social" href="/accounts/google/login/?process=login" hx-boost="false">
+      {% translate "Google" %}
+    </a>
+    <a class="btn btn-social" href="/accounts/microsoft/login/?process=login" hx-boost="false">
+      {% translate "Microsoft" %}
+    </a>
+    <a class="btn btn-social" href="/accounts/apple/login/?process=login" hx-boost="false">
+      {% translate "Apple" %}
+    </a>
+  </div>
+
+  <p class="text-center text-muted mt-4 mb-0" style="font-size:.8125rem">
+    {% translate "New to STACOS?" %}
+    <a href="{% url 'accounts:register' %}">{% translate "Create an account" %}</a>
+  </p>
+</div>
+{% endblock %}

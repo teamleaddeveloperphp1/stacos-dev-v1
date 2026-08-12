@@ -1,0 +1,76 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Virtualenv / uv ---
+.venv/
+venv/
+env/
+
+# --- Django ---
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+/media/
+/staticfiles/
+
+# Compiled CSS is a build artefact of static/scss — never commit it.
+/static/css/
+/static/css.map/
+*.css.map
+
+# --- Environment ---
+.env
+.env.*
+!.env.example
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Mobile (Capacitor) ---
+/mobile/dist/
+/mobile/node_modules/
+/mobile/android/
+/mobile/ios/
+/mobile/.capacitor/
+
+# --- Testing / coverage ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+/test-results/
+/playwright-report/
+/blob-report/
+.playwright/
+
+# --- Type checking / linting caches ---
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Local scratch ---
+/scratch/
+/tmp/

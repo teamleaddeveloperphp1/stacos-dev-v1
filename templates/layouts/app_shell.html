@@ -1,0 +1,155 @@
+{% load i18n static %}<!doctype html>
+{#
+  The persistent application shell.
+
+  This renders ONCE per full page load. Navigation replaces only #main, so the
+  sidebar, header, tenant switcher and notification state never re-render and the
+  application never blinks. That single decision is most of the difference
+  between "a website" and "an app".
+
+  Every link inside .app-shell inherits hx-boost from the wrapper, so it swaps
+  #main, pushes the URL, and morphs rather than replaces. A direct GET to any of
+  those URLs still returns this full page, which is what keeps deep links,
+  the back button and "open in new tab" working.
+#}
+<html lang="{{ LANGUAGE_CODE|default:'en-in' }}" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% translate "STACOS" %}{% endblock %}</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  <script defer src="{% static 'js/app.js' %}"></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+
+  <a class="visually-hidden-focusable btn btn-primary position-absolute m-2" href="#main" style="z-index:2000">
+    {% translate "Skip to main content" %}
+  </a>
+
+  {# Progress bar for navigations that outlast ~180ms. #}
+  <div id="route-progress" class="route-progress" aria-hidden="true"></div>
+
+  {# Screen readers do not notice an HTMX swap. This announces the new page. #}
+  <div id="route-announcer" class="visually-hidden" role="status" aria-live="polite"></div>
+
+  <div class="app-shell"
+       hx-boost="true"
+       hx-target="#main"
+       hx-swap="morph transition:true"
+       hx-push-url="true"
+       hx-ext="preload,morph"
+       x-data="{ navOpen: false }">
+
+    {# ---------------------------------------------------------------- #}
+    {# Sidebar — chrome, never re-rendered                              #}
+    {# ---------------------------------------------------------------- #}
+    <aside class="app-sidebar" :class="{ 'is-open': navOpen }" id="app-sidebar">
+      <a class="app-brand" href="{% url 'app:dashboard' %}" preload>
+        <span class="app-brand__mark">S</span>
+        <span>STACOS</span>
+      </a>
+
+      <c-tenant-switcher :tenant="current_tenant" :memberships="nav_memberships" />
+
+      <nav class="app-nav" aria-label="{% translate 'Main' %}">
+        <div class="app-nav__group">
+          <a class="app-nav__link" href="{% url 'app:dashboard' %}" preload
+             {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
+            <c-icon name="home" />
+            <span>{% translate "Dashboard" %}</span>
+          </a>
+          <a class="app-nav__link" href="{% url 'app:entity_list' %}" preload
+             {% if request.resolver_match.url_name == 'entity_list' %}aria-current="page"{% endif %}>
+            <c-icon name="building" />
+            <span>{% translate "Entities" %}</span>
+            <span class="app-nav__count" id="entity-count">{{ entity_count|default:"" }}</span>
+          </a>
+        </div>
+
+        {#
+          The compliance, notices, requests and vault sections arrive with their
+          own milestones. They are listed here, visibly disabled, because an
+          empty navigation tells a new user nothing about what the product does.
+        #}
+        <div class="app-nav__group">
+          <div class="app-nav__label">{% translate "Compliance" %}</div>
+          <c-nav-placeholder icon="calendar" label="{% translate 'Calendar' %}" />
+          <c-nav-placeholder icon="inbox" label="{% translate 'Information requests' %}" />
+          <c-nav-placeholder icon="alert" label="{% translate 'Notices' %}" />
+          <c-nav-placeholder icon="folder" label="{% translate 'Documents' %}" />
+        </div>
+
+        <div class="app-nav__group">
+          <div class="app-nav__label">{% translate "Settings" %}</div>
+          <a class="app-nav__link" href="{% url 'accounts:security' %}" preload>
+            <c-icon name="shield" />
+            <span>{% translate "Security" %}</span>
+          </a>
+        </div>
+      </nav>
+    </aside>
+
+    {# ---------------------------------------------------------------- #}
+    {# Header                                                            #}
+    {# ---------------------------------------------------------------- #}
+    <header class="app-header">
+      <button class="btn btn-sm btn-link d-lg-none p-1" @click="navOpen = !navOpen"
+              aria-label="{% translate 'Toggle navigation' %}" aria-controls="app-sidebar">
+        <c-icon name="menu" />
+      </button>
+
+      <button class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-2"
+              @click="$dispatch('stacos:palette-open')"
+              aria-label="{% translate 'Search' %}">
+        <c-icon name="search" />
+        <span class="d-none d-md-inline text-muted">{% translate "Search" %}</span>
+        <kbd class="d-none d-md-inline">Ctrl K</kbd>
+      </button>
+
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-link p-1" onclick="stacosToggleTheme()"
+                aria-label="{% translate 'Switch between light and dark theme' %}">
+          <c-icon name="theme" />
+        </button>
+
+        {#
+          One SSE connection carries badge counts and toasts. Polling every ten
+          seconds across fifty thousand tenants would melt PostgreSQL and still
+          not feel real-time.
+        #}
+        <div hx-ext="sse" sse-connect="/app/stream/" class="position-relative">
+          <button class="btn btn-sm btn-link p-1" aria-label="{% translate 'Notifications' %}">
+            <c-icon name="bell" />
+            <span id="notification-badge" sse-swap="notification-count"></span>
+          </button>
+        </div>
+
+        <c-user-menu :user="request.user" />
+      </div>
+    </header>
+
+    {# ---------------------------------------------------------------- #}
+    {# Main — the only region navigation replaces                        #}
+    {# ---------------------------------------------------------------- #}
+    <main class="app-main" id="main" hx-history-elt aria-live="polite" aria-atomic="false">
+      {% block main %}{% endblock %}
+    </main>
+  </div>
+
+  {#
+    Toasts arrive two ways: rendered here for a full page load, and pushed by the
+    HX-Trigger header for anything that happens without one. Both end up in the
+    same container with the same markup.
+  #}
+  <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true">
+    {% for message in messages %}
+      <c-toast :level="message.tags" :message="message" />
+    {% endfor %}
+  </div>
+
+  <div id="modal-container"></div>
+  <c-command-palette />
+</body>
+</html>

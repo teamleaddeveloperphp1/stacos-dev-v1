@@ -1,0 +1,101 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+<section class="hero">
+  <div class="container">
+    <div class="row">
+      <div class="col-12 col-lg-8">
+        <h1 class="hero__title mb-3">
+          {% translate "Every compliance obligation you have. Worked out for you." %}
+        </h1>
+        <p class="hero__lede mb-4">
+          {% blocktranslate %}
+          Tell us what your business is, where it operates and how big it is.
+          STACOS builds the complete statutory calendar — GST, TDS, income tax,
+          ROC, PF, ESIC, labour, factory, environment — and keeps your CA in the
+          same workspace instead of on WhatsApp.
+          {% endblocktranslate %}
+        </p>
+        <div class="d-flex flex-wrap gap-2">
+          <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">
+            {% translate "Start free trial" %}
+          </a>
+          <a class="btn btn-outline-secondary btn-lg" href="{% url 'marketing:pricing' %}">
+            {% translate "See pricing" %}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-5 border-top">
+  <div class="container">
+    <div class="row g-4">
+      <div class="col-12 col-md-4">
+        <h2 class="h5">{% translate "Nothing to set up" %}</h2>
+        <p class="text-muted">
+          {% blocktranslate %}
+          You answer a short profile — entity type, states, industry, turnover,
+          headcount, a few flags. The calendar is generated from that. You edit
+          exceptions; you never build it from an empty page.
+          {% endblocktranslate %}
+        </p>
+      </div>
+      <div class="col-12 col-md-4">
+        <h2 class="h5">{% translate "Your CA works inside it" %}</h2>
+        <p class="text-muted">
+          {% blocktranslate %}
+          Invite your chartered accountant or company secretary with a scoped,
+          revocable engagement. They prepare, you approve. Nothing is filed
+          unilaterally, and when the engagement ends their access ends with it.
+          {% endblocktranslate %}
+        </p>
+      </div>
+      <div class="col-12 col-md-4">
+        <h2 class="h5">{% translate "An audit trail that holds up" %}</h2>
+        <p class="text-muted">
+          {% blocktranslate %}
+          Every filing, notice, register and approval is recorded with who did
+          it, when, and what changed — the record you hand a regulator, or an
+          acquirer during due diligence.
+          {% endblocktranslate %}
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-5 border-top">
+  <div class="container">
+    <h2 class="h4 mb-4">{% translate "For professional firms" %}</h2>
+    <div class="row g-4">
+      <div class="col-12 col-md-6 col-lg-3">
+        <h3 class="h6">{% translate "One board, every client" %}</h3>
+        <p class="text-muted small">{% translate "Every obligation across your whole client book, ranked by what is closest to breaching." %}</p>
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <h3 class="h6">{% translate "Stop chasing documents" %}</h3>
+        <p class="text-muted small">{% translate "Raise an information request once. It reminds, escalates, and files the response straight into the vault." %}</p>
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <h3 class="h6">{% translate "Time, WIP and billing" %}</h3>
+        <p class="text-muted small">{% translate "Log time against a client and an obligation, then turn it into a GST-compliant invoice." %}</p>
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <h3 class="h6">{% translate "Know what you actually earned" %}</h3>
+        <p class="text-muted small">{% translate "Realisation and recovery per client and per engagement — the report that changes how a firm quotes." %}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-5 border-top" style="background: var(--stacos-surface-sunken)">
+  <div class="container text-center">
+    <h2 class="h3 mb-3">{% translate "Start with one entity, free for 14 days." %}</h2>
+    <p class="text-muted mb-4">{% translate "No card required. Add your CA whenever you are ready." %}</p>
+    <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">{% translate "Create your account" %}</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,115 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Security' %}"
+               subtitle="{% translate 'Devices you have trusted, and sessions that are currently signed in.' %}">
+  <form method="post" action="{% url 'accounts:revoke_devices' %}"
+        onsubmit="return confirm('{% translate "Sign out of every device, including this one?" %}')">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-outline-danger">
+      {% translate "Sign out everywhere" %}
+    </button>
+  </form>
+</c-page-header>
+
+<div class="row g-4">
+  {# ------------------------------------------------------------------ #}
+  <div class="col-12 col-xl-6">
+    <div class="data-table">
+      <div class="data-table__toolbar">
+        <strong class="small">{% translate "Trusted devices" %}</strong>
+        <span class="text-muted ms-auto" style="font-size:.75rem">
+          {% translate "Trusted for 30 days" %}
+        </span>
+      </div>
+      <div class="data-table__scroll">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>{% translate "Device" %}</th>
+              <th>{% translate "Last used" %}</th>
+              <th>{% translate "Status" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in devices %}
+              <tr>
+                <td>
+                  <div class="fw-medium">{{ device }}</div>
+                  <div class="text-muted" style="font-size:.75rem">{{ device.ip_last_seen|default:"—" }}</div>
+                </td>
+                <td><time datetime="{{ device.last_used_at|date:'c' }}">{{ device.last_used_at|date:"j M Y, H:i" }}</time></td>
+                <td>
+                  {% if device.revoked_at %}
+                    <c-status-chip status="na" label="{% translate 'Revoked' %}" />
+                  {% elif device.is_valid %}
+                    <c-status-chip status="on-track" label="{% translate 'Trusted' %}" />
+                  {% else %}
+                    <c-status-chip status="complete" label="{% translate 'Expired' %}" />
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="p-0">
+                <c-empty-state title="{% translate 'No trusted devices' %}"
+                               body="{% translate 'You will be asked for both verification codes each time you sign in.' %}" />
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# ------------------------------------------------------------------ #}
+  <div class="col-12 col-xl-6">
+    <div class="data-table">
+      <div class="data-table__toolbar">
+        <strong class="small">{% translate "Active sessions" %}</strong>
+      </div>
+      <div class="data-table__scroll">
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>{% translate "Where" %}</th>
+              <th>{% translate "Signed in" %}</th>
+              <th>{% translate "Last seen" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for session in sessions %}
+              <tr>
+                <td>
+                  <div class="fw-medium">
+                    {{ session.ip_address|default:"—" }}
+                    {% if session.session_key == current_session_key %}
+                      <span class="status-chip status-chip--in-progress ms-1">{% translate "This device" %}</span>
+                    {% endif %}
+                  </div>
+                  <div class="text-muted text-truncate" style="font-size:.75rem; max-width: 22rem">
+                    {{ session.user_agent|default:"—" }}
+                  </div>
+                </td>
+                <td><time datetime="{{ session.created_at|date:'c' }}">{{ session.created_at|date:"j M, H:i" }}</time></td>
+                <td><time datetime="{{ session.last_seen_at|date:'c' }}">{{ session.last_seen_at|date:"j M, H:i" }}</time></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="p-0">
+                <c-empty-state title="{% translate 'No other sessions' %}" />
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-light border mt-4 small" role="note">
+  <strong>{% translate "How sign-in works here." %}</strong>
+  {% blocktranslate %}
+  STACOS verifies both your email address and your mobile number together, as one
+  step, when you register and whenever you sign in from a device it does not
+  recognise. Signing out everywhere revokes every trusted device and ends every
+  session immediately — including on the mobile app.
+  {% endblocktranslate %}
+</div>

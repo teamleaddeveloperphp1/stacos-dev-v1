@@ -1,0 +1,30 @@
+{
+  "name": "stacos-assets",
+  "version": "0.1.0",
+  "private": true,
+  "description": "STACOS front-end asset build. Deliberately boring: dart-sass + esbuild, no bundler config.",
+  "scripts": {
+    "build:css": "sass --load-path=node_modules --quiet-deps --silence-deprecation=import,global-builtin,color-functions,if-function --style=compressed --no-source-map assets/scss/app.scss:static/css/app.css assets/scss/marketing.scss:static/css/marketing.css",
+    "watch:css": "sass --load-path=node_modules --quiet-deps --silence-deprecation=import,global-builtin,color-functions,if-function --watch assets/scss/app.scss:static/css/app.css assets/scss/marketing.scss:static/css/marketing.css",
+    "build:js": "esbuild assets/js/app.js --bundle --minify --outfile=static/js/app.js",
+    "watch:js": "esbuild assets/js/app.js --bundle --watch --outfile=static/js/app.js",
+    "build": "npm-run-all --parallel build:css build:js",
+    "dev": "npm-run-all --parallel watch:css watch:js"
+  },
+  "dependencies": {
+    "alpinejs": "^3.14.9",
+    "bootstrap": "^5.3.8",
+    "htmx-ext-preload": "^2.1.1",
+    "htmx-ext-sse": "^2.2.4",
+    "htmx.org": "^2.0.7",
+    "idiomorph": "^0.7.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "npm-run-all": "^4.1.5",
+    "sass": "^1.83.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}

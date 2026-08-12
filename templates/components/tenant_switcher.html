@@ -1,0 +1,51 @@
+{% load i18n %}
+{#
+  The tenant switcher — always visible, top left.
+
+  A user is one global identity that may belong to many tenants: a partner at
+  their firm, a director of their own company, a consultant to three clients.
+  Switching context has to be one click and always in the same place, or people
+  end up keeping several browser profiles open.
+#}
+<div class="tenant-switcher" x-data="{ open: false }" @keydown.escape="open = false">
+  <button type="button" class="tenant-switcher__button"
+          @click="open = !open"
+          :aria-expanded="open.toString()"
+          aria-haspopup="listbox">
+    <span class="avatar">{{ tenant.name|slice:":1"|upper|default:"?" }}</span>
+    <span class="flex-grow-1 overflow-hidden">
+      <span class="tenant-switcher__name d-block">{{ tenant.name|default:_("No organisation") }}</span>
+      <span class="tenant-switcher__type">
+        {% if tenant.type == "PRACTICE" %}{% translate "Professional firm" %}
+        {% elif tenant.type == "DEALER" %}{% translate "Channel partner" %}
+        {% elif tenant.type %}{% translate "Business" %}
+        {% else %}{% translate "Finish setting up" %}{% endif %}
+      </span>
+    </span>
+    <c-icon name="chevron-down" size="14" />
+  </button>
+
+  <div x-show="open" x-cloak x-transition.opacity.duration.120ms
+       @click.outside="open = false"
+       class="card mt-1 p-1" role="listbox"
+       aria-label="{% translate 'Switch organisation' %}">
+    {% for membership in memberships %}
+      <form method="post" action="{% url 'app:switch_tenant' %}">
+        {% csrf_token %}
+        <input type="hidden" name="tenant_id" value="{{ membership.tenant_id }}">
+        <button type="submit" class="palette__item"
+                role="option"
+                aria-selected="{% if membership.tenant_id == tenant.id %}true{% else %}false{% endif %}">
+          <span class="avatar">{{ membership.tenant.name|slice:":1"|upper }}</span>
+          <span class="flex-grow-1 text-start">
+            <span class="d-block">{{ membership.tenant.name }}</span>
+            <span class="palette__hint ms-0">{{ membership.role.name }}</span>
+          </span>
+          {% if membership.tenant_id == tenant.id %}<c-icon name="check" size="14" />{% endif %}
+        </button>
+      </form>
+    {% empty %}
+      <p class="text-muted small p-2 mb-0">{% translate "You are not a member of any organisation yet." %}</p>
+    {% endfor %}
+  </div>
+</div>

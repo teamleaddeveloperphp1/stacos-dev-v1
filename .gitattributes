@@ -1,0 +1,22 @@
+# Normalise line endings. Without this, Windows checkouts write CRLF into shell
+# scripts (breaking containers with an unhelpful `\r: not found`) and into
+# migrations (making every diff unreadable).
+* text=auto eol=lf
+
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.pdf   binary
+
+# Generated — collapse in diffs and exclude from language stats.
+uv.lock            linguist-generated=true -diff
+package-lock.json  linguist-generated=true -diff
+*/migrations/*.py  linguist-generated=true

@@ -1,0 +1,111 @@
+// =============================================================================
+// STACOS application stylesheet
+//
+// The import order below is not stylistic — Bootstrap requires exactly this
+// sequence. Its functions must load before our tokens can call them, our
+// overrides must land before its variables/maps, and its utility API must come
+// last so utilities win over components. Get the order wrong and your overrides
+// are silently ignored, which is a long afternoon.
+// =============================================================================
+
+// 1. Bootstrap functions — needed before we can use tint/shade in our tokens.
+@import "bootstrap/scss/functions";
+
+// 2. STACOS tokens.
+@import "tokens";
+
+// 3. Override Bootstrap's defaults. No `!default` here: these must win.
+$primary:   $stacos-blue-600;
+$secondary: $stacos-grey-500;
+$success:   $stacos-status-on-track;
+$info:      $stacos-status-in-progress;
+$warning:   $stacos-status-due-soon;
+$danger:    $stacos-status-overdue;
+$light:     $stacos-grey-50;
+$dark:      $stacos-grey-900;
+
+$body-color:     $stacos-grey-900;
+$body-bg:        $stacos-grey-0;
+$body-secondary-color: $stacos-grey-500;
+
+$font-family-sans-serif: $stacos-font-sans;
+$font-family-monospace:  $stacos-font-mono;
+$font-size-base:  $stacos-text-base;
+$line-height-base: $stacos-leading-normal;
+
+// Tighter than stock. Bootstrap's defaults read as a prototype.
+$border-radius:    $stacos-radius-md;
+$border-radius-sm: $stacos-radius-sm;
+$border-radius-lg: $stacos-radius-lg;
+$border-color:     $stacos-grey-200;
+
+$box-shadow-sm: $stacos-shadow-xs;
+$box-shadow:    $stacos-shadow-sm;
+$box-shadow-lg: $stacos-shadow-lg;
+
+// Denser vertical rhythm — this is a working tool, not a landing page.
+$spacer: 1rem;
+$input-btn-padding-y:    0.375rem;
+$input-btn-padding-x:    0.75rem;
+$input-btn-font-size:    $stacos-text-base;
+$input-btn-focus-width:  0.2rem;
+$input-btn-focus-color-opacity: 0.18;
+
+$table-cell-padding-y:    0.5rem;
+$table-cell-padding-x:    0.75rem;
+$table-border-color:      $stacos-grey-200;
+$table-hover-bg:          $stacos-grey-50;
+
+$card-border-color:  $stacos-grey-200;
+$card-cap-bg:        $stacos-grey-50;
+$card-spacer-y:      $stacos-space-4;
+$card-spacer-x:      $stacos-space-4;
+
+$enable-negative-margins: true;
+$enable-shadows: false;
+$enable-gradients: false;
+
+// 4. Bootstrap variables and maps — these read the overrides above.
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/variables-dark";
+@import "bootstrap/scss/maps";
+@import "bootstrap/scss/mixins";
+@import "bootstrap/scss/root";
+
+// 5. Only the Bootstrap layers actually used. Importing everything ships roughly
+//    40% more CSS than this product renders.
+@import "bootstrap/scss/reboot";
+@import "bootstrap/scss/type";
+@import "bootstrap/scss/images";
+@import "bootstrap/scss/containers";
+@import "bootstrap/scss/grid";
+@import "bootstrap/scss/tables";
+@import "bootstrap/scss/forms";
+@import "bootstrap/scss/buttons";
+@import "bootstrap/scss/transitions";
+@import "bootstrap/scss/dropdown";
+@import "bootstrap/scss/nav";
+@import "bootstrap/scss/navbar";
+@import "bootstrap/scss/card";
+@import "bootstrap/scss/breadcrumb";
+@import "bootstrap/scss/pagination";
+@import "bootstrap/scss/badge";
+@import "bootstrap/scss/alert";
+@import "bootstrap/scss/progress";
+@import "bootstrap/scss/list-group";
+@import "bootstrap/scss/close";
+@import "bootstrap/scss/toasts";
+@import "bootstrap/scss/modal";
+@import "bootstrap/scss/tooltip";
+@import "bootstrap/scss/popover";
+@import "bootstrap/scss/spinners";
+@import "bootstrap/scss/offcanvas";
+@import "bootstrap/scss/placeholders";
+@import "bootstrap/scss/helpers";
+
+// 6. STACOS component layer.
+@import "components/index";
+
+// 7. Bootstrap utilities last, so a utility class always beats a component rule.
+@import "bootstrap/scss/utilities";
+@import "bootstrap/scss/utilities/api";

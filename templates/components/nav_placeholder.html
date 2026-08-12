@@ -1,0 +1,15 @@
+{% load i18n %}
+{#
+  A navigation entry for a module that has not shipped yet.
+
+  Shown rather than hidden on purpose: an empty sidebar tells a new user nothing
+  about what the product will do for them, and hiding future modules makes the
+  application feel smaller than it is. Clearly marked so nobody mistakes it for
+  something broken.
+#}
+<span class="app-nav__link opacity-50" aria-disabled="true"
+      title="{% translate 'Coming in a later release' %}">
+  <c-icon :name="icon" />
+  <span>{{ label }}</span>
+  <span class="app-nav__count">{% translate "soon" %}</span>
+</span>

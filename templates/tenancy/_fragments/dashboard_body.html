@@ -1,0 +1,82 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Compliance health' %}"
+               subtitle="{% if tenant %}{{ tenant.name }}{% else %}{% translate 'Finish setting up your organisation' %}{% endif %}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:entity_list' %}" preload>
+    {% translate "All entities" %}
+  </a>
+</c-page-header>
+
+{% if entity_count %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title mb-1">{% translate "Entities" %}</div>
+          <div class="figure-value fs-3 fw-semibold">{{ entity_count|num }}</div>
+        </div>
+      </div>
+    </div>
+    {#
+      The next three tiles — overdue, due this week, awaiting your approval —
+      are driven by the obligation register, which arrives with the compliance
+      engine. They are shown as pending rather than omitted so the shape of the
+      dashboard is visible from the first release.
+    #}
+    <div class="col-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title mb-1">{% translate "Overdue" %}</div>
+          <div class="text-muted small">{% translate "Available with the compliance calendar" %}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title mb-1">{% translate "Due this week" %}</div>
+          <div class="text-muted small">{% translate "Available with the compliance calendar" %}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="section-title mb-1">{% translate "Awaiting your approval" %}</div>
+          <div class="text-muted small">{% translate "Available with return preparation" %}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header d-flex align-items-center">
+      <strong class="small">{% translate "Your entities" %}</strong>
+      <a class="ms-auto small" href="{% url 'app:entity_list' %}" preload>{% translate "View all" %}</a>
+    </div>
+    <ul class="list-group list-group-flush">
+      {% for entity in entities %}
+        <li class="list-group-item d-flex align-items-center gap-3">
+          <span class="avatar">{{ entity.name|slice:":1"|upper }}</span>
+          <span class="flex-grow-1">
+            <a href="{% url 'app:entity_detail' entity.pk %}" preload class="fw-medium text-decoration-none">
+              {{ entity.name }}
+            </a>
+            <span class="d-block text-muted" style="font-size:.75rem">
+              {{ entity.entity_type }}{% if entity.registered_office_state %} · {{ entity.registered_office_state }}{% endif %}
+            </span>
+          </span>
+          <c-status-chip status="{% if entity.status == 'ACTIVE' %}on-track{% else %}na{% endif %}"
+                         label="{{ entity.get_status_display }}" />
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% else %}
+  <c-empty-state title="{% translate 'Add your first entity' %}"
+                 body="{% translate 'Tell us about the company, LLP or firm you need to keep compliant. We will work out which obligations apply and build the calendar for you.' %}">
+    <a class="btn btn-primary" href="{% url 'app:entity_list' %}">
+      {% translate "Add an entity" %}
+    </a>
+  </c-empty-state>
+{% endif %}

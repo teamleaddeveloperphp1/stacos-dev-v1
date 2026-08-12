@@ -1,0 +1,136 @@
+// The data table: dense, scannable, and the same everywhere.
+
+.data-table {
+  width: 100%;
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-lg);
+  overflow: hidden;
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-3;
+    padding: $stacos-space-3;
+    border-bottom: 1px solid var(--stacos-border);
+    background: var(--stacos-surface);
+  }
+
+  // Wide content scrolls inside its own container. The page body must never
+  // scroll horizontally.
+  &__scroll { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    margin: 0;
+    font-size: $stacos-text-sm;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--stacos-surface-sunken);
+    font-size: $stacos-text-xs;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--stacos-text-muted);
+    white-space: nowrap;
+    border-bottom: 1px solid var(--stacos-border);
+  }
+
+  tbody tr {
+    height: var(--stacos-row-height);
+    transition: background var(--stacos-duration-fast) var(--stacos-ease);
+
+    &:hover { background: var(--stacos-surface-sunken); }
+  }
+
+  tbody td {
+    vertical-align: middle;
+    border-bottom: 1px solid var(--stacos-border);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $stacos-space-3;
+    border-top: 1px solid var(--stacos-border);
+    font-size: $stacos-text-sm;
+    color: var(--stacos-text-muted);
+  }
+}
+
+// Click-to-edit: an assignee, a due date or a status should never cost a page
+// navigation to change.
+.inline-edit {
+  border: 1px solid transparent;
+  border-radius: var(--stacos-radius-sm);
+  padding: 1px 4px;
+  cursor: pointer;
+  transition: border-color var(--stacos-duration-fast) var(--stacos-ease),
+              background var(--stacos-duration-fast) var(--stacos-ease);
+
+  &:hover {
+    border-color: var(--stacos-border-strong);
+    background: var(--stacos-surface);
+  }
+}
+
+// Avatars for assignees.
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--stacos-accent-subtle);
+  color: var(--stacos-accent);
+  font-size: 0.625rem;
+  font-weight: 700;
+  flex: none;
+
+  &--lg { width: 32px; height: 32px; font-size: $stacos-text-xs; }
+}
+
+// The audit trail timeline, used on every detail page.
+.timeline {
+  position: relative;
+  padding-left: $stacos-space-5;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    background: var(--stacos-border);
+  }
+
+  &__item {
+    position: relative;
+    padding-bottom: $stacos-space-4;
+
+    &::before {
+      content: "";
+      position: absolute;
+      left: calc(-1 * #{$stacos-space-5} + 4px);
+      top: 5px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--stacos-border-strong);
+      box-shadow: 0 0 0 3px var(--stacos-surface);
+    }
+  }
+
+  &__meta {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+}

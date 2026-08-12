@@ -1,0 +1,41 @@
+{% load i18n static %}<!doctype html>
+<html lang="{{ LANGUAGE_CODE|default:'en-in' }}" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% translate "Sign in" %} · STACOS{% endblock %}</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script defer src="{% static 'js/app.js' %}"></script>
+</head>
+<body class="d-flex flex-column min-vh-100" style="background: var(--stacos-surface-sunken);">
+
+  <header class="py-4 text-center">
+    <a class="app-brand d-inline-flex border-0" href="/" style="height:auto;">
+      <span class="app-brand__mark">S</span>
+      <span>STACOS</span>
+    </a>
+  </header>
+
+  <main class="flex-grow-1 d-flex align-items-start justify-content-center px-3 pb-5">
+    <div class="w-100">
+      {% if messages %}
+        <div class="mx-auto mb-3" style="max-width:26rem">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags|default:'info' }} py-2 small mb-2" role="alert">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+
+  <footer class="text-center text-muted py-3" style="font-size:.75rem">
+    <a href="/security/" class="text-muted">{% translate "Security" %}</a>
+    <span class="mx-2">·</span>
+    <span>{% translate "Skorydov Tax and Compliance Software" %}</span>
+  </footer>
+</body>
+</html>
