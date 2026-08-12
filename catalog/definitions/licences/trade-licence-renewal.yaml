@@ -1,0 +1,36 @@
+code: IN-LIC-TRADE-LICENCE
+country: IN
+category: LICENSING
+family: Trade licences
+authority: MUNICIPAL
+version: 1
+title: Municipal trade licence — renewal
+plain_language_summary: >
+  The local body's licence to carry on a trade at a given address, renewed annually
+  and usually payable at the start of the financial year. The cheapest licence a
+  business holds, and the one most likely to be forgotten when an office moves.
+statutory_reference: Municipal corporation acts and by-laws
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: TRADE_LICENCE
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: TRADE_LICENCE
+      explain: you hold a municipal trade licence
+due:
+  anchor: FY_START
+  offset: { months: 0, day_of_month: 30 }
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: licence, label: Renewed licence, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-plant
+penalty_summary: "Late fee and, on continued default, sealing of the premises by the local body."
+effective_from: 2015-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

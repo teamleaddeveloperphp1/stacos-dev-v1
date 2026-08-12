@@ -1,0 +1,36 @@
+code: IN-PT-GJ-EC-ANNUAL
+country: IN
+category: LABOUR
+family: Professional tax
+authority: STATE_TAX
+version: 1
+title: Professional tax — Gujarat enrolment (annual)
+plain_language_summary: >
+  Gujarat's annual enrolment payment by the business itself, due 30 September.
+  A modest flat amount, and one that quietly accrues interest for years when a
+  branch is opened and nobody registers it.
+statutory_reference: Section 5 Gujarat State Tax on Professions Act, 1976
+periodicity: ANNUAL
+period_anchor: FY
+jurisdictions: [IN-GJ]
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_EC
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PT_EC
+      explain: you hold a professional tax enrolment certificate
+due:
+  anchor: FY_START
+  offset: { months: 5, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Payment challan, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "Interest at 18% a year plus penalty."
+effective_from: 1976-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

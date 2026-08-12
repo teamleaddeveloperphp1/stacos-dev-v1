@@ -1,0 +1,34 @@
+code: IN-LABOUR-MINIMUM-WAGES-REVIEW
+country: IN
+category: LABOUR
+family: Wages
+authority: STATE_LABOUR
+version: 1
+title: Minimum wages — half-yearly rate revision review
+plain_language_summary: >
+  States revise minimum wage rates twice a year with the variable dearness
+  allowance, usually in April and October. Paying last year's rate is a wage
+  shortfall with retrospective effect, and it is recovered with interest.
+statutory_reference: Section 3 Minimum Wages Act, 1948
+periodicity: HALF_YEARLY
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: employee_count
+      op: gte
+      value: 1
+      explain: you employ people covered by scheduled employments
+due:
+  anchor: PERIOD_START
+  offset: { months: 0, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: notification, label: Applicable state rate notification, kind: DOC, mandatory_for_close: true }
+  - { key: payroll_check, label: Payroll comparison against the revised rates, kind: DOC }
+default_owner_role: org-hr
+penalty_summary: "Recovery of the shortfall plus up to ten times the amount as compensation."
+effective_from: 1948-03-15
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

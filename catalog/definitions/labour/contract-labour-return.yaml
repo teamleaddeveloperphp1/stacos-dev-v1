@@ -1,0 +1,36 @@
+code: IN-LABOUR-CONTRACT-LABOUR-RETURN
+country: IN
+category: LABOUR
+family: Contract labour
+authority: STATE_LABOUR
+version: 1
+title: Contract labour — annual return (Form XXV)
+plain_language_summary: >
+  A principal employer engaging twenty or more contract workers must register,
+  and file an annual return of the contractors engaged and workers deployed. The
+  principal employer remains liable for wages and PF if a contractor defaults,
+  which is what makes this more than paperwork.
+statutory_reference: Rule 82(2) Contract Labour (Regulation and Abolition) Central Rules, 1971
+periodicity: ANNUAL
+period_anchor: CALENDAR
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: contractor_count
+      op: gte
+      value: 20
+      explain: you engage twenty or more contract workers
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 15 }
+  shift_if_holiday: NEXT_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: return, label: Filed Form XXV, kind: DOC, mandatory_for_close: true }
+  - { key: registration, label: Principal employer registration certificate, kind: DOC }
+default_owner_role: org-hr
+penalty_summary: "Imprisonment up to three months or a fine up to ₹1,000, or both."
+effective_from: 1971-02-21
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

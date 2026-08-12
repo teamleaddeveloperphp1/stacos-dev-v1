@@ -7,6 +7,7 @@ import django.db.models.deletion
 import stacos.catalog.models
 import stacos.core.ids
 import stacos.engine.types
+from django.contrib.postgres.operations import BtreeGistExtension
 from django.db import migrations, models
 
 
@@ -19,6 +20,13 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # `defversion_no_overlapping_published` is a GiST exclusion constraint
+        # over (uuid, daterange), and GiST has no default operator class for
+        # uuid without btree_gist. A development database usually has the
+        # extension already, which is exactly why this has to be stated here:
+        # otherwise the constraint works on every developer's machine and fails
+        # the first time CI builds a database from scratch.
+        BtreeGistExtension(),
         migrations.CreateModel(
             name='ComplianceDefinition',
             fields=[

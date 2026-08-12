@@ -1,0 +1,35 @@
+code: IN-MCA-DIRECTOR-DISCLOSURE
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: Director disclosures — MBP-1 and DIR-8
+plain_language_summary: >
+  Every director declares their interests in other bodies corporate, and confirms
+  they are not disqualified, at the first board meeting of the financial year. It
+  takes ten minutes and is the single most commonly forgotten secretarial task.
+statutory_reference: Sections 184(1) and 164(2) Companies Act, 2013
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: entity_type
+      op: in
+      value: [PVT_LTD, PUBLIC_LTD, OPC, SECTION_8]
+      explain: you are a company
+due:
+  # At the first board meeting of the year, so anchored to the year's start.
+  anchor: FY_START
+  offset: { months: 1, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: mbp1, label: Signed MBP-1 from each director, kind: DOC, mandatory_for_close: true }
+  - { key: dir8, label: Signed DIR-8 from each director, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-secretarial
+penalty_summary: "Up to ₹1,00,000 on the director; a contract entered in breach is voidable."
+effective_from: 2014-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

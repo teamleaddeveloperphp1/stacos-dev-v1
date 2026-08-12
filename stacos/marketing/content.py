@@ -314,7 +314,7 @@ MODULES: tuple[Module, ...] = (
                     "than an annual filing. They escalate to the owner’s manager when "
                     "a date passes, and they stop the moment the row is closed.",
                     "Channels are email, in-app, mobile push, and — where you have "
-                    "registered templates — WhatsApp and SMS.",
+                    "Meta-approved templates — WhatsApp.",
                 ),
             ),
         ),
@@ -1052,7 +1052,7 @@ PLANS: tuple[Plan, ...] = (
             "Notice tracker with deadline countdown",
             "Information requests with reminders",
             "Statutory registers and minutes",
-            "WhatsApp and SMS reminders",
+            "WhatsApp reminders",
             "Full audit trail export",
         ),
         highlight=True,
@@ -1100,7 +1100,7 @@ ADD_ONS = (
     ("Additional entity", "₹399 / month", "Beyond your plan's included entities."),
     ("Additional user", "₹199 / month", "Beyond your plan's included seats."),
     ("Notice auto-retrieval", "₹999 / month", "Where the authority permits it."),
-    ("WhatsApp reminders", "₹499 / month", "Per entity, DLT-registered templates."),
+    ("WhatsApp reminders", "₹499 / month", "Per entity, Meta-approved templates."),
     ("White label", "₹4,999 / month", "Your logo and subdomain, for practices and dealers."),
 )
 
@@ -1769,7 +1769,7 @@ SUBPROCESSORS: tuple[tuple[str, str, str, str], ...] = (
     ("Cloud hosting", "Application and database hosting", "India", "All customer data"),
     ("Object storage", "Document storage", "India", "Uploaded documents"),
     ("Transactional email", "Verification codes, reminders, notifications", "India", "Name, email"),
-    ("SMS and WhatsApp", "Verification codes and reminders", "India", "Name, mobile number"),
+    ("WhatsApp Business", "Verification codes and reminders", "India", "Name, mobile number"),
     ("Payment gateway (domestic)", "Subscription payments in INR", "India", "Billing details"),
     (
         "Payment gateway (international)",

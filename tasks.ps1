@@ -124,11 +124,29 @@ switch ($Task) {
         Invoke-Section 'mypy';                  uv run mypy stacos config
         Invoke-Section 'django check';          uv run python manage.py check
         Invoke-Section 'migration drift'
+        # The schema-owner URL is needed to compare against the real schema, so
+        # it is set for these three commands only and put back afterwards. Left
+        # in place, the test run would connect as the owner rather than as the
+        # runtime role — and Row-Level Security tests are meaningless against a
+        # role that is not the one production uses.
+        $runtimeDatabaseUrl = $env:DATABASE_URL
         if ($env:DATABASE_MIGRATE_URL) { $env:DATABASE_URL = $env:DATABASE_MIGRATE_URL }
         uv run python manage.py makemigrations --check --dry-run
         Invoke-Section 'view permission declarations'; uv run python manage.py check_view_permissions
         Invoke-Section 'row-level security';           uv run python manage.py ensure_rls
-        Invoke-Section 'pytest';                       uv run pytest
+        $env:DATABASE_URL = $runtimeDatabaseUrl
+
+        # Reads YAML, touches no database. Catches the two ways catalog content
+        # goes wrong that nothing else can see: a rule that fires for nobody (a
+        # typo in a fact name) and one that fires for everybody (a missing
+        # clause). Cheap, and the alternative is a client finding out.
+        Invoke-Section 'catalog validation'
+        uv run python manage.py validatecatalog --strict
+
+        Invoke-Section 'pytest'
+        uv run pytest
+        if ($LASTEXITCODE -ne 0) { throw "pytest failed with exit code $LASTEXITCODE." }
+
         Write-Host "`nAll gates passed." -ForegroundColor Green
     }
 

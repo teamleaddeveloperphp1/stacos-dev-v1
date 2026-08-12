@@ -90,16 +90,16 @@ def apply_transition(
         # and the page is stale. That is an ordinary race, not an error worth a
         # stack trace.
         raise TransitionError(
-            _("This obligation is now %(state)s, so that action no longer applies. "
-              "Refresh to see where it has got to.")
+            _(
+                "This obligation is now %(state)s, so that action no longer applies. "
+                "Refresh to see where it has got to."
+            )
             % {"state": obligation.get_state_display().lower()},
             code="stale",
         )
 
     if move.permission not in permissions:
-        raise TransitionError(
-            _("You do not have permission to do that."), code="forbidden"
-        )
+        raise TransitionError(_("You do not have permission to do that."), code="forbidden")
 
     note = note.strip()
     if move.requires_note and not note:
@@ -110,8 +110,10 @@ def apply_transition(
 
     if move.requires_filing_reference and not filing_reference.strip():
         raise TransitionError(
-            _("Record the acknowledgement number. Without it the filing cannot be "
-              "evidenced during an assessment."),
+            _(
+                "Record the acknowledgement number. Without it the filing cannot be "
+                "evidenced during an assessment."
+            ),
             code="reference_required",
         )
 
@@ -250,7 +252,10 @@ def assign(
             if assignee is not None
             else _("Assignment cleared.")
         ),
-        context={"from": str(previous) if previous else None, "to": str(assignee) if assignee else None},
+        context={
+            "from": str(previous) if previous else None,
+            "to": str(assignee) if assignee else None,
+        },
     )
 
     record_event(

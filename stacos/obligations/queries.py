@@ -30,8 +30,8 @@ from django.db.models import (
     Case,
     Count,
     DateField,
-    ExpressionWrapper,
     F,
+    Func,
     IntegerField,
     Q,
     QuerySet,
@@ -60,6 +60,22 @@ __all__ = [
 
 _OPEN = sorted(str(s) for s in OPEN_STATES)
 _CLOSED = sorted(str(s) for s in CLOSED_STATES)
+
+
+class DateDiffDays(Func):
+    """``later - earlier``, in whole days, as an integer.
+
+    Spelled out as a function rather than written as ``F("due_date") - Value(day)``
+    because Django models the subtraction of two date expressions as a *duration*
+    and installs an interval converter — while PostgreSQL's ``date - date`` returns
+    a plain integer. The mismatch surfaces as ``int() argument must be ... not
+    'datetime.timedelta'`` when the row is fetched, which is a long way from where
+    the annotation was written.
+    """
+
+    template = "(%(expressions)s)"
+    arg_joiner = " - "
+    output_field = IntegerField()
 
 
 def live(queryset: QuerySet[ObligationInstance] | None = None) -> QuerySet[ObligationInstance]:
@@ -102,10 +118,7 @@ def annotate_status(
         # legitimate state and `None - date` would raise.
         days_to_due=Case(
             When(due_date__isnull=True, then=Value(None, output_field=IntegerField())),
-            default=ExpressionWrapper(
-                F("due_date") - Value(as_of, output_field=DateField()),
-                output_field=IntegerField(),
-            ),
+            default=DateDiffDays(F("due_date"), Value(as_of, output_field=DateField())),
             output_field=IntegerField(),
         ),
         filed_late=Case(

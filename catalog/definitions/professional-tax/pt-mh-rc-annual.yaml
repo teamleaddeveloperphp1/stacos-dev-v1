@@ -1,0 +1,40 @@
+code: IN-PT-MH-RC-ANNUAL
+country: IN
+category: LABOUR
+family: Professional tax
+authority: STATE_TAX
+version: 1
+title: Professional tax — Maharashtra employer return (annual)
+plain_language_summary: >
+  Employers whose Maharashtra professional tax liability was under ₹1,00,000 in the
+  previous year file one annual return by 31 March instead of twelve monthly ones.
+  Crossing the threshold moves you onto the monthly rule for the following year.
+statutory_reference: Rule 11(3) Maharashtra State Tax on Professions Rules, 1975
+periodicity: ANNUAL
+period_anchor: FY
+jurisdictions: [IN-MH]
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_RC
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PT_RC
+      explain: you hold a professional tax registration certificate
+    - fact: employee_count
+      op: lt
+      value: 20
+      explain: your payroll is small enough that annual filing applies
+due:
+  anchor: PERIOD_END
+  offset: { months: 0, day_of_month: 31 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: return, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "₹1,000 late-filing fee plus interest at 1.25% per month."
+effective_from: 1975-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

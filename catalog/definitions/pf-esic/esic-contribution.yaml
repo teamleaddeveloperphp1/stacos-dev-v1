@@ -1,0 +1,34 @@
+code: IN-ESIC-CONTRIBUTION
+country: IN
+category: LABOUR
+family: PF and ESIC
+authority: ESIC
+version: 1
+title: ESIC monthly contribution
+plain_language_summary: >
+  The monthly employees' state insurance contribution, due by the 15th. If it is
+  not paid, an insured employee's medical claim can be refused — which makes this
+  one of the few compliance deadlines with an immediate human consequence.
+statutory_reference: Regulation 31 ESI (General) Regulations, 1950
+filing_portal_url: "https://www.esic.gov.in"
+periodicity: MONTHLY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: ESIC
+      explain: you hold an ESIC employer code
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 15 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Contribution challan, kind: DOC, mandatory_for_close: true }
+  - { key: return, label: Monthly contribution return, kind: DOC }
+default_owner_role: org-hr
+penalty_summary: "Interest at 12% a year plus damages up to 25% of the arrears."
+effective_from: 1952-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

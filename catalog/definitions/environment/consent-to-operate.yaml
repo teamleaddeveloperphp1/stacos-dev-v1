@@ -1,0 +1,38 @@
+code: IN-ENV-CONSENT-TO-OPERATE
+country: IN
+category: ENVIRONMENT
+family: Pollution control
+authority: STATE_PCB
+version: 1
+title: Consent to Operate — renewal
+plain_language_summary: >
+  A factory cannot lawfully run without a current Consent to Operate from the state
+  pollution control board under both the Water and Air Acts. Renewal takes months
+  and requires up-to-date monitoring data, so starting at expiry is starting too
+  late.
+statutory_reference: Section 25 Water (Prevention and Control of Pollution) Act, 1974 and Section 21 Air Act, 1981
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: PREMISES
+scope_selector:
+  premises_type: FACTORY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PCB_CONSENT
+      explain: you hold a pollution control board consent
+due:
+  anchor: LICENCE_EXPIRY
+  offset: { days: -120 }
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: consent, label: Renewed consent order, kind: DOC, mandatory_for_close: true }
+  - { key: monitoring, label: Ambient and effluent monitoring reports, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Closure directions under Section 33A; imprisonment from 18 months for operating without consent."
+effective_from: 1974-03-23
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

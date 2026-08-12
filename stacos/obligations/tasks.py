@@ -91,12 +91,10 @@ def materialise_entity(
 
 @shared_task(
     base=TenantTask,
-    bind=True,
     name="stacos.obligations.materialise_tenant",
     task_permissions=_TASK_PERMISSIONS,
 )
 def materialise_tenant(
-    self: TenantTask,
     *,
     tenant_id: str,
     as_of: str | None = None,

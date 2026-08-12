@@ -1,0 +1,38 @@
+code: IN-FEMA-EDPMS-RECON
+country: IN
+category: FEMA_RBI
+family: FEMA
+authority: RBI
+version: 1
+title: Export realisation — quarterly EDPMS and IDPMS reconciliation
+plain_language_summary: >
+  Export proceeds have to be realised within nine months and import payments
+  matched to bills of entry. The bank's EDPMS and IDPMS systems track both, and
+  entries that stay open become caution-listing candidates — after which no bank
+  will process your export documents.
+statutory_reference: RBI Master Direction on Export of Goods and Services
+periodicity: QUARTERLY
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: IEC
+      explain: you hold an Importer Exporter Code
+    - fact: has_export_import
+      op: eq
+      value: true
+      explain: you import or export goods
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: recon, label: EDPMS/IDPMS outstanding statement from the AD bank, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "Caution-listing by RBI; export documents can no longer be handled by any bank."
+effective_from: 2014-03-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

@@ -1,0 +1,37 @@
+code: IN-ENV-HAZARDOUS-WASTE-AUTH
+country: IN
+category: ENVIRONMENT
+family: Waste
+authority: STATE_PCB
+version: 1
+title: Hazardous waste authorisation — renewal
+plain_language_summary: >
+  Generating, storing or handling hazardous waste needs a separate authorisation
+  from the pollution control board, distinct from the Consent to Operate. Two
+  documents, two expiry dates, and businesses regularly renew one and not the
+  other.
+statutory_reference: Rule 6 Hazardous and Other Wastes Rules, 2016
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: PREMISES
+scope_selector:
+  premises_type: FACTORY
+applicability:
+  all:
+    - fact: deals_in_hazardous_material
+      op: eq
+      value: true
+      explain: you handle hazardous material
+due:
+  anchor: LICENCE_EXPIRY
+  offset: { days: -120 }
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: authorisation, label: Renewed authorisation, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-plant
+penalty_summary: "Closure directions; imprisonment up to five years under the Environment Act."
+effective_from: 2016-04-04
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

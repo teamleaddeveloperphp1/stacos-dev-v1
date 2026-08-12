@@ -1,0 +1,34 @@
+code: IN-LABOUR-BONUS-PAYMENT
+country: IN
+category: LABOUR
+family: Wages
+authority: STATE_LABOUR
+version: 1
+title: Statutory bonus — payment and Form D return
+plain_language_summary: >
+  Statutory bonus must be paid within eight months of the year end, and the Form D
+  return filed within thirty days of payment. The minimum is 8.33% of wages and it
+  is payable whether or not the business made a profit.
+statutory_reference: Sections 19 and 26 Payment of Bonus Act, 1965 r/w Rule 5
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: employee_count
+      op: gte
+      value: 20
+      explain: you employ twenty or more people, which brings the Bonus Act into force
+due:
+  anchor: PERIOD_END
+  offset: { months: 8, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: form_d, label: Filed Form D return, kind: DOC, mandatory_for_close: true }
+  - { key: register, label: Bonus register (Forms A, B and C), kind: DOC }
+default_owner_role: org-hr
+penalty_summary: "Imprisonment up to six months or a fine up to ₹1,000, plus recovery of the bonus."
+effective_from: 1965-09-25
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

@@ -1,0 +1,35 @@
+code: IN-INT-DPDP-REVIEW
+country: IN
+category: DATA_PRIVACY
+family: Internal governance
+authority: INTERNAL
+version: 1
+title: Personal data protection — annual review
+plain_language_summary: >
+  An annual review of what personal data is held, on what basis, for how long, and
+  who it is shared with — plus the notice, consent and grievance mechanisms the
+  DPDP Act requires. Penalties run to ₹250 crore, which puts this out of the
+  category of housekeeping.
+statutory_reference: Digital Personal Data Protection Act, 2023
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: employee_count
+      op: gte
+      value: 20
+      explain: you process personal data of employees and customers at scale
+due:
+  anchor: FY_START
+  offset: { months: 5, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: inventory, label: Data inventory and retention schedule, kind: DOC, mandatory_for_close: true }
+  - { key: notices, label: Privacy notices and consent records, kind: DOC }
+default_owner_role: org-admin
+penalty_summary: "Up to ₹250 crore for failure to take reasonable security safeguards."
+effective_from: 2024-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

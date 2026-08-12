@@ -1,0 +1,33 @@
+code: IN-INT-DSC-RENEWAL
+country: IN
+category: INTERNAL_GOVERNANCE
+family: Internal governance
+authority: INTERNAL
+version: 1
+title: Digital signature certificates — renewal
+plain_language_summary: >
+  Every statutory portal filing needs a valid digital signature. Certificates run
+  for one to three years and expire without warning, invariably on the day a return
+  is due. Renewing a month early costs nothing extra.
+statutory_reference: Internal control; Information Technology Act, 2000
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: entity_type
+      op: in
+      value: [PVT_LTD, PUBLIC_LTD, OPC, LLP, SECTION_8, TRUST, SOCIETY]
+      explain: you file through portals that require a digital signature
+due:
+  anchor: FY_START
+  offset: { months: 1, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: certificates, label: Valid DSC list with expiry dates, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-secretarial
+penalty_summary: "No statutory penalty; every dependent filing is blocked until renewed."
+effective_from: 2015-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

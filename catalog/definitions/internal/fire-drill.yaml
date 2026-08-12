@@ -1,0 +1,34 @@
+code: IN-INT-FIRE-DRILL
+country: IN
+category: SAFETY_FIRE
+family: Internal governance
+authority: INTERNAL
+version: 1
+title: Fire and evacuation drill
+plain_language_summary: >
+  A recorded evacuation drill every six months, with the time taken and the issues
+  found. The record is what demonstrates that the emergency plan is real rather
+  than a document, and it is asked for after any incident.
+statutory_reference: Section 41B Factories Act, 1948; state fire safety rules
+periodicity: HALF_YEARLY
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: employee_count
+      op: gte
+      value: 50
+      explain: you occupy premises where a documented evacuation plan is required
+due:
+  anchor: PERIOD_END
+  offset: { months: 0, day_of_month: -1 }
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: report, label: Drill report with timings and attendance, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-plant
+penalty_summary: "Up to ₹1,00,000 under Section 92 where an on-site emergency plan is mandatory."
+effective_from: 2015-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

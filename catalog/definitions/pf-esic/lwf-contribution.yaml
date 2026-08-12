@@ -1,0 +1,49 @@
+code: IN-LWF-CONTRIBUTION
+country: IN
+category: LABOUR
+family: PF and ESIC
+authority: STATE_LABOUR
+version: 1
+title: Labour welfare fund contribution
+plain_language_summary: >
+  A small state-level contribution per employee, half-yearly in most states. The
+  amounts are trivial — tens of rupees per head — and the penalty for missing them
+  is not, which makes this a classic long-tail compliance trap.
+statutory_reference: State Labour Welfare Fund Acts
+periodicity: HALF_YEARLY
+period_anchor: CALENDAR
+jurisdictions:
+  - IN-MH
+  - IN-KA
+  - IN-TN
+  - IN-GJ
+  - IN-DL
+  - IN-HR
+  - IN-PB
+  - IN-WB
+  - IN-AP
+  - IN-TG
+  - IN-MP
+  - IN-CT
+  - IN-KL
+  - IN-GA
+  - IN-OR
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: employee_count
+      op: gte
+      value: 5
+      explain: you employ five or more people
+due:
+  anchor: PERIOD_END
+  offset: { months: 0, day_of_month: 15 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Contribution challan, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "Interest and penalty vary by state; typically up to twice the contribution."
+effective_from: 2015-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

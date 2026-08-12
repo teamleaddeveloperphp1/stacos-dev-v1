@@ -1,0 +1,40 @@
+code: IN-PT-KL-HALF-YEARLY
+country: IN
+category: LABOUR
+family: Professional tax
+authority: MUNICIPAL
+version: 1
+title: Professional tax — Kerala half-yearly payment
+plain_language_summary: >
+  Kerala levies professional tax half-yearly through the panchayat or municipality
+  where the establishment is located. Two payments a year, each due within a month
+  of the half ending.
+statutory_reference: Section 250 Kerala Municipality Act, 1994
+periodicity: HALF_YEARLY
+period_anchor: FY
+jurisdictions: [IN-KL]
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_RC
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PT_RC
+      explain: you hold a professional tax registration certificate
+    - fact: employee_count
+      op: gte
+      value: 1
+      explain: you have employees whose salary attracts professional tax
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: -1 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Payment receipt, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "Penalty as prescribed by the local body, typically 2% per month."
+effective_from: 1994-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

@@ -243,14 +243,15 @@ def _select_offset(rule: Mapping[str, Any], period: Period) -> Mapping[str, Any]
     a period's ordinal depends on where the generation window happened to start
     and would silently mean something different on a different horizon.
     """
-    overrides = rule.get("offset_by_month") or {}
+    overrides: Mapping[Any, Mapping[str, Any]] = rule.get("offset_by_month") or {}
     if overrides:
         # YAML gives integer keys, JSON round-trips them as strings. Accept both
         # rather than making an author think about which one they are writing.
         for key in (period.end.month, str(period.end.month)):
             if key in overrides:
                 return overrides[key]
-    return rule.get("offset", {})
+    default: Mapping[str, Any] = rule.get("offset", {})
+    return default
 
 
 def _apply_offset(anchor_date: date, offset: Mapping[str, Any]) -> date:

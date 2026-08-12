@@ -13,11 +13,17 @@ Read this before writing code. These are the conventions that, if broken, cost f
 .\start.ps1              # whole stack detached: web, sse, worker, beat, flower, assets
 .\start.ps1 -Status      # what is running (logs in .run\logs\)
 .\stop.ps1               # stop it all
+
+python manage.py loadpack IN        # jurisdiction pack from catalog/packs/IN.yaml
+python manage.py loadcatalog        # compliance definitions from catalog/definitions/
+python manage.py validatecatalog    # semantic checks; CI runs it with --strict
 ```
 
 `start.sh` / `stop.sh` are the Linux and macOS equivalents, with long-form flags.
 
 Never call `python manage.py migrate` directly: the app connects as `stacos_app`, which does not own the schema. `tasks.ps1 migrate` swaps in the owner role.
+
+`.env` sets `DJANGO_SETTINGS_MODULE=config.settings.dev` for the dev server, and pytest-django lets that environment variable beat its own ini setting — so pytest passes `--ds=config.settings.test` explicitly in `pyproject.toml`. Do not remove it: without it, anything that sources `.env` before running the suite silently tests a different configuration than the one it claims to certify.
 
 ## The six rules
 

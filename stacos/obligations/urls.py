@@ -7,7 +7,6 @@ app_name = "compliance"
 urlpatterns = [
     path("", views.calendar_list, name="calendar"),
     path("month/", views.calendar_month, name="month"),
-    path("panel/", views.dashboard_panel, name="dashboard_panel"),
     path("<uuid:pk>/", views.obligation_detail, name="detail"),
     path("<uuid:pk>/transition/", views.obligation_transition, name="transition"),
     path("<uuid:pk>/record-event/", views.record_entity_event, name="record_event"),

@@ -1,0 +1,35 @@
+code: IN-EPF-ANNUAL-RETURN
+country: IN
+category: LABOUR
+family: PF and ESIC
+authority: EPFO
+version: 1
+title: EPF annual return and reconciliation
+plain_language_summary: >
+  An annual reconciliation of the twelve monthly ECRs against the wage register and
+  the members' passbooks, and confirmation that every eligible employee has been
+  enrolled. Unenrolled employees are the finding an EPFO inspection is most likely
+  to make.
+statutory_reference: Para 43 EPF Scheme, 1952
+filing_portal_url: "https://unifiedportal-emp.epfindia.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PF
+      explain: you hold an EPFO establishment code
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: recon, label: Annual reconciliation working, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "Assessment under Section 7A for any shortfall, with damages and interest."
+effective_from: 1952-11-15
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

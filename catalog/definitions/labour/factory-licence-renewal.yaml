@@ -1,0 +1,41 @@
+code: IN-LABOUR-FACTORY-LICENCE
+country: IN
+category: LABOUR
+family: Factories
+authority: STATE_LABOUR
+version: 1
+title: Factory licence renewal
+plain_language_summary: >
+  A factory licence is issued for a term and lapses on expiry. Operating on a
+  lapsed licence is an offence in itself, quite apart from the renewal fee, and the
+  inspector's first question at any visit is the licence date.
+statutory_reference: Section 6 Factories Act, 1948 r/w state rules
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: PREMISES
+scope_selector:
+  premises_type: FACTORY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: FACTORY_LICENCE
+      explain: you hold a factory licence
+due:
+  # Anchored to the licence's own expiry rather than to a calendar date, because
+  # licences are issued on the date the application happened to be approved.
+  # Unresolvable until an expiry is recorded — and a guessed renewal date for a
+  # licence is worse than an explicit prompt.
+  anchor: LICENCE_EXPIRY
+  offset: { days: -30 }
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: licence, label: Renewed licence, kind: DOC, mandatory_for_close: true }
+  - { key: challan, label: Fee payment challan, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Up to ₹2,00,000 and imprisonment up to two years for operating without a licence."
+effective_from: 1948-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

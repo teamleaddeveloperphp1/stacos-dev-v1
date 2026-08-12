@@ -1,0 +1,39 @@
+code: IN-FEMA-SOFTEX
+country: IN
+category: FEMA_RBI
+family: FEMA
+authority: RBI
+version: 1
+title: SOFTEX — monthly declaration of software exports
+plain_language_summary: >
+  Software and IT-enabled service exports are declared on a SOFTEX form certified
+  by STPI, within thirty days of the invoice. Without it the inward remittance
+  cannot be reconciled and the export proceeds stay outstanding on the bank's
+  records indefinitely.
+statutory_reference: Regulation 6 FEM (Export of Goods and Services) Regulations, 2015
+periodicity: MONTHLY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: has_export_import
+      op: eq
+      value: true
+      explain: you export services
+    - fact: sector
+      op: matches
+      value: "(?i)software|information technology|digital"
+      explain: you are in software or IT services
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: -1 }
+  shift_if_holiday: NEXT_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: softex, label: Certified SOFTEX form, kind: DOC, mandatory_for_close: true }
+  - { key: invoices, label: Export invoices for the month, kind: DOC }
+default_owner_role: org-finance
+penalty_summary: "Export proceeds remain unrealised on the EDPMS system; FEMA contravention on write-off."
+effective_from: 2015-01-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

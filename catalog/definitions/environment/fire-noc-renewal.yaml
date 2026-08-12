@@ -1,0 +1,35 @@
+code: IN-SAFETY-FIRE-NOC
+country: IN
+category: SAFETY_FIRE
+family: Fire safety
+authority: FIRE
+version: 1
+title: Fire safety no-objection certificate — renewal
+plain_language_summary: >
+  Buildings above the prescribed height or occupancy need a fire NOC, renewed
+  annually after inspection. Insurance claims are routinely contested where the NOC
+  had lapsed, which usually costs more than the renewal ever would.
+statutory_reference: State Fire Prevention and Life Safety Measures Acts
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: FIRE_NOC
+      explain: you hold a fire safety no-objection certificate
+due:
+  anchor: LICENCE_EXPIRY
+  offset: { days: -45 }
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: noc, label: Renewed NOC, kind: DOC, mandatory_for_close: true }
+  - { key: inspection, label: Fire officer inspection report, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Sealing of the premises; insurance cover may be treated as void."
+effective_from: 2015-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

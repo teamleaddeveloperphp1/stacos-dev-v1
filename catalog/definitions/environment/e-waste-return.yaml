@@ -1,0 +1,36 @@
+code: IN-ENV-EWASTE-RETURN
+country: IN
+category: ENVIRONMENT
+family: Waste
+authority: CPCB
+version: 1
+title: E-waste — annual return
+plain_language_summary: >
+  Producers, and bulk consumers holding more than a thousand pieces of electronic
+  equipment, file an annual e-waste return by 30 June. Most offices of any size are
+  bulk consumers without realising it.
+statutory_reference: Rule 16 E-Waste (Management) Rules, 2022
+filing_portal_url: "https://eprewastecpcb.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: employee_count
+      op: gte
+      value: 100
+      explain: you employ enough people to be a bulk consumer of electronic equipment
+due:
+  anchor: PERIOD_END
+  offset: { months: 3, day_of_month: 30 }
+  shift_if_holiday: NEXT_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: return, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
+  - { key: recycler, label: Authorised recycler collection receipts, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Environmental compensation levied by CPCB; prosecution under the Environment Act."
+effective_from: 2023-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

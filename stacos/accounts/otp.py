@@ -227,12 +227,19 @@ def _dispatch_codes(verification: PendingVerification) -> None:
     )
 
     if result.not_on_whatsapp:
-        # Distinct from a delivery failure: the number has no WhatsApp account,
-        # so retrying will never work. Recorded so the view can say so plainly
-        # rather than leaving the user waiting for a message that is not coming.
+        # Distinct from a delivery failure: the number has no WhatsApp account, so
+        # retrying will never work. Persisted rather than only logged, because the
+        # person who needs to know is the user — otherwise they wait on the
+        # verification screen for a message that is never coming.
+        verification.phone_unreachable = True
+        verification.save(update_fields=["phone_unreachable"])
         logger.warning("otp.recipient_not_on_whatsapp", verification_id=str(verification.id))
     elif not result.accepted:
         logger.warning("otp.whatsapp_send_failed", error=result.error)
+    elif verification.phone_unreachable:
+        # The number was changed to a reachable one; clear the warning.
+        verification.phone_unreachable = False
+        verification.save(update_fields=["phone_unreachable"])
 
 
 # ---------------------------------------------------------------------------

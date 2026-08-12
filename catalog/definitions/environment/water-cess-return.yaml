@@ -1,0 +1,35 @@
+code: IN-ENV-WATER-CESS
+country: IN
+category: ENVIRONMENT
+family: Pollution control
+authority: STATE_PCB
+version: 1
+title: Water cess — monthly return
+plain_language_summary: >
+  A monthly return of water consumed, on which cess is levied, filed with the state
+  pollution control board by the 5th. Meter readings are the evidence, and a
+  factory without a working meter is assessed on capacity rather than actual use.
+statutory_reference: Section 10 Water (Prevention and Control of Pollution) Cess Act, 1977
+periodicity: MONTHLY
+instance_scope: PREMISES
+scope_selector:
+  premises_type: FACTORY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PCB_CONSENT
+      explain: you hold a pollution control board consent
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 5 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: return, label: Filed return, kind: DOC, mandatory_for_close: true }
+  - { key: meter, label: Water meter readings, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Interest and penalty up to the amount of cess; assessment on capacity if unmetered."
+effective_from: 1978-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

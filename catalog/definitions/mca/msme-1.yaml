@@ -1,0 +1,39 @@
+code: IN-MCA-MSME1
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: MSME-1 — half-yearly return of dues to micro and small enterprises
+plain_language_summary: >
+  A half-yearly return of amounts owed to registered micro and small suppliers for
+  more than forty-five days, with the reason for the delay. It exists to make late
+  payment to small vendors visible, and the disclosure is public.
+statutory_reference: Section 405 Companies Act, 2013 r/w MSME Order, 2019
+filing_portal_url: "https://www.mca.gov.in"
+periodicity: HALF_YEARLY
+period_anchor: CALENDAR
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: entity_type
+      op: in
+      value: [PVT_LTD, PUBLIC_LTD, OPC, SECTION_8]
+      explain: you are a company
+    - fact: has_msme_vendors
+      op: eq
+      value: true
+      explain: you buy from registered micro or small enterprises
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: srn, label: SRN and challan, kind: DOC, mandatory_for_close: true }
+  - { key: ageing, label: Vendor ageing analysis, kind: DOC }
+default_owner_role: org-finance
+penalty_summary: "Up to ₹25,000 on the company and ₹25,000–₹3,00,000 on officers in default."
+effective_from: 2019-01-22
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

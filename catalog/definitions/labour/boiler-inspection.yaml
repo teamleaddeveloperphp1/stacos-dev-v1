@@ -1,0 +1,39 @@
+code: IN-SAFETY-BOILER-INSPECTION
+country: IN
+category: SAFETY_FIRE
+family: Plant safety
+authority: STATE_LABOUR
+version: 1
+title: Boiler certificate renewal and inspection
+plain_language_summary: >
+  A boiler cannot be operated without a current certificate, and the inspection has
+  to be arranged before the certificate lapses because the inspector's diary is not
+  yours. Operating an uncertified boiler is a criminal offence, not a fine.
+statutory_reference: Section 8 Boilers Act, 1923
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: PREMISES
+scope_selector:
+  premises_type: FACTORY
+applicability:
+  all:
+    - fact: has_boiler
+      op: eq
+      value: true
+      explain: you operate a boiler
+due:
+  anchor: FY_START
+  offset: { months: 1, day_of_month: 30 }
+  # A physically-dependent obligation: an inspector has to attend, so unlike a
+  # statutory filing this genuinely cannot happen on a holiday.
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: certificate, label: Renewed boiler certificate, kind: DOC, mandatory_for_close: true }
+  - { key: inspection, label: Inspection report, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Imprisonment up to two years and a fine up to ₹1,00,000."
+effective_from: 1923-09-23
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

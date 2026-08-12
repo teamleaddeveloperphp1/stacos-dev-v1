@@ -1,0 +1,37 @@
+code: IN-LIC-BIS-CERTIFICATION
+country: IN
+category: LICENSING
+family: Sector licences
+authority: FSSAI
+version: 1
+title: BIS certification — licence renewal and marking fee
+plain_language_summary: >
+  Products under compulsory certification cannot be sold without a valid BIS
+  licence and the standard mark. The licence carries an annual marking fee based on
+  production, and unpaid fees suspend the licence rather than merely accruing
+  interest.
+statutory_reference: Section 17 Bureau of Indian Standards Act, 2016
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: BIS
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: BIS
+      explain: you hold a BIS licence
+due:
+  anchor: LICENCE_EXPIRY
+  offset: { days: -60 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: licence, label: Renewed BIS licence, kind: DOC, mandatory_for_close: true }
+  - { key: fee, label: Marking fee payment receipt, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Up to ₹5,00,000 and imprisonment up to two years for improper use of the standard mark."
+effective_from: 2017-10-12
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

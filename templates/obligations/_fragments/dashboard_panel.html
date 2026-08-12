@@ -2,10 +2,8 @@
 {% comment %}
   What is due next, on the dashboard.
 
-  Its own endpoint, loaded lazily, so the shell paints immediately instead of the
-  whole page waiting on the register. The list deliberately includes anything
-  already overdue — a "what is coming up" that silently omits what you have
-  already missed is worse than no list at all.
+  The list deliberately includes anything already overdue — a "what is coming up"
+  that silently omits what you have already missed is worse than no list at all.
 {% endcomment %}
 <section class="card" id="dashboard-obligations" aria-live="polite" aria-atomic="false">
   <div class="card__header">

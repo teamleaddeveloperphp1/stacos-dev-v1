@@ -1,0 +1,46 @@
+code: IN-ENV-PLASTIC-WASTE-EPR
+country: IN
+category: ENVIRONMENT
+family: Waste
+authority: CPCB
+version: 1
+title: Plastic waste — extended producer responsibility annual return
+plain_language_summary: >
+  Producers, importers and brand owners of plastic packaging file an annual return
+  of what they put on the market and how much they recovered against their EPR
+  target. Shortfalls are settled in environmental compensation, which is a real
+  cash cost.
+statutory_reference: Rule 9 Plastic Waste Management Rules, 2016 r/w EPR Guidelines, 2022
+filing_portal_url: "https://eprplastic.cpcb.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - any:
+        - fact: has_export_import
+          op: eq
+          value: true
+          explain: you import goods, which brings packaging obligations with them
+        - fact: has_factory_premises
+          op: eq
+          value: true
+          explain: you manufacture, and therefore package, goods
+    - fact: aggregate_turnover
+      op: gt
+      value: 100000000
+      explain: your turnover is above ₹10 crore, where EPR registration is expected
+due:
+  anchor: PERIOD_END
+  offset: { months: 3, day_of_month: 30 }
+  shift_if_holiday: NEXT_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: return, label: Filed EPR annual return, kind: DOC, mandatory_for_close: true }
+  - { key: certificates, label: Recycling certificates purchased or earned, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Environmental compensation proportional to the shortfall against the EPR target."
+effective_from: 2022-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

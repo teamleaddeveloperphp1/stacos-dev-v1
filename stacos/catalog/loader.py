@@ -202,7 +202,8 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
         Periodicity(periodicity)
     except ValueError:
         raise CatalogError(
-            source, f"unknown periodicity {periodicity!r}; expected one of {[p for p in Periodicity]}"
+            source,
+            f"unknown periodicity {periodicity!r}; expected one of {sorted(Periodicity)}",
         ) from None
 
     instance_scope = str(raw.get("instance_scope", InstanceScope.ENTITY))
@@ -245,9 +246,7 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
             "entity holds, including unrelated ones.",
         )
     if instance_scope == InstanceScope.PREMISES and not scope_selector.get("premises_type"):
-        raise CatalogError(
-            source, "instance_scope PREMISES needs scope_selector.premises_type"
-        )
+        raise CatalogError(source, "instance_scope PREMISES needs scope_selector.premises_type")
 
     effective_from = _as_date(source, "effective_from", required("effective_from"))
     effective_to = (
@@ -494,9 +493,7 @@ def load_extensions(root: Path | None = None) -> LoadReport:
                         "jurisdictions": [str(j) for j in (entry.get("jurisdictions") or [])],
                         "scope_rule": dict(entry.get("scope_rule") or {}),
                         "relief": dict(entry.get("relief") or {}),
-                        "published_at": _as_date(
-                            str(path), "published_at", entry["published_at"]
-                        ),
+                        "published_at": _as_date(str(path), "published_at", entry["published_at"]),
                     },
                 )
                 (report.created if created else report.updated).append(reference)

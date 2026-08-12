@@ -7,9 +7,14 @@ from typing import Any
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout
 from django import forms
+from django.utils.functional import Promise
 from django.utils.translation import gettext_lazy as _
 
 from stacos.obligations.models import EntityEvent, ObligationInstance
+
+#: A translated string is a ``Promise`` until something renders it, which is what
+#: lets one process serve a user in English and another in Hindi.
+StrOrPromise = str | Promise
 
 
 class TransitionForm(forms.Form):
@@ -70,31 +75,13 @@ class EntityEventForm(forms.ModelForm[EntityEvent]):
         self.helper.layout = Layout("occurred_on", "note")
 
 
-class SuppressionForm(forms.Form):
-    """Dismissing an obligation for good, rather than for one period."""
-
-    reason = forms.CharField(
-        label=_("Why does this not apply?"),
-        widget=forms.Textarea(attrs={"rows": 3}),
-        help_text=_(
-            "Recorded against the entity. The nightly rebuild will not bring this "
-            "obligation back."
-        ),
-    )
-    all_periods = forms.BooleanField(
-        label=_("Apply to every period, not just this one"),
-        required=False,
-    )
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.helper = FormHelper()
-        self.helper.form_tag = False
-
-
 #: Filters offered above the calendar. Kept as data so the toolbar, the empty
 #: state and the query builder cannot drift out of step.
-STATUS_FILTERS: tuple[tuple[str, str], ...] = (
+#:
+#: Typed with ``StrOrPromise`` because these are lazily translated: the label is
+#: a promise until something renders it, which is what lets one process serve a
+#: user in English and another in Hindi.
+STATUS_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
     ("", _("Everything open")),
     ("overdue", _("Overdue")),
     ("due_soon", _("Due in 7 days")),
@@ -103,19 +90,6 @@ STATUS_FILTERS: tuple[tuple[str, str], ...] = (
     ("completed", _("Completed")),
     ("all", _("All, including completed")),
 )
-
-
-class CalendarFilterForm(forms.Form):
-    """Query-string filters. Never used to write anything, so no CSRF concern."""
-
-    q = forms.CharField(required=False)
-    status = forms.ChoiceField(choices=STATUS_FILTERS, required=False)
-    category = forms.ChoiceField(choices=(), required=False)
-    entity = forms.UUIDField(required=False)
-
-    def __init__(self, *args: Any, categories: list[tuple[str, str]] | None = None, **kwargs: Any):
-        super().__init__(*args, **kwargs)
-        self.fields["category"].choices = [("", _("Every category")), *(categories or [])]
 
 
 def obligation_display(instance: ObligationInstance) -> str:

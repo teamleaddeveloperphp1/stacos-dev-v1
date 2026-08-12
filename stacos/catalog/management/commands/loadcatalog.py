@@ -35,9 +35,7 @@ class Command(BaseCommand):
                 "effective window, so last month's calendar stays explainable."
             ),
         )
-        parser.add_argument(
-            "--skip-extensions", action="store_true", help="Definitions only."
-        )
+        parser.add_argument("--skip-extensions", action="store_true", help="Definitions only.")
 
     def handle(self, *args: Any, **options: Any) -> None:
         report = load_catalog(

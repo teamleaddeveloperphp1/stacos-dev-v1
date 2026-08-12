@@ -1,8 +1,29 @@
 # The compliance engine — design specification
 
-> **Status:** designed, not built. This is the specification for the next milestone.
-> Foundation (§2) is complete; nothing in this document exists in code yet, except
-> the schema hooks noted under "What Foundation already provides".
+> **Status: built.** The pure engine, the `catalog` app, the `obligations`
+> register and the calendar UI all exist, with 129 seed definitions for India.
+> This document is now a description of what was built rather than a plan,
+> except where noted below.
+>
+> **Two things were built differently from this specification**, both for
+> reasons worth knowing:
+>
+> * **Month-keyed offset overrides.** §3 models one offset per definition. The
+>   TDS returns needed two — January–March is due 31 May while the other three
+>   quarters are due one month after they close — and so did the March TDS
+>   payment. `due.offset_by_month` handles it as data. The alternative was a
+>   duplicate definition carrying a copy of the applicability rule, and two
+>   copies of one rule drift apart within a year.
+> * **Event-driven materialisation is not built.** §8's 26QB/QC/QD family and
+>   anything else with `periodicity: EVENT_BASED` generates no periods, so those
+>   definitions were left out of the seed catalog rather than shipped as rows
+>   that never appear. `PREVIOUS_INSTANCE_DATE` similarly resolves only through a
+>   declared fallback.
+>
+> **Still open from §7:** the golden-file scenario suite. The persona library
+> exists (`stacos/catalog/personas.py`, 16 personas) and drives the dead-rule and
+> discrimination checks; pinning "this persona gets exactly these 47 obligations"
+> against a frozen catalog snapshot has not been done.
 
 The product wins or loses on one thing: **does the compliance calendar for a given entity get generated correctly and automatically, with zero manual setup?** Everything else is supporting cast. This document is the design for that engine.
 

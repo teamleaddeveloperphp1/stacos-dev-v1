@@ -1,0 +1,33 @@
+code: IN-INT-INSURANCE-RENEWAL
+country: IN
+category: INTERNAL_GOVERNANCE
+family: Internal governance
+authority: INTERNAL
+version: 1
+title: Insurance policies — annual renewal review
+plain_language_summary: >
+  Fire, burglary, marine, public liability and directors' and officers' cover all
+  renew annually, usually on different dates. A single day's gap between policies is
+  a day the business is uninsured, and claims are declined on exactly that basis.
+statutory_reference: Internal control; Public Liability Insurance Act, 1991 for hazardous handlers
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: aggregate_turnover
+      op: gt
+      value: 10000000
+      explain: your scale of operations warrants insured risk
+due:
+  anchor: FY_START
+  offset: { months: 0, day_of_month: 15 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: schedule, label: Policy schedule with cover dates, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "Public liability insurance is compulsory for hazardous handlers; otherwise uninsured loss."
+effective_from: 2015-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

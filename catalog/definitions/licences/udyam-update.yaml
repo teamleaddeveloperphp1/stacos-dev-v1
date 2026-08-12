@@ -1,0 +1,37 @@
+code: IN-LIC-UDYAM-UPDATE
+country: IN
+category: LICENSING
+family: Trade licences
+authority: DGFT
+version: 1
+title: Udyam registration — annual update
+plain_language_summary: >
+  Udyam registration has to be updated each year with turnover and investment
+  figures, which are pulled from the income tax and GST returns. Failing to update
+  suspends the registration, and with it the delayed-payment protection under the
+  MSMED Act.
+statutory_reference: Paragraph 8 Udyam Registration Notification, 2020
+filing_portal_url: "https://udyamregistration.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: UDYAM
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: UDYAM
+      explain: you hold a Udyam registration
+due:
+  anchor: PERIOD_END
+  offset: { months: 3, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: certificate, label: Updated Udyam certificate, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "Registration suspended; MSMED Act delayed-payment protection is lost."
+effective_from: 2020-07-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

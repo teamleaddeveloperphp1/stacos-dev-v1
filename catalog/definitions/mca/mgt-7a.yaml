@@ -1,0 +1,48 @@
+code: IN-MCA-MGT7A
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: MGT-7A — abridged annual return (small company or OPC)
+plain_language_summary: >
+  The shorter annual return for a one-person company or a small company — paid-up
+  capital up to ₹4 crore and turnover up to ₹40 crore. Same deadline as MGT-7,
+  materially less work, and companies frequently file the wrong one.
+statutory_reference: Section 92 Companies Act, 2013 r/w Rule 11(1) proviso
+filing_portal_url: "https://www.mca.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: entity_type
+      op: in
+      value: [PVT_LTD, OPC]
+      explain: you are a private company or one-person company
+    - fact: is_listed
+      op: ne
+      value: true
+      explain: you are not listed
+    - fact: paid_up_capital
+      op: lt
+      value: 40000000
+      explain: your paid-up capital is within the small-company threshold
+    - fact: aggregate_turnover
+      op: lt
+      value: 400000000
+      explain: your turnover is within the small-company threshold
+due:
+  anchor: EVENT_DATE
+  event_key: AGM_DATE
+  offset: { days: 60 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: srn, label: SRN and challan, kind: DOC, mandatory_for_close: true }
+  - { key: return, label: Signed abridged annual return, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-secretarial
+penalty_summary: "₹100 per day with no cap."
+effective_from: 2021-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

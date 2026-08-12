@@ -207,6 +207,13 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-ra",
+    # Belt and braces over the `DJANGO_SETTINGS_MODULE` key above, which
+    # pytest-django lets a *shell* environment variable override. `.env` sets
+    # that variable to `config.settings.dev` for the dev server, so anything
+    # that loads it before running pytest — the task runner does — would
+    # silently test a different configuration than the one being certified.
+    # `--ds` takes precedence over both, so this cannot happen by accident.
+    "--ds=config.settings.test",
 ]
 markers = [
     "e2e: Playwright end-to-end tests (slow; require a running server)",

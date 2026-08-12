@@ -199,6 +199,8 @@ def _existing_instances(entity: Entity) -> list[ExistingInstance]:
             "state",
             "due_date",
             "definition_version",
+            "needs_input",
+            "confirmed",
             "archived_at",
             "event_count",
         )
@@ -215,6 +217,8 @@ def _existing_instances(entity: Entity) -> list[ExistingInstance]:
             state=row["state"],
             due_date=row["due_date"],
             definition_version=row["definition_version"],
+            needs_input=row["needs_input"],
+            confirmed=row["confirmed"],
             # Evidence lands in the vault module; until then an obligation with
             # human activity against it is the thing that must not be destroyed,
             # and the event log is the honest signal for that.
@@ -303,8 +307,7 @@ def apply_plan(
         revived_count=revived,
         unchanged_count=len(plan.unchanged),
         diagnostics=[
-            {"severity": d.severity, "code": d.code, "message": d.message}
-            for d in plan.diagnostics
+            {"severity": d.severity, "code": d.code, "message": d.message} for d in plan.diagnostics
         ],
         triggered_by=actor if getattr(actor, "is_authenticated", False) else None,
         duration_ms=int((time.perf_counter() - started) * 1000),
@@ -361,8 +364,7 @@ def _create_instances(
             scope_kind=item.scope.kind,
             scope_ref=item.scope.ref,
             scope_label=display.label if display else "",
-            scope_jurisdiction=item.scope.jurisdiction
-            or (display.jurisdiction if display else ""),
+            scope_jurisdiction=item.scope.jurisdiction or (display.jurisdiction if display else ""),
             period_key=item.period.key,
             period_label=item.period.label,
             period_start=item.period.start,
@@ -452,8 +454,7 @@ def _update_instances(entity: Entity, plan: MaterialisationPlan) -> int:
                 ),
                 actor_label="STACOS",
                 note=(
-                    f"Due date moved from {before or 'unscheduled'} to "
-                    f"{after or 'unscheduled'}."
+                    f"Due date moved from {before or 'unscheduled'} to {after or 'unscheduled'}."
                 ),
                 context={
                     "from": before.isoformat() if before else None,

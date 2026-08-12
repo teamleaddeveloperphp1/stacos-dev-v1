@@ -181,7 +181,9 @@ class DefinitionVersion(TimeStampedModel):
     applicability_rule = models.JSONField(
         default=dict,
         blank=True,
-        help_text=_("Declarative rule evaluated by stacos.engine.rules. Empty applies to everyone."),
+        help_text=_(
+            "Declarative rule evaluated by stacos.engine.rules. Empty applies to everyone."
+        ),
     )
     #: Every fact the rule reads, extracted at load time. The inverted index that
     #: lets a profile edit re-evaluate only the definitions it could have
@@ -404,8 +406,7 @@ class GovernmentExtension(TimeStampedModel):
             # An EXTENSION with no new date is a data-entry accident that would
             # silently resolve to the original date and look like it worked.
             models.CheckConstraint(
-                condition=~Q(kind__in=["EXTENSION", "ADVANCEMENT"])
-                | Q(new_due_date__isnull=False),
+                condition=~Q(kind__in=["EXTENSION", "ADVANCEMENT"]) | Q(new_due_date__isnull=False),
                 name="extension_has_new_date",
             ),
         ]

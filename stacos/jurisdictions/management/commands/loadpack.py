@@ -45,9 +45,7 @@ class Command(BaseCommand):
             raise CommandError(f"No pack directory at {root}")
 
         country = options["country"]
-        paths = (
-            [root / f"{country.upper()}.yaml"] if country else sorted(root.glob("*.yaml"))
-        )
+        paths = [root / f"{country.upper()}.yaml"] if country else sorted(root.glob("*.yaml"))
 
         for path in paths:
             if not path.exists():

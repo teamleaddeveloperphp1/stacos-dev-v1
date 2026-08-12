@@ -95,6 +95,7 @@ class EntityEvent(TenantScopedModel):
     def __str__(self) -> str:
         return f"{self.key} on {self.occurred_on}"
 
+
 #: Rendered into the partial index and into the SQL overdue annotation. Sorted so
 #: the generated migration is stable across machines.
 _OPEN_STATE_VALUES: list[str] = sorted(str(s) for s in OPEN_STATES)
@@ -267,9 +268,7 @@ class ObligationInstance(TenantScopedModel, SoftDeleteModel):
         self.superseded_at = timezone.now()
         self.supersede_reason = reason
         self.state = State.NOT_APPLICABLE
-        self.save(
-            update_fields=["superseded_at", "supersede_reason", "state", "updated_at"]
-        )
+        self.save(update_fields=["superseded_at", "supersede_reason", "state", "updated_at"])
 
 
 class ObligationEvent(TenantScopedModel):
@@ -355,9 +354,7 @@ class ObligationSuppression(TenantScopedModel):
     #: not a factory, stop asking". A specific key suppresses one occurrence.
     period_key = models.CharField(max_length=32, blank=True)
 
-    kind = models.CharField(
-        max_length=20, choices=Kind.choices, default=Kind.NOT_APPLICABLE
-    )
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.NOT_APPLICABLE)
     reason = models.TextField()
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True

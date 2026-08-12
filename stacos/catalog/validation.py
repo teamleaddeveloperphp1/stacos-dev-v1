@@ -37,6 +37,7 @@ merge gate rather than a deployment gate.
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -157,7 +158,7 @@ def _check_effective_windows(documents: Sequence[DefinitionDocument]) -> list[Fi
         published = sorted(
             (d for d in versions if d.status == "PUBLISHED"), key=lambda d: d.effective_from
         )
-        for earlier, later in zip(published, published[1:], strict=False):
+        for earlier, later in itertools.pairwise(published):
             earlier_end = earlier.effective_to
             if earlier_end is None or earlier_end >= later.effective_from:
                 findings.append(
@@ -364,8 +365,7 @@ def _check_dates_resolve(document: DefinitionDocument, *, as_of: date) -> list[F
                 Level.ERROR,
                 document.code,
                 "periods",
-                f"periodicity {document.periodicity} generated no periods over a "
-                f"four-year window.",
+                f"periodicity {document.periodicity} generated no periods over a four-year window.",
             )
         ]
 

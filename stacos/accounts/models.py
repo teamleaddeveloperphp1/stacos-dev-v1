@@ -243,6 +243,19 @@ class PendingVerification(models.Model):
     email_satisfied = models.BooleanField(default=False)
     phone_satisfied = models.BooleanField(default=False)
 
+    #: The number has no WhatsApp account, so the code was never delivered and a
+    #: resend never will be. Distinct from a delivery failure, and stored rather
+    #: than only logged because the *user* is the one who needs to know: without
+    #: this they sit on the verification screen waiting for a message that is not
+    #: coming, and then contact support.
+    #:
+    #: WhatsApp is currently a hard requirement for sign-up. There is deliberately
+    #: no SMS fallback: it would need DLT template registration, which takes weeks,
+    #: and shipping a half-working second channel is worse than one that plainly
+    #: says what it needs. ``WhatsAppResult.not_on_whatsapp`` keeps that decision
+    #: reversible — adding the fallback later changes no caller.
+    phone_unreachable = models.BooleanField(default=False)
+
     # One counter for the pair. Submitting the form once is one attempt, even
     # though it carries two codes.
     attempts = models.PositiveSmallIntegerField(default=0)

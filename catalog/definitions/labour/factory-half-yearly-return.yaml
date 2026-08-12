@@ -1,0 +1,36 @@
+code: IN-LABOUR-FACTORY-HALF-YEARLY
+country: IN
+category: LABOUR
+family: Factories
+authority: STATE_LABOUR
+version: 1
+title: Factory half-yearly return (Form 22)
+plain_language_summary: >
+  The half-yearly return of employment and working hours required in most states.
+  Shorter than the annual return, and easily forgotten because it falls in the
+  middle of the year when nothing else labour-related is due.
+statutory_reference: Section 110 Factories Act, 1948 r/w state rules
+periodicity: HALF_YEARLY
+period_anchor: CALENDAR
+instance_scope: PREMISES
+scope_selector:
+  premises_type: FACTORY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: FACTORY_LICENCE
+      explain: you hold a factory licence
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 15 }
+  shift_if_holiday: NEXT_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: return, label: Filed Form 22 with acknowledgement, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-plant
+penalty_summary: "Up to ₹1,00,000 under Section 92."
+effective_from: 1948-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

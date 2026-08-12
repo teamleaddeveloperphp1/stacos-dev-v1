@@ -72,9 +72,7 @@ def build_profile_view(
     """
     profile = profile or EntityProfile.objects.filter(entity=entity).first()
 
-    registrations = list(
-        EntityRegistration.objects.filter(entity=entity, archived_at__isnull=True)
-    )
+    registrations = list(EntityRegistration.objects.filter(entity=entity, archived_at__isnull=True))
     premises = list(EntityPremises.objects.filter(entity=entity, archived_at__isnull=True))
 
     facts = _base_facts(entity, profile)

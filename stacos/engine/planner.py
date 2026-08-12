@@ -101,6 +101,14 @@ class ExistingInstance:
     has_evidence: bool = False
     has_history: bool = False
     archived: bool = False
+    #: The prompt still displayed on the row — "tell us your AGM date". Compared
+    #: so that answering the prompt clears it: an instance showing both a date
+    #: and a request for the date it was computed from reads as broken.
+    needs_input: str = ""
+    #: Whether the applicability rule was decided. A fact arriving later turns an
+    #: UNKNOWN into a definite answer, and the "confirm this" flag has to go with
+    #: it or the user is asked to confirm something already settled.
+    confirmed: bool = True
 
     @property
     def is_protected(self) -> bool:
@@ -370,6 +378,17 @@ def _diff(
                 current.definition_version,
                 planned.definition_version,
             )
+
+        # These two are what the row *says about itself*, and both go stale the
+        # moment the input they describe arrives. Recording an AGM date resolves
+        # the due date; without this the row would keep asking for the date it
+        # has just been given. Compared for every instance including terminal
+        # ones, because a prompt on a filed obligation is equally wrong.
+        if current.needs_input != planned.needs_input:
+            changes["needs_input"] = (current.needs_input, planned.needs_input)
+
+        if current.confirmed != planned.confirmed:
+            changes["confirmed"] = (current.confirmed, planned.confirmed)
 
         if changes:
             to_update.append(InstanceDelta(identity=identity, changes=changes))

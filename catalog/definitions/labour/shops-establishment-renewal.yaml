@@ -1,0 +1,35 @@
+code: IN-LABOUR-SHOPS-ESTAB-RENEWAL
+country: IN
+category: LABOUR
+family: Shops and establishments
+authority: STATE_LABOUR
+version: 1
+title: Shops and establishments registration renewal
+plain_language_summary: >
+  Every office, shop and warehouse needs a shops and establishments registration
+  from the state, renewable on a term that varies from one to five years. The
+  certificate must be displayed at the premises, which is how a lapsed one is
+  usually spotted.
+statutory_reference: State Shops and Commercial Establishments Acts
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: SHOPS_ESTAB
+      explain: you hold a shops and establishments registration
+due:
+  anchor: FY_START
+  offset: { months: 0, day_of_month: 30 }
+  shift_if_holiday: NEXT_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: certificate, label: Renewed registration certificate, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "Fines vary by state, typically ₹5,000–₹1,00,000, with continuing daily penalties."
+effective_from: 2015-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

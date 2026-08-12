@@ -1,0 +1,35 @@
+code: IN-PT-WB-ANNUAL-RETURN
+country: IN
+category: LABOUR
+family: Professional tax
+authority: STATE_TAX
+version: 1
+title: Professional tax — West Bengal annual employer return
+plain_language_summary: >
+  The consolidated annual return for West Bengal employers, due 30 April. Filed
+  online with an enrolment-wise breakdown of the salary slabs applied.
+statutory_reference: Rule 11 West Bengal State Tax on Professions Rules, 1979
+periodicity: ANNUAL
+period_anchor: FY
+jurisdictions: [IN-WB]
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_RC
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PT_RC
+      explain: you hold a professional tax registration certificate
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: return, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "₹200 for the first month of delay and ₹100 for each month after."
+effective_from: 1979-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

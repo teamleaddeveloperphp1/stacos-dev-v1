@@ -43,6 +43,11 @@ _VIEW_BASICS = frozenset(
         "tenancy.entity.view",
         "tenancy.profile.view",
         "engagements.view",
+        # Seeing the calendar, and seeing what the law behind an entry says, is
+        # the product's floor. A user who cannot read either has nothing to look
+        # at, so both sit in the basic bundle rather than being granted upwards.
+        "compliance.obligation.view",
+        "catalog.view",
     }
 )
 
@@ -52,6 +57,30 @@ _ENTITY_STEWARD = _VIEW_BASICS | {
     "tenancy.registration.view",
     "tenancy.premises.manage",
     "core.audit.view",
+}
+
+#: Doing the work: preparing, chasing information, recording the dates that
+#: unblock a due date. Everything short of taking responsibility for a filing.
+_COMPLIANCE_PREPARER = frozenset(
+    {
+        "compliance.obligation.prepare",
+        "compliance.obligation.request_info",
+        "compliance.obligation.assign",
+        "compliance.event.record",
+        "compliance.calendar.rebuild",
+    }
+)
+
+#: Taking responsibility: review, sign-off, recording the filing, closing it.
+#: Split from preparation because that is how firms actually delegate — an
+#: article clerk prepares and a partner is answerable.
+_COMPLIANCE_APPROVER = _COMPLIANCE_PREPARER | {
+    "compliance.obligation.review",
+    "compliance.obligation.file",
+    "compliance.obligation.close",
+    "compliance.obligation.defer",
+    "compliance.obligation.dismiss",
+    "compliance.obligation.dispute",
 }
 
 
@@ -86,6 +115,13 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "core.audit.export",
             "core.data.export",
             "finance.view",
+        }
+        | _COMPLIANCE_APPROVER
+        | {
+            # Client-side sign-off and reopening a closed obligation both belong
+            # to whoever is answerable for the filing, which is the owner.
+            "compliance.obligation.approve",
+            "compliance.obligation.reopen",
         },
     ),
     RoleSpec(
@@ -105,7 +141,11 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "accounts.user.view",
             "engagements.invite",
             "finance.view",
-        },
+        }
+        # Prepares and chases, but does not approve — that is the whole point of
+        # the role, and the reason `_COMPLIANCE_APPROVER` is not used here.
+        | _COMPLIANCE_PREPARER
+        | {"compliance.obligation.close"},
     ),
     RoleSpec(
         code="org-department-user",
@@ -118,7 +158,10 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         ),
         # Note the absence of `finance.view`: this user sees an obligation's
         # title and due date but every amount is masked.
-        permissions=_VIEW_BASICS | {"tenancy.premises.manage"},
+        permissions=_VIEW_BASICS
+        | {"tenancy.premises.manage"}
+        | _COMPLIANCE_PREPARER
+        | {"compliance.obligation.close"},
         default_categories=("SAFETY_FIRE", "LABOUR", "ENVIRONMENT", "LICENSING"),
     ),
     RoleSpec(
@@ -154,7 +197,9 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "core.audit.export",
             "core.data.export",
             "finance.view",
-        },
+        }
+        | _COMPLIANCE_APPROVER
+        | {"compliance.obligation.reopen"},
     ),
     RoleSpec(
         code="practice-manager",
@@ -170,7 +215,8 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "accounts.user.view",
             "engagements.invite",
             "finance.view",
-        },
+        }
+        | _COMPLIANCE_APPROVER,
     ),
     RoleSpec(
         code="practice-staff",
@@ -180,7 +226,9 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         description=(
             "Executes assigned work, prepares returns, logs time and raises information requests."
         ),
-        permissions=_VIEW_BASICS | {"tenancy.profile.edit", "tenancy.registration.view"},
+        permissions=_VIEW_BASICS
+        | {"tenancy.profile.edit", "tenancy.registration.view"}
+        | _COMPLIANCE_PREPARER,
     ),
     # -----------------------------------------------------------------------
     # Dealer — a channel partner

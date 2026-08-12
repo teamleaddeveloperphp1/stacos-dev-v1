@@ -1,0 +1,33 @@
+code: IN-INT-DR-TEST
+country: IN
+category: INTERNAL_GOVERNANCE
+family: Internal governance
+authority: INTERNAL
+version: 1
+title: Backup restore and disaster-recovery test
+plain_language_summary: >
+  An untested backup is a hope, not a control. A twice-yearly restore test — take a
+  backup, restore it somewhere else, confirm the data is intact — is what turns it
+  into one, and it is the evidence an auditor or an insurer will ask for.
+statutory_reference: Internal control; DPDP Act, 2023 reasonable security safeguards
+periodicity: HALF_YEARLY
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: aggregate_turnover
+      op: gt
+      value: 50000000
+      explain: your scale of operations depends on recoverable systems
+due:
+  anchor: PERIOD_END
+  offset: { months: 0, day_of_month: -1 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: report, label: Restore test report with timings, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-admin
+penalty_summary: "No direct penalty; a failure to restore is discovered only when it matters."
+effective_from: 2024-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

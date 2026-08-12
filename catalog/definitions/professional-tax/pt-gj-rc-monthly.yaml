@@ -1,0 +1,39 @@
+code: IN-PT-GJ-RC-MONTHLY
+country: IN
+category: LABOUR
+family: Professional tax
+authority: STATE_TAX
+version: 1
+title: Professional tax — Gujarat employer payment (monthly)
+plain_language_summary: >
+  Gujarat's monthly employer payment, due by the 15th — earlier than most states.
+  Collected by the local municipal body rather than the state in several districts,
+  so the payment channel differs by location even though the rule does not.
+statutory_reference: Section 6 Gujarat State Tax on Professions, Trades, Callings and Employments Act, 1976
+periodicity: MONTHLY
+jurisdictions: [IN-GJ]
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_RC
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PT_RC
+      explain: you hold a professional tax registration certificate
+    - fact: employee_count
+      op: gte
+      value: 1
+      explain: you have employees whose salary attracts professional tax
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 15 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Payment challan, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "Interest at 18% a year plus penalty up to the amount of tax."
+effective_from: 1976-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

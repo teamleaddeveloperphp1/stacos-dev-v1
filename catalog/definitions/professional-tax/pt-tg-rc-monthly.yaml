@@ -1,0 +1,39 @@
+code: IN-PT-TG-RC-MONTHLY
+country: IN
+category: LABOUR
+family: Professional tax
+authority: STATE_TAX
+version: 1
+title: Professional tax — Telangana employer payment (monthly)
+plain_language_summary: >
+  Telangana's monthly employer payment, due by the 10th. The Act is inherited from
+  undivided Andhra Pradesh, so the rules read alike — but the registrations and the
+  payment portals are separate and a Hyderabad office needs its own.
+statutory_reference: Section 7 Telangana Tax on Professions, Trades, Callings and Employments Act, 1987
+periodicity: MONTHLY
+jurisdictions: [IN-TG]
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_RC
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PT_RC
+      explain: you hold a professional tax registration certificate
+    - fact: employee_count
+      op: gte
+      value: 1
+      explain: you have employees whose salary attracts professional tax
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 10 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Payment challan, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-hr
+penalty_summary: "Interest at 2% per month plus penalty up to twice the tax."
+effective_from: 2014-06-02
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

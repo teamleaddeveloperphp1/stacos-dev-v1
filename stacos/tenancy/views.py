@@ -36,20 +36,22 @@ def dashboard(request: HttpRequest) -> HttpResponse:
 
     The headline counters come from one conditional aggregation over the register
     rather than several ``.count()`` calls, so the tiles cannot disagree with each
-    other. "What is due next" loads separately, on reveal, so the shell paints
-    without waiting for it.
+    other — they were computed from one snapshot.
     """
     from django.utils import timezone
 
-    from stacos.obligations.queries import status_counts
+    from stacos.obligations.queries import status_counts, upcoming
 
+    as_of = timezone.localdate()
     entities = Entity.objects.select_related("tenant").filter(archived_at__isnull=True)
 
     context = {
         "entity_count": entities.count(),
         "entities": entities[:6],
         "tenant": getattr(request, "tenant", None),
-        "counts": status_counts(as_of=timezone.localdate()),
+        "as_of": as_of,
+        "counts": status_counts(as_of=as_of),
+        "upcoming": upcoming(as_of=as_of, within_days=30).select_related("entity")[:8],
     }
 
     template = (

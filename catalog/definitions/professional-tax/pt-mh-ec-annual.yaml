@@ -1,0 +1,36 @@
+code: IN-PT-MH-EC-ANNUAL
+country: IN
+category: LABOUR
+family: Professional tax
+authority: STATE_TAX
+version: 1
+title: Professional tax — Maharashtra enrolment certificate (annual)
+plain_language_summary: >
+  A flat annual amount payable by the business itself — as distinct from the tax
+  deducted from employees — due 30 June. ₹2,500 a year, and the source of an
+  entirely disproportionate number of recovery notices.
+statutory_reference: Section 8 Maharashtra State Tax on Professions Act, 1975
+periodicity: ANNUAL
+period_anchor: FY
+jurisdictions: [IN-MH]
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_EC
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PT_EC
+      explain: you hold a professional tax enrolment certificate
+due:
+  anchor: FY_START
+  offset: { months: 2, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Payment challan, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "Interest at 1.25% per month plus penalty up to the amount of tax."
+effective_from: 1975-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

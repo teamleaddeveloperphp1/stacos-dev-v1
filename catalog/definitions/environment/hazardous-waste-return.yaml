@@ -1,0 +1,37 @@
+code: IN-ENV-HAZARDOUS-WASTE-RETURN
+country: IN
+category: ENVIRONMENT
+family: Waste
+authority: STATE_PCB
+version: 1
+title: Hazardous waste — annual return (Form 4)
+plain_language_summary: >
+  An annual return of hazardous waste generated, stored, disposed of and sent to
+  authorised recyclers, due 30 June. The quantities have to reconcile with the
+  manifests, and a mismatch is treated as unaccounted waste.
+statutory_reference: Rule 20(2) Hazardous and Other Wastes (Management and Transboundary Movement) Rules, 2016
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: PREMISES
+scope_selector:
+  premises_type: FACTORY
+applicability:
+  all:
+    - fact: deals_in_hazardous_material
+      op: eq
+      value: true
+      explain: you handle hazardous material
+due:
+  anchor: PERIOD_END
+  offset: { months: 3, day_of_month: 30 }
+  shift_if_holiday: NEXT_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: return, label: Filed Form 4 with acknowledgement, kind: DOC, mandatory_for_close: true }
+  - { key: manifests, label: Form 10 manifests for the year, kind: DOC }
+default_owner_role: org-plant
+penalty_summary: "Imprisonment up to five years or a fine up to ₹1,00,000 under the Environment Act."
+effective_from: 2016-04-04
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

@@ -35,6 +35,26 @@
     </div>
   </div>
 
+  {% comment %}
+    A number with no WhatsApp account cannot be reached at all, and resending
+    will never help. Saying so plainly beats leaving somebody watching a screen
+    for a message that is not coming — which is the whole reason
+    `not_on_whatsapp` is a distinct outcome from a delivery failure.
+
+    WhatsApp is a hard requirement for sign-up today. An SMS fallback would need
+    DLT template registration, which takes weeks; the interface is shaped so that
+    adding one later changes no caller.
+  {% endcomment %}
+  {% if verification.phone_unreachable %}
+    <div class="alert alert-warning py-2 small" role="alert">
+      {% blocktranslate %}
+        That number does not have a WhatsApp account, so we could not send the second
+        code. Sign up again with a number that has WhatsApp on it — resending will not
+        help.
+      {% endblocktranslate %}
+    </div>
+  {% endif %}
+
   <form method="post" novalidate>
     {% csrf_token %}
 

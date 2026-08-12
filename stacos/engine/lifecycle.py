@@ -31,11 +31,11 @@ from enum import StrEnum
 
 __all__ = [
     "CLOSED_STATES",
-    "DisplayStatus",
     "OPEN_STATES",
-    "State",
     "TERMINAL_STATES",
     "TRANSITIONS",
+    "DisplayStatus",
+    "State",
     "Transition",
     "allowed_transitions",
     "derive_display_status",
@@ -243,7 +243,10 @@ TRANSITIONS: tuple[Transition, ...] = (
     # A review that needs no client sign-off goes straight to ready. Common for
     # routine monthly filings where the client has standing authorisation.
     Transition(
-        State.PENDING_REVIEW, State.READY_TO_FILE, "Approve for filing", "compliance.obligation.review"
+        State.PENDING_REVIEW,
+        State.READY_TO_FILE,
+        "Approve for filing",
+        "compliance.obligation.review",
     ),
     Transition(
         State.PENDING_CLIENT_APPROVAL,
@@ -391,13 +394,18 @@ def derive_display_status(
     state: str,
     due_date: date | None,
     as_of: date,
-    filed_on: date | None = None,
 ) -> DisplayStatus:
     """Collapse a state and a date into the one word shown to a user.
 
     The ordering matters: overdue beats everything except being finished. A user
     scanning a list of two hundred rows needs the worst true thing about each one,
     not the most recent.
+
+    Lateness is deliberately *not* an input. A filing submitted after its date is
+    still complete — the work is done — so it reads ``COMPLETE`` here and carries
+    a separate "filed late" badge from :func:`filed_late`. Folding the two into
+    one word would leave no way to say "done, but late", which is exactly what a
+    penalty computation needs to know.
     """
     if state in {State.FILED, State.CLOSED}:
         return DisplayStatus.COMPLETE

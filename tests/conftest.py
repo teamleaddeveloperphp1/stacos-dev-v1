@@ -54,9 +54,22 @@ def _reset_messaging_state() -> Iterator[None]:
 
 @pytest.fixture(scope="session")
 def django_db_setup(django_db_setup: Any, django_db_blocker: Any) -> None:
-    """Load the system roles once, after the test database is created."""
+    """Load reference data once, after the test database is created.
+
+    System roles, the India jurisdiction pack and the whole compliance catalog.
+    All three are platform-owned reference data that every test can read and none
+    should be writing, so loading them once at setup — before the per-test
+    transaction opens — is both faster and more honest than a fixture that
+    rebuilds them.
+
+    Testing against the **live** catalog rather than a hand-built miniature is
+    deliberate for the materialisation suite: a definition whose rule stops
+    matching any real entity is a bug this catches and a fixture would not.
+    """
     with django_db_blocker.unblock():
         call_command("sync_system_roles", verbosity=0)
+        call_command("loadpack", "IN", verbosity=0)
+        call_command("loadcatalog", verbosity=0)
 
 
 @pytest.fixture
@@ -80,17 +93,21 @@ def platform(db: Any) -> Iterator[AccessScope]:
 
 @pytest.fixture
 def india(db: Any) -> JurisdictionPack:
-    return JurisdictionPack.objects.create(
-        country="IN",
-        name="India",
-        currency="INR",
-        currency_symbol="₹",
-        default_timezone="Asia/Kolkata",
-        digit_grouping=JurisdictionPack.DigitGrouping.INDIAN,
-        fy_start_month=4,
-        fy_start_day=1,
-        is_published=True,
-    )
+    """The India pack, as loaded from ``catalog/packs/IN.yaml``.
+
+    Fetched rather than constructed, so tests run against the fiscal year,
+    weekend rule and holiday calendar the product actually ships. A hand-built
+    pack here would let the real one drift without anything noticing — and
+    ``country`` is unique, so constructing a second one would fail anyway.
+
+    Self-healing for transactional tests, which truncate the tables the
+    session-scoped setup populated.
+    """
+    pack = JurisdictionPack.objects.filter(country="IN").first()
+    if pack is None:
+        call_command("loadpack", "IN", verbosity=0)
+        pack = JurisdictionPack.objects.get(country="IN")
+    return pack
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +196,123 @@ def entity_b(org: Tenant) -> Entity:
 @pytest.fixture
 def rival_entity(other_org: Tenant) -> Entity:
     return _make_entity(other_org, "Rival Steel Pvt Ltd", "RSPL")
+
+
+# ---------------------------------------------------------------------------
+# The obligation register
+#
+# Shared with the security suite as well as the obligations suite, which is why
+# these live here rather than in a directory-local conftest: "can this tenant
+# reach that tenant's calendar" is an isolation question, and it needs the same
+# fixture the feature tests use rather than an approximation of it.
+# ---------------------------------------------------------------------------
+
+#: Fixed. A calendar test whose expectations move with the wall clock is a
+#: calendar test that gets switched off in March.
+AS_OF = date(2026, 8, 12)
+
+
+@pytest.fixture
+def manufacturer(org: Tenant) -> Entity:
+    """A Gujarat manufacturer with GST in two states and one factory.
+
+    Deliberately realistic rather than minimal: enough profile that a meaningful
+    slice of the live catalog applies, and two GSTINs so the per-registration
+    fan-out is actually exercised. A one-state fixture would pass every test in
+    the suite while proving nothing about the behaviour that matters most.
+    """
+    from stacos.tenancy.models import EntityPremises, EntityRegistration
+
+    with platform_scope(reason="test-fixture"):
+        entity = Entity.objects.create(
+            tenant=org,
+            name="Shreeji Textiles Pvt Ltd",
+            short_code="STPL",
+            entity_type="PVT_LTD",
+            country="IN",
+            incorporation_date=date(2011, 6, 14),
+            registered_office_state="IN-GJ",
+        )
+        EntityProfile.objects.create(
+            tenant=org,
+            entity=entity,
+            aggregate_turnover=Decimal("800000000"),
+            employee_count=200,
+            contractor_count=45,
+            paid_up_capital=Decimal("50000000"),
+            net_worth=Decimal("350000000"),
+            states_of_operation=["IN-GJ", "IN-MH"],
+            facts={
+                "gst_scheme": "REGULAR",
+                "qrmp_opted": False,
+                "women_employees_count": 60,
+                "has_boiler": True,
+                "has_msme_vendors": True,
+                "is_listed": False,
+                "has_foreign_shareholding": False,
+                "has_ecommerce_sales": False,
+                "has_export_import": False,
+                "deals_in_hazardous_material": False,
+                "is_dormant": False,
+                "sector": "Textiles",
+            },
+        )
+
+        for kind, where in (
+            ("PAN", ""),
+            ("TAN", ""),
+            ("CIN", ""),
+            ("GST", "IN-GJ"),
+            ("GST", "IN-MH"),
+            ("PF", ""),
+            ("ESIC", ""),
+            ("PT_RC", "IN-GJ"),
+            ("PT_EC", "IN-GJ"),
+            ("FACTORY_LICENCE", "IN-GJ"),
+            ("PCB_CONSENT", "IN-GJ"),
+        ):
+            EntityRegistration.objects.create(
+                tenant=org,
+                entity=entity,
+                type=kind,
+                jurisdiction=where,
+                value=f"{kind}{where or 'XX'}TEST",
+                label=f"{kind} {where}".strip(),
+            )
+
+        EntityPremises.objects.create(
+            tenant=org,
+            entity=entity,
+            name="Ahmedabad Plant",
+            type="FACTORY",
+            jurisdiction="IN-GJ",
+        )
+        return entity
+
+
+@pytest.fixture
+def materialised(manufacturer: Entity) -> Entity:
+    """The manufacturer with its calendar already built."""
+    from stacos.obligations.services import materialise
+
+    with platform_scope(reason="test-fixture"):
+        materialise(manufacturer, as_of=AS_OF, trigger="ONBOARDING")
+    return manufacturer
+
+
+@pytest.fixture
+def an_obligation(materialised: Entity) -> Any:
+    """One GSTR-3B, for any test that needs a concrete row to act on."""
+    from stacos.obligations.models import ObligationInstance
+
+    with platform_scope(reason="test-fixture"):
+        return (
+            ObligationInstance.objects.filter(
+                entity=materialised, definition_code="IN-GST-GSTR3B-MONTHLY"
+            )
+            .order_by("due_date")
+            .first()
+        )
 
 
 # ---------------------------------------------------------------------------

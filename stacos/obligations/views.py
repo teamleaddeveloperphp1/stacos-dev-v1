@@ -34,7 +34,7 @@ from stacos.obligations.forms import (
     obligation_display,
 )
 from stacos.obligations.models import EntityEvent, ObligationEvent, ObligationInstance
-from stacos.obligations.queries import annotate_status, keyset_page, live, status_counts, upcoming
+from stacos.obligations.queries import annotate_status, keyset_page, live, status_counts
 from stacos.obligations.services import materialise
 from stacos.obligations.transitions import (
     TransitionError,
@@ -348,7 +348,9 @@ def obligation_transition(request: HttpRequest, pk: str) -> HttpResponse:
             as_of=as_of,
         )
     except TransitionError as exc:
-        return _detail_error(request, obligation, str(exc), status=409 if exc.code == "stale" else 422)
+        return _detail_error(
+            request, obligation, str(exc), status=409 if exc.code == "stale" else 422
+        )
 
     refreshed = _get(pk, as_of=as_of)
     counts = status_counts(as_of=as_of)
@@ -485,25 +487,6 @@ def rebuild_calendar(request: HttpRequest, entity_pk: str) -> HttpResponse:
 # ---------------------------------------------------------------------------
 
 
-@require_permission("compliance.obligation.view")
-def dashboard_panel(request: HttpRequest) -> HttpResponse:
-    """What is due next, for the dashboard.
-
-    Its own endpoint so the dashboard can load it lazily and the shell paints
-    immediately, rather than the whole page waiting on the register.
-    """
-    as_of = _today()
-    return render(
-        request,
-        "obligations/_fragments/dashboard_panel.html",
-        {
-            "as_of": as_of,
-            "counts": status_counts(as_of=as_of),
-            "upcoming": upcoming(as_of=as_of, within_days=30)[:8],
-        },
-    )
-
-
 @require_permission("catalog.view")
 def definition_detail(request: HttpRequest, code: str) -> HttpResponse:
     """What the law says, behind an obligation.
@@ -557,7 +540,9 @@ def entity_summary(request: HttpRequest, entity_pk: str) -> HttpResponse:
         {
             "entity": entity,
             "as_of": as_of,
-            "rows": [{**row, "label": labels.get(row["category"], row["category"])} for row in rows],
+            "rows": [
+                {**row, "label": labels.get(row["category"], row["category"])} for row in rows
+            ],
             "timeline": ObligationEvent.objects.filter(entity=entity).select_related("actor")[:10],
         },
     )

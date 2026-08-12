@@ -1,0 +1,36 @@
+code: IN-LIC-LEGAL-METROLOGY
+country: IN
+category: LICENSING
+family: Sector licences
+authority: LEGAL_METROLOGY
+version: 1
+title: Legal metrology — weights and measures verification
+plain_language_summary: >
+  Every weighing and measuring instrument used in trade must be verified and
+  stamped annually by the legal metrology department. Packers and importers also
+  need a separate registration for declarations on packaged commodities.
+statutory_reference: Section 24 Legal Metrology Act, 2009 r/w Rule 15
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: LEGAL_METROLOGY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: LEGAL_METROLOGY
+      explain: you hold a legal metrology registration
+due:
+  anchor: FY_START
+  offset: { months: 2, day_of_month: 30 }
+  shift_if_holiday: PREVIOUS_WORKING_DAY
+  calendars: [IN-NATIONAL]
+evidence:
+  - { key: certificate, label: Verification certificate for each instrument, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-plant
+penalty_summary: "Up to ₹25,000 for a first offence, rising with repetition, plus seizure of the instrument."
+effective_from: 2011-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

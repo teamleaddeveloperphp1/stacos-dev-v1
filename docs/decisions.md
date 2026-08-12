@@ -148,7 +148,9 @@ Things that need a decision from the product owner before the module they affect
 
 ### Before the notices milestone
 
-3. **Government portal scraping.** §9 of the brief covers this and was truncated from the original message. Automated retrieval from income tax, GST and MCA portals needs a written legal position on terms of service and on holding client credentials, before any adapter is written. This is a legal question, not a technical one.
+3. **Government portal scraping — decided: no scraping in v1.** Automated retrieval from the income tax, GST and MCA portals would require holding client credentials and driving a session against terms of service that do not contemplate it. Both are legal exposures, not technical ones, and neither is worth taking before there is a product to protect.
+
+   The notices module will therefore ship with **manual entry and email ingestion**, and a documented adapter interface with no implementation behind it. That interface is the whole point: it keeps the decision reversible, so that a written legal position — or an official API, which is the outcome actually worth waiting for — turns into an adapter rather than a rewrite. The pricing page already says "notice auto-retrieval, where the authority permits it", which is the honest formulation and should stay that way.
 
 ### Before launch
 
@@ -156,7 +158,11 @@ Things that need a decision from the product owner before the module they affect
 5. **Apple Sign in client secret expiry.** It is a JWT valid for at most six months and needs a rotation job. Everyone forgets this and it fails at 3 a.m. six months after launch.
 6. **Passkeys.** django-allauth ≥65 ships WebAuthn. A one-time code delivered to a device is phishable whatever the channel; passkeys are not, cost nothing per authentication, and Indian professionals on Windows Hello can use them today. Worth considering as an *additional* factor even though the dual-channel requirement stands.
 
-7. **A fallback for numbers not on WhatsApp.** See decision 6 above. Either accept that WhatsApp is a hard requirement for sign-up and say so on the registration form, or add SMS as a fallback for the `not_on_whatsapp` case. The interface already distinguishes it; the product decision has not been made.
+7. **A fallback for numbers not on WhatsApp — decided: WhatsApp is a hard requirement, stated plainly.** No SMS fallback in v1. Adding one means TRAI DLT template registration, which takes weeks and buys a second half-working channel; a single channel that says exactly what it needs is better than two that each work sometimes.
+
+   What shipped with the engine milestone: the registration form already asks for a "WhatsApp number" and says the code goes there. `PendingVerification.phone_unreachable` now persists the `not_on_whatsapp` outcome, and the verification screen tells the user that resending will not help and they need a number with WhatsApp on it. Previously this outcome was only written to the log — which meant the one person who needed to know was the only one who could not see it.
+
+   The decision stays reversible at no cost: `WhatsAppResult.not_on_whatsapp` is still a distinct outcome from a delivery failure, so adding SMS later changes no caller.
 
 ### Product shape
 

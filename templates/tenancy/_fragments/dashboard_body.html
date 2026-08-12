@@ -46,18 +46,16 @@
   </div>
 
   {% comment %}
-    Loaded on its own rather than inline, so the shell and the entity tiles paint
-    immediately instead of the whole dashboard waiting on the register. `revealed`
-    rather than `load` means a user who lands and navigates away in 300ms never
-    costs the query.
+    Rendered inline rather than lazily fetched.
+
+    It was a lazy `revealed` load at first, and that was the wrong trade twice
+    over: the whole panel costs one aggregate and one limited select, so the
+    second round trip bought nothing — and a swap arriving mid-navigation raced
+    the shell's view transition, which the browser resolves by skipping the
+    transition and rejecting its promise. Cheaper and calmer to just render it.
   {% endcomment %}
-  <div hx-get="{% url 'compliance:dashboard_panel' %}"
-       hx-trigger="revealed once"
-       hx-swap="outerHTML"
-       class="mb-4">
-    <div class="card"><div class="card-body text-muted small">
-      {% translate "Loading what is due…" %}
-    </div></div>
+  <div class="mb-4">
+    {% include "obligations/_fragments/dashboard_panel.html" %}
   </div>
 
   <div class="card">
