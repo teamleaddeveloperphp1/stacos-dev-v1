@@ -10,14 +10,14 @@
  * loading feedback.
  */
 
-import "htmx.org";
+// Must come first: it puts htmx on `window`, which the extensions below read at
+// import time. See htmx-setup.js.
+import htmx from "./htmx-setup.js";
 import "htmx-ext-preload";
-import "htmx-ext-sse";
 import Alpine from "alpinejs";
 import { Idiomorph } from "idiomorph";
 import { Dropdown, Modal, Offcanvas, Toast, Tooltip } from "bootstrap";
 
-window.htmx = window.htmx || htmx;
 window.Alpine = Alpine;
 
 // ---------------------------------------------------------------------------
@@ -28,16 +28,32 @@ window.Alpine = Alpine;
 // most of the difference between "a web page reloaded" and "the app responded".
 // ---------------------------------------------------------------------------
 htmx.defineExtension("morph", {
-  isInlineSwap: (swapStyle) => swapStyle === "morph",
+  isInlineSwap: (swapStyle) => String(swapStyle).startsWith("morph"),
+
   handleSwap: (swapStyle, target, fragment) => {
-    if (swapStyle !== "morph") return false;
-    Idiomorph.morph(target, fragment.outerHTML ?? fragment.innerHTML, {
-      morphStyle: "outerHTML",
+    const style = String(swapStyle);
+    if (!style.startsWith("morph")) return false;
+
+    // `morph` replaces the target element; `morph:innerHTML` replaces its
+    // children. The distinction matters: the shell targets #main, and morphing
+    // that with outerHTML turns #main *into* the fragment — destroying the very
+    // element every later navigation targets.
+    const morphStyle = style.split(":")[1] || "outerHTML";
+
+    const holder = document.createElement("div");
+    holder.append(
+      ...(fragment.nodeType === Node.DOCUMENT_FRAGMENT_NODE
+        ? Array.from(fragment.childNodes)
+        : [fragment]),
+    );
+
+    Idiomorph.morph(target, holder.innerHTML, {
+      morphStyle,
       callbacks: {
-        // Alpine components manage their own subtree; morphing into them fights
+        // Alpine components own their subtree; morphing into them fights
         // Alpine's reactivity and produces flicker.
         beforeNodeMorphed: (oldNode) =>
-          !(oldNode instanceof Element && oldNode.hasAttribute("x-data-ignore-morph")),
+          !(oldNode instanceof Element && oldNode.hasAttribute("data-no-morph")),
       },
     });
     return true;
@@ -133,6 +149,55 @@ document.body.addEventListener("htmx:afterSwap", (event) => {
 });
 
 // ---------------------------------------------------------------------------
+// Modals
+//
+// Modal bodies are fetched on demand into #modal-container rather than rendered
+// hidden into every page — there will eventually be a lot of them, and the shell
+// has to stay small.
+//
+// Two things have to be handled here because HTMX cannot know about them: the
+// modal must be shown once its markup lands, and it must be disposed when
+// dismissed so a reopened modal does not stack backdrops.
+// ---------------------------------------------------------------------------
+document.body.addEventListener("htmx:afterSwap", (event) => {
+  if (event.detail.target?.id !== "modal-container") return;
+
+  const el = event.detail.target.querySelector(".modal");
+  if (!el) return;
+
+  const modal = Modal.getOrCreateInstance(el);
+  modal.show();
+
+  el.addEventListener(
+    "hidden.bs.modal",
+    () => {
+      modal.dispose();
+      event.detail.target.innerHTML = "";
+    },
+    { once: true },
+  );
+});
+
+// A successful submit inside a modal asks it to close via HX-Trigger. The
+// server decides, because only the server knows whether the save succeeded.
+document.body.addEventListener("stacos:modal-close", () => {
+  document.querySelectorAll("#modal-container .modal").forEach((el) => {
+    Modal.getOrCreateInstance(el).hide();
+  });
+});
+
+// A 422 re-renders the form inside the still-open modal. Without this the
+// response would be swapped into the list target and the modal would sit there
+// looking like nothing happened.
+document.body.addEventListener("htmx:beforeSwap", (event) => {
+  if (event.detail.xhr?.status !== 422) return;
+  const container = document.getElementById("modal-container");
+  if (!container || !container.querySelector(".modal")) return;
+  event.detail.shouldSwap = true;
+  event.detail.target = container;
+});
+
+// ---------------------------------------------------------------------------
 // Command palette and keyboard shortcuts
 // ---------------------------------------------------------------------------
 const SHORTCUTS = {
@@ -187,6 +252,67 @@ document.addEventListener("keydown", (event) => {
 function openPalette() {
   document.dispatchEvent(new CustomEvent("stacos:palette-open"));
 }
+
+/**
+ * The command palette.
+ *
+ * Registered as an Alpine component rather than written inline, because it has
+ * real behaviour: the footer promises ↑/↓ to navigate and Enter to open, and a
+ * palette that advertises keyboard control without implementing it is worse than
+ * one that does not mention it.
+ *
+ * Items are re-queried on every access rather than cached, because HTMX replaces
+ * the results list on each keystroke.
+ */
+Alpine.data("palette", () => ({
+  open: false,
+  index: 0,
+
+  init() {
+    document.addEventListener("stacos:palette-open", () => this.show());
+  },
+
+  show() {
+    this.open = true;
+    this.index = 0;
+    this.$nextTick(() => {
+      this.$refs.input?.focus();
+      this.$refs.input?.select();
+      this.mark();
+    });
+  },
+
+  hide() {
+    this.open = false;
+  },
+
+  items() {
+    return Array.from(this.$refs.results?.querySelectorAll("[data-palette-item]") ?? []);
+  },
+
+  // Called after each HTMX swap: the previously highlighted node no longer exists.
+  reset() {
+    this.index = 0;
+    this.mark();
+  },
+
+  mark() {
+    const items = this.items();
+    items.forEach((el, i) => el.setAttribute("aria-selected", String(i === this.index)));
+    items[this.index]?.scrollIntoView({ block: "nearest" });
+  },
+
+  move(delta) {
+    const count = this.items().length;
+    if (!count) return;
+    this.index = (this.index + delta + count) % count;
+    this.mark();
+  },
+
+  choose() {
+    this.items()[this.index]?.click();
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Bootstrap widget initialisation

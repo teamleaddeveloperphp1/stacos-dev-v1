@@ -1,0 +1,41 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+<section class="section">
+  <div class="container container--reading">
+    <h1 class="hero__title mb-3">{% translate "Frequently asked questions" %}</h1>
+    <p class="hero__lede mb-5">
+      {% translate "Grouped by what you are trying to find out. If yours is not here, the contact form reaches a person." %}
+    </p>
+
+    <nav class="jump-links" aria-label="{% translate 'On this page' %}">
+      <ul>
+        {% for section in sections %}
+          <li><a href="#{{ section.title|slugify }}">{{ section.title }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+
+    {% for section in sections %}
+      <section class="mt-5" id="{{ section.title|slugify }}">
+        <c-marketing.section-head title="{{ section.title }}" />
+        <c-marketing.faq-list :faqs="section.faqs" />
+      </section>
+    {% endfor %}
+
+    <div class="callout mt-5">
+      <strong>{% translate "Still unanswered?" %}</strong>
+      <p class="mb-3 mt-2">
+        {% blocktranslate with hours=company.support_hours %}
+        Send it to us. Enquiries are answered by the team that builds the product,
+        {{ hours }}.
+        {% endblocktranslate %}
+      </p>
+      <a class="btn btn-primary" href="{% url 'marketing:contact' %}">{% translate "Ask us" %}</a>
+    </div>
+  </div>
+</section>
+
+<c-marketing.cta-band />
+{% endblock %}

@@ -3,7 +3,7 @@
 
 {% block title %}{% translate "Verify your identity" %} · STACOS{% endblock %}
 
-{#
+{% comment %}
   The dual-OTP screen.
 
   One screen, two codes, one submission, one rate limit. Both channels are
@@ -12,13 +12,13 @@
   The two codes are shown side by side rather than in sequence because a user
   reading them off two devices needs to see what is being asked of them before
   they start, and because a two-step flow invites abandoning after the first.
-#}
+{% endcomment %}
 
 {% block content %}
 <div class="auth-card">
   <h1 class="auth-card__title">{% translate "Verify it's you" %}</h1>
   <p class="auth-card__lede">
-    {% blocktranslate %}We've sent a code to each of your two channels. Enter both to continue.{% endblocktranslate %}
+    {% blocktranslate %}We've sent one code by email and one on WhatsApp. Enter both to continue.{% endblocktranslate %}
   </p>
 
   <div class="d-flex flex-column gap-2 mb-4 p-3 rounded"
@@ -29,8 +29,8 @@
       <span class="ms-auto fw-medium">{{ masked_email }}</span>
     </div>
     <div class="d-flex align-items-center gap-2">
-      <c-icon name="phone" size="14" />
-      <span class="text-muted">{% translate "Mobile" %}</span>
+      <c-icon name="whatsapp" size="14" />
+      <span class="text-muted">{% translate "WhatsApp" %}</span>
       <span class="ms-auto fw-medium">{{ masked_phone }}</span>
     </div>
   </div>

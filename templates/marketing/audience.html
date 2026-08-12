@@ -1,0 +1,129 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+
+<c-marketing.hero
+  eyebrow="{{ audience.name }}"
+  title="{{ audience.headline }}"
+  lede="{{ audience.lede }}">
+  <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">{% translate "Start free trial" %}</a>
+  <a class="btn btn-outline-secondary btn-lg" href="{% url 'marketing:contact' %}">{% translate "Talk to us" %}</a>
+</c-marketing.hero>
+
+{# --- The problem, then the outcome ---------------------------------- #}
+<section class="section section--sunken">
+  <div class="container">
+    <div class="row g-5">
+      <div class="col-12 col-lg-6">
+        <c-marketing.section-head
+          eyebrow="{% translate 'What usually goes wrong' %}"
+          title="{% translate 'The failure is rarely carelessness' %}" />
+        <dl class="pain-list">
+          {% for title, body in audience.pains %}
+            <dt>{{ title }}</dt>
+            <dd>{{ body }}</dd>
+          {% endfor %}
+        </dl>
+      </div>
+      <div class="col-12 col-lg-6">
+        <c-marketing.section-head
+          eyebrow="{% translate 'What changes' %}"
+          title="{% translate 'What you have instead' %}" />
+        <dl class="pain-list pain-list--positive">
+          {% for title, body in audience.outcomes %}
+            <dt>{{ title }}</dt>
+            <dd>{{ body }}</dd>
+          {% endfor %}
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if audience.sections %}
+  <section class="section">
+    <div class="container container--reading">
+      <c-marketing.prose :sections="audience.sections" />
+    </div>
+  </section>
+{% endif %}
+
+{# --- Modules that matter most to this audience ---------------------- #}
+<section class="section section--sunken">
+  <div class="container">
+    <c-marketing.section-head
+      eyebrow="{% translate 'The parts you will live in' %}"
+      title="{% translate 'Where the work actually happens' %}" />
+    <div class="row g-4">
+      {% for module in modules %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <c-marketing.feature-card
+            icon="{{ module.icon }}"
+            title="{{ module.name }}"
+            body="{{ module.nav_summary }}"
+            href="{% url 'marketing:module' module.slug %}" />
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{# --- The plan usually chosen ---------------------------------------- #}
+{% if plan %}
+  <section class="section">
+    <div class="container container--reading">
+      <div class="plan-callout">
+        <div>
+          <p class="plan-callout__eyebrow">{% translate "Usually starts on" %}</p>
+          <h2 class="plan-callout__name">{{ plan.name }}</h2>
+          <p class="plan-callout__tagline">{{ plan.tagline }}</p>
+          <ul class="tick-list">
+            {% for feature in plan.features %}<li>{{ feature }}</li>{% endfor %}
+          </ul>
+        </div>
+        <div class="plan-callout__price">
+          {% if plan.monthly_inr %}
+            <span class="plan-callout__amount">₹{{ plan.monthly_inr|floatformat:0 }}</span>
+            <span class="plan-callout__unit">{% translate "per month" %}</span>
+          {% else %}
+            <span class="plan-callout__amount">{% translate "Let's talk" %}</span>
+          {% endif %}
+          <a class="btn btn-primary w-100 mt-3" href="{% url 'marketing:pricing' %}">
+            {% translate "See all plans" %}
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endif %}
+
+{% if audience.faqs %}
+  <section class="section section--sunken">
+    <div class="container container--reading">
+      <c-marketing.section-head title="{% translate 'Questions from people like you' %}" />
+      <c-marketing.faq-list :faqs="audience.faqs" />
+    </div>
+  </section>
+{% endif %}
+
+<section class="section">
+  <div class="container">
+    <c-marketing.section-head title="{% translate 'Not quite you?' %}" />
+    <div class="row g-4">
+      {% for other in others %}
+        <div class="col-12 col-md-6">
+          <c-marketing.feature-card
+            title="{{ other.name }}"
+            body="{{ other.nav_summary }}"
+            href="{% url 'marketing:audience' other.slug %}"
+            cta="{% translate 'See the detail' %}" />
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<c-marketing.cta-band />
+
+{% endblock %}

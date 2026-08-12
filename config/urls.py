@@ -19,14 +19,28 @@ code depends on the arrangement.
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.contrib.sitemaps.views import sitemap
+from django.templatetags.static import static as static_url
 from django.urls import include, path
+from django.views.generic.base import RedirectView
 
 from stacos.core.views import healthz
+from stacos.marketing.sitemaps import SITEMAPS
+from stacos.marketing.views import robots_txt
 
 urlpatterns = [
     # --- Operations ---
     path("healthz", healthz, name="healthz"),
     path("admin/", admin.site.urls),
+    # --- Crawler directives, at the roots crawlers actually request ---
+    path("robots.txt", robots_txt, name="robots"),
+    path("sitemap.xml", sitemap, {"sitemaps": SITEMAPS}, name="sitemap"),
+    # Browsers request /favicon.ico regardless of the <link rel="icon"> tag.
+    path(
+        "favicon.ico",
+        RedirectView.as_view(url=static_url("favicon.svg"), permanent=True),
+        name="favicon",
+    ),
     # --- Authentication ---
     path("auth/", include("stacos.accounts.urls", namespace="accounts")),
     path("accounts/", include("allauth.urls")),

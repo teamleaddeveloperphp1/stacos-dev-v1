@@ -83,8 +83,8 @@ export default function LoginPage({ f7router }) {
 
       <Block>
         <p style={{ fontSize: 13, color: "var(--stacos-text-muted)" }}>
-          After your password we will send a code to your email and a code to
-          your phone. You will need both.
+          After your password we send one code to your email and one on WhatsApp.
+          You will need both.
         </p>
       </Block>
     </Page>

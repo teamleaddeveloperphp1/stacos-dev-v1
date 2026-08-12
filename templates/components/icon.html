@@ -1,4 +1,5 @@
-{#
+<c-vars size="16" class="" />
+{% comment %}
   Inline SVG icons.
 
   Inlined rather than loaded from a sprite or an icon font: a sprite costs an
@@ -7,11 +8,10 @@
   text carries the meaning — so all of them are aria-hidden.
 
   Usage:  <c-icon name="home" />  <c-icon name="bell" size="20" />
-#}
-{% var s=size|default:"16" %}
-<svg width="{{ s }}" height="{{ s }}" viewBox="0 0 24 24" fill="none"
+{% endcomment %}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none"
      stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
-     class="flex-none {{ class }}" aria-hidden="true" focusable="false">
+     class="{{ class }}" aria-hidden="true" focusable="false" style="flex:none">
   {% if name == "home" %}
     <path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>
   {% elif name == "building" %}
@@ -63,5 +63,22 @@
     <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/>
   {% elif name == "phone" %}
     <rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>
+  {% elif name == "whatsapp" %}
+    {% comment %}
+      A generic messaging glyph, not the platform's mark, which is trademarked.
+      Always paired with the word "WhatsApp", so it carries no meaning alone and
+      does not need to be recognisable on its own.
+    {% endcomment %}
+    <path d="M21 11.5a8.5 8.5 0 01-12.6 7.4L3.5 20.5l1.7-4.8A8.5 8.5 0 1121 11.5z"/>
+    <path d="M9 9.6c.2-.5.5-.5.7-.5h.5c.2 0 .4 0 .6.4l.5 1.3c.1.2 0 .4-.1.5l-.3.4c-.1.1-.2.3 0 .5a6 6 0 002.5 2c.2.1.4.1.5-.1l.4-.5c.1-.1.3-.2.5-.1l1.3.6c.2.1.3.2.3.4 0 .5-.4 1.2-1.2 1.4-.8.1-2.3-.3-3.9-1.6a7.6 7.6 0 01-2.2-3.1c-.3-.9-.3-1.6.1-2.4z"/>
+  {% elif name == "briefcase" %}
+    <rect x="3" y="7.5" width="18" height="12.5" rx="2"/>
+    <path d="M9 7.5V6a2 2 0 012-2h2a2 2 0 012 2v1.5M3 12.5h18"/>
+  {% elif name == "history" %}
+    <path d="M4 12a8 8 0 108-8 8 8 0 00-5.7 2.4L4 8.5"/>
+    <path d="M4 4v4.5h4.5M12 7.5V12l3 2"/>
+  {% elif name == "link" %}
+    <path d="M10.5 13.5a4 4 0 006 .5l2-2a4 4 0 00-5.7-5.7L11.5 7.5"/>
+    <path d="M13.5 10.5a4 4 0 00-6-.5l-2 2a4 4 0 005.7 5.7l1.3-1.3"/>
   {% endif %}
 </svg>

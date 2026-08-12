@@ -1,0 +1,38 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+<section class="section">
+  <div class="container container--reading">
+    <h1 class="hero__title mb-3">{% translate "What’s new" %}</h1>
+    <p class="hero__lede mb-5">
+      {% blocktranslate %}
+      Published because “what changed, and when” is a compliance question. If a
+      behaviour you depend on changes, it appears here with the date it changed.
+      {% endblocktranslate %}
+    </p>
+
+    <ol class="changelog">
+      {% for released, title, items in entries %}
+        <li class="changelog__entry">
+          <time class="changelog__date" datetime="{{ released|date:'Y-m-d' }}">
+            {{ released|date:"j F Y" }}
+          </time>
+          <h2 class="changelog__title">{{ title }}</h2>
+          <ul class="changelog__items">
+            {% for item in items %}<li>{{ item }}</li>{% endfor %}
+          </ul>
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'Want a change we have not made?' %}"
+  body="{% translate 'Customer requests are how most of the list above got written.' %}"
+  primary_label="{% translate 'Tell us' %}"
+  primary_url="{% url 'marketing:contact' %}"
+  secondary_label="{% translate 'Start free trial' %}"
+  secondary_url="{% url 'accounts:register' %}" />
+{% endblock %}

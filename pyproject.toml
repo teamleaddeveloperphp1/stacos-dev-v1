@@ -116,8 +116,10 @@ ignore = [
     "S101",    # assert is fine in tests and in internal invariants
     "B008",    # Django/DRF idiom: callables in argument defaults
     "RUF012",  # Django class attrs are conventionally mutable
-    # Prose in this codebase uses en dashes and typographic quotes deliberately;
-    # the docstrings are meant to be read.
+    # Prose and user-facing labels in this codebase use en dashes and
+    # typographic quotes deliberately — "Q2 FY2026-27 (Jul–Sep)" is what a period
+    # label should say, and the docstrings are meant to be read.
+    "RUF001",
     "RUF002",
     "RUF003",
 ]

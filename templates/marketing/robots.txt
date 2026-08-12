@@ -1,0 +1,23 @@
+{% comment %}
+  Crawler directives, rendered rather than served as a static file so they cannot
+  drift from the URL configuration, and so a staging deployment refuses indexing
+  by configuration (MARKETING_ALLOW_INDEXING) rather than by someone remembering
+  to swap a file.
+
+  Note what robots.txt is not: it is not access control. Every path below is
+  already protected by authentication — disallowing them only keeps them out of
+  search results and saves crawl budget for the pages that should be found.
+{% endcomment %}{% if allow_indexing %}User-agent: *
+Disallow: /app/
+Disallow: /auth/
+Disallow: /accounts/
+Disallow: /admin/
+Disallow: /api/
+Allow: /
+
+Sitemap: {{ sitemap_url }}
+{% else %}# Indexing is disabled for this deployment. If you are seeing this on
+# stacos.in, it is a misconfiguration — please tell us.
+User-agent: *
+Disallow: /
+{% endif %}

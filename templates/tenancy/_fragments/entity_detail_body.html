@@ -118,11 +118,11 @@
       </div>
     </div>
 
-    {#
+    {% comment %}
       Financial figures are masked for users without `finance.view`. A plant HR
       user can see that an obligation exists and when it is due, but not the
       amounts attached to it.
-    #}
+    {% endcomment %}
     {% can 'finance.view' as may_see_finance %}
     <div class="card">
       <div class="card-header"><strong class="small">{% translate "Scale" %}</strong></div>

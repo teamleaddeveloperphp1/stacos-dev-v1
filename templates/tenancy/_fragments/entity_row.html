@@ -1,0 +1,25 @@
+{% load i18n %}
+{% comment %}
+  One row of the entity table.
+
+  Extracted so the list and the create response render the identical markup —
+  a newly added row must be indistinguishable from a reloaded one, or the page
+  drifts out of sync with what a refresh would show.
+{% endcomment %}
+<tr id="entity-row-{{ entity.pk }}">
+  <td>
+    <a href="{% url 'app:entity_detail' entity.pk %}" preload
+       class="fw-medium text-decoration-none">{{ entity.name }}</a>
+    {% if entity.short_code %}
+      <span class="text-muted ms-1" style="font-size:.75rem">{{ entity.short_code }}</span>
+    {% endif %}
+  </td>
+  <td class="text-muted">{{ entity.entity_type }}</td>
+  <td class="text-muted">{{ entity.registered_office_state|default:"—" }}</td>
+  {# Literal default: a missing filter argument raises, a missing attribute does not. #}
+  <td class="num">{{ entity.registration_count|default:0|num }}</td>
+  <td>
+    <c-status-chip status="{% if entity.status == 'ACTIVE' %}on-track{% elif entity.status == 'DORMANT' %}waiting{% else %}na{% endif %}"
+                   label="{{ entity.get_status_display }}" />
+  </td>
+</tr>

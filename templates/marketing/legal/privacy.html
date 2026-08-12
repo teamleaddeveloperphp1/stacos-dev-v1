@@ -1,0 +1,149 @@
+{% extends "marketing/legal/_base.html" %}
+{% load i18n %}
+
+{% block legal %}
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Two different roles, and why it matters" %}</h2>
+  <p>
+    {% blocktranslate %}
+    We handle personal data in two distinct capacities, and your rights differ
+    between them.
+    {% endblocktranslate %}
+  </p>
+  <ul class="prose__list">
+    <li>
+      {% blocktranslate %}
+      <strong>As a data fiduciary</strong>, for the people who deal with us
+      directly: account users, visitors to this website, and people who contact
+      us. This policy describes that.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>As a data processor</strong>, for the data our customers put into
+      their accounts — their employees, directors and clients. There, the customer
+      decides what is collected and why; we act on their instructions under the
+      data processing addendum.
+      {% endblocktranslate %}
+    </li>
+  </ul>
+  <p>
+    {% blocktranslate %}
+    If you are an employee of a STACOS customer and want to exercise rights over
+    data held in their account, ask them: we cannot act on that data without their
+    instruction, and telling you so is not evasion — it is the boundary that keeps
+    their records safe from anyone claiming to be you.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "What we collect, as a fiduciary" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Account data: name, work email, mobile number, role, organisation, and the password hash — never the password." %}</li>
+    <li>{% translate "Authentication data: verification attempts, trusted devices, sessions, and the addresses they came from." %}</li>
+    <li>{% translate "Billing data: billing name and address, GSTIN, invoices, and payment references. Card details are handled by the payment gateway; we never see or store a full card number." %}</li>
+    <li>{% translate "Usage data: which pages were requested and when, and diagnostic logs, for security and reliability." %}</li>
+    <li>{% translate "Enquiry data: whatever you send us through the contact form or by email." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Why we hold it" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "To provide the service you asked for, and to bill for it." %}</li>
+    <li>{% translate "To verify that you are who you say you are — the codes to your email and mobile exist for that alone." %}</li>
+    <li>{% translate "To keep the service secure, to detect abuse, and to keep an audit record we are contractually and statutorily expected to keep." %}</li>
+    <li>{% translate "To answer you when you contact us." %}</li>
+    <li>{% translate "To tell you about material changes to the service, its terms or its security. These are service messages, not marketing." %}</li>
+  </ul>
+  <p>
+    {% blocktranslate %}
+    We send marketing email only where you have asked for it, and every marketing
+    message carries a working unsubscribe link. Unsubscribing never affects
+    service messages.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Who else sees it" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Only the sub-processors listed on the sub-processors page, each for a defined
+    purpose, and authorities where we are legally compelled — in which case we
+    tell you unless we are prohibited from doing so. We do not sell personal data,
+    we do not share it with advertising networks, and we do not use it to train
+    machine-learning models.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Where it is stored, and for how long" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Data for Indian customers is stored in an Indian region." %}</li>
+    <li>{% translate "Account data is kept while your account is active." %}</li>
+    <li>{% translate "Customer data is deleted ninety days after your subscription ends, unless you ask for it sooner or a law requires longer." %}</li>
+    <li>{% translate "Invoices and tax records are kept for the period Indian tax law requires." %}</li>
+    <li>{% translate "Security and audit logs are kept for twelve months, then deleted." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "How it is protected" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Encryption in transit and at rest, additional field-level encryption for
+    identifiers and credentials, dual-channel verification on new devices,
+    re-authentication on sensitive actions, and an append-only audit trail. The
+    security page describes the controls in the detail a security team wants.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Your rights" %}</h2>
+  <p>
+    {% blocktranslate %}
+    You may ask us for a copy of the personal data we hold about you, ask us to
+    correct it, ask us to delete it where no legal obligation requires us to keep
+    it, withdraw consent where we relied on consent, and complain to us or to the
+    relevant authority. The DPDP notice explains how to exercise each of these and
+    how long we take.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Children" %}</h2>
+  <p>
+    {% blocktranslate %}
+    The service is for businesses and professional firms. It is not directed at
+    children, and we do not knowingly create accounts for anyone under eighteen.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Breach notification" %}</h2>
+  <p>
+    {% blocktranslate %}
+    If personal data we hold is compromised, we will notify affected customers and
+    the relevant authority without undue delay, with what we know, what we are
+    doing about it, and what you should do. We would rather tell you early with an
+    incomplete picture than late with a tidy one.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Contacting us" %}</h2>
+  <p>
+    {% blocktranslate with email=company.privacy_email officer=company.grievance_officer grievance=company.grievance_email %}
+    Privacy questions: {{ email }}. Complaints: {{ officer }}, {{ grievance }}. We
+    acknowledge within two working days and respond substantively within thirty.
+    {% endblocktranslate %}
+  </p>
+</section>
+{% endblock %}

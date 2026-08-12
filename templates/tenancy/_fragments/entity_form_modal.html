@@ -1,0 +1,62 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The entity form, in a modal loaded on demand.
+
+  Loaded by hx-get into #modal-container and shown by the modal hook in app.js.
+  Loading it on demand rather than rendering a hidden dialog into every page
+  keeps the shell small — there will eventually be a lot of these.
+
+  On a validation failure the view returns 422 with only this fragment, so the
+  modal stays open and keeps what the user typed. HTMX is configured to swap
+  422 responses precisely for this.
+{% endcomment %}
+<div class="modal fade" tabindex="-1" aria-labelledby="entity-form-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+
+      <form hx-post="{% url 'app:entity_create' %}"
+            hx-target="#entity-rows tbody"
+            hx-swap="afterbegin"
+            hx-disabled-elt="find button[type=submit]"
+            hx-indicator="#entity-form-spinner">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="entity-form-title">{% translate "Add an entity" %}</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="{% translate 'Close' %}"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small mb-4">
+            {% blocktranslate %}
+            Just the essentials for now. Turnover, headcount, registrations and
+            premises come next — those are what we use to work out which
+            obligations apply.
+            {% endblocktranslate %}
+          </p>
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 small" role="alert">
+              {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+
+          {% crispy form %}
+        </div>
+
+        <div class="modal-footer">
+          <span class="htmx-indicator me-auto" id="entity-form-spinner">
+            <span class="spinner-inline"></span>
+            <span class="small text-muted ms-1">{% translate "Saving…" %}</span>
+          </span>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">{% translate "Add entity" %}</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>

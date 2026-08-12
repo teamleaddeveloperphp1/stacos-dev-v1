@@ -12,7 +12,13 @@ Two deliberate choices:
 """
 
 from .base import *
-from .base import MIDDLEWARE, env
+from .base import BASE_DIR, MIDDLEWARE, TEMPLATES, env
+
+# The component gallery lives here rather than in templates/, so test fixtures
+# never ship as production templates. It must be loaded through the real loader
+# chain — django-cotton rewrites source at load time, so a Template built from a
+# string in a test would bypass the component system entirely.
+TEMPLATES[0]["DIRS"] = [*TEMPLATES[0]["DIRS"], BASE_DIR / "tests" / "templates"]
 
 DEBUG = False
 ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
@@ -43,7 +49,7 @@ CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-SMS_PROVIDER = "memory"
+WHATSAPP = {**WHATSAPP, "PROVIDER": "memory"}
 
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.InMemoryStorage"},
@@ -54,10 +60,14 @@ STORAGES = {
 MIDDLEWARE = [m for m in MIDDLEWARE if "whitenoise" not in m]
 
 # A test app with throwaway scoped models, used to parametrise the isolation
-# suite. MIGRATION_MODULES=None keeps `makemigrations --check` from demanding
-# migrations for it in CI.
+# suite.
+#
+# It has a real migration rather than being created by `--run-syncdb`, for two
+# reasons: unmigrated apps are synced *before* migrations run, so its foreign key
+# to tenancy_tenant would reference a table that does not exist yet; and its
+# tables need Row-Level Security like any other scoped table, or the RLS test
+# would be asserting against tables that were never protected.
 INSTALLED_APPS = [*INSTALLED_APPS, "tests.testapp"]
-MIGRATION_MODULES = {"testapp": None}
 
 WAFFLE_CREATE_MISSING_FLAGS = True
 WAFFLE_CREATE_MISSING_SWITCHES = True

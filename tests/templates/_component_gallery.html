@@ -1,0 +1,89 @@
+{% load i18n %}
+{% comment %}
+  Every component in the design system, invoked once.
+
+  Rendered by tests/test_templates.py. It has to be a real template file loaded
+  through the real loader chain, because django-cotton works by *rewriting
+  template source* as it loads — constructing a Template from a string in a test
+  bypasses that entirely and would silently pass while the component never runs.
+
+  Adding a component without adding it here fails
+  `test_every_component_is_covered`.
+{% endcomment %}
+
+<section id="icons">
+  <c-icon name="home" />
+  <c-icon name="bell" size="20" />
+  <c-icon name="building" /><c-icon name="calendar" /><c-icon name="inbox" />
+  <c-icon name="alert" /><c-icon name="folder" /><c-icon name="shield" />
+  <c-icon name="search" /><c-icon name="menu" /><c-icon name="theme" />
+  <c-icon name="plus" /><c-icon name="chevron-down" /><c-icon name="check" />
+  <c-icon name="x" /><c-icon name="user" /><c-icon name="logout" />
+  <c-icon name="lock" /><c-icon name="mail" /><c-icon name="phone" />
+  <c-icon name="document" /><c-icon name="switch" /><c-icon name="chevron-right" />
+  {# An unknown name must degrade to an empty svg, never raise. #}
+  <c-icon name="no-such-icon" />
+</section>
+
+<section id="status-chips">
+  <c-status-chip status="overdue" />
+  <c-status-chip status="due-soon" label="Due in 3 days" />
+  <c-status-chip status="on-track" />
+  <c-status-chip status="in-progress" />
+  <c-status-chip status="waiting" />
+  <c-status-chip status="complete" />
+  <c-status-chip status="na" />
+  <c-status-chip status="disputed" />
+  {# No attributes at all: must fall back to the declared default. #}
+  <c-status-chip />
+</section>
+
+<section id="due-badges">
+  <c-due-badge :date="due_date" :days="days_ahead" />
+  <c-due-badge :date="due_date" :original="original_date" :days="days_late"
+               notification="Notification 12/2026 – Central Tax" />
+  {# Only a date, no countdown — the unresolved-anchor case. #}
+  <c-due-badge :date="due_date" />
+</section>
+
+<section id="page-headers">
+  <c-page-header title="Entities" />
+  <c-page-header title="Entities" subtitle="Every legal person you keep compliant.">
+    <button class="btn btn-primary">New</button>
+  </c-page-header>
+</section>
+
+<section id="empty-states">
+  <c-empty-state />
+  <c-empty-state title="No entities yet" body="Add the first company.">
+    <a class="btn btn-primary" href="#">Add an entity</a>
+  </c-empty-state>
+</section>
+
+<section id="toasts">
+  <c-toast level="success" message="Saved." />
+  <c-toast level="danger" title="Could not save" message="Try again." />
+  <c-toast>Slot content instead of a message attribute.</c-toast>
+</section>
+
+<section id="oob">
+  <c-oob id="entity-count">42</c-oob>
+</section>
+
+<section id="nav">
+  <c-nav-placeholder icon="calendar" label="Calendar" />
+</section>
+
+<section id="switcher">
+  <c-tenant-switcher :tenant="tenant" :memberships="memberships" />
+  {# Mid-onboarding: no tenant yet, and the shell must still draw. #}
+  <c-tenant-switcher :tenant="no_tenant" :memberships="no_memberships" />
+</section>
+
+<section id="user-menu">
+  <c-user-menu :user="user" />
+</section>
+
+<section id="palette">
+  <c-command-palette />
+</section>

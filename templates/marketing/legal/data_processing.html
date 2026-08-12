@@ -1,0 +1,141 @@
+{% extends "marketing/legal/_base.html" %}
+{% load i18n %}
+
+{% block legal %}
+<section class="prose__section">
+  <h2 class="prose__heading">1. {% translate "Roles" %}</h2>
+  <p>
+    {% blocktranslate with legal_name=company.legal_name %}
+    For personal data contained in customer data, you are the data fiduciary (or
+    controller) and {{ legal_name }} is the processor. This addendum forms part of
+    the terms of service and applies whenever we process personal data on your
+    behalf.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">2. {% translate "Scope of processing" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Subject matter: providing the STACOS compliance platform." %}</li>
+    <li>{% translate "Duration: for as long as your subscription is active, plus the deletion window in clause 8." %}</li>
+    <li>{% translate "Nature and purpose: storing, organising, retrieving and transmitting customer data so the service works, and generating the audit record the service is built to produce." %}</li>
+    <li>{% translate "Categories of data: identification and contact details, employment and payroll data, tax identifiers, filings, statutory registers, documents, and activity records." %}</li>
+    <li>{% translate "Categories of data principals: your personnel, directors, officers, and — where you are a professional firm — your clients' personnel." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">3. {% translate "Our obligations" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Process customer data only on your documented instructions, of which the terms of service and your use of the product are the primary instruction." %}</li>
+    <li>{% translate "Not sell customer data, and not use it to train machine-learning models." %}</li>
+    <li>{% translate "Bind everyone with access to confidentiality obligations, and limit access to those who need it for a defined task." %}</li>
+    <li>{% translate "Apply the technical and organisational measures in clause 5 and not materially weaken them during the term." %}</li>
+    <li>{% translate "Tell you without undue delay if an instruction appears to breach applicable data protection law." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">4. {% translate "Sub-processors" %}</h2>
+  <p>
+    {% blocktranslate %}
+    You give general authorisation for the sub-processors listed on the
+    sub-processors page. We impose equivalent data protection obligations on each,
+    and we remain responsible to you for their performance. We notify annual and
+    enterprise customers at least thirty days before a new sub-processor begins
+    processing customer data, and you may object on reasonable data-protection
+    grounds during that period.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">5. {% translate "Security measures" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Tenant isolation enforced in the application and independently by database row-level security, tested adversarially on every build." %}</li>
+    <li>{% translate "Encryption in transit and at rest, with field-level encryption for identifiers and credentials." %}</li>
+    <li>{% translate "Dual-channel verification for new devices, and re-authentication for sensitive actions." %}</li>
+    <li>{% translate "Role-based access scoped by entity, department and compliance category." %}</li>
+    <li>{% translate "An append-only audit trail that the database will not permit to be updated or deleted." %}</li>
+    <li>{% translate "Support access only with your consent, time-boxed, visible to you and logged." %}</li>
+    <li>{% translate "Continuous backup with point-in-time recovery and exercised restores." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">6. {% translate "Assisting you" %}</h2>
+  <p>
+    {% blocktranslate %}
+    The product is built so that you can answer access, correction and erasure
+    requests yourself, and export what you need without asking us. Where you need
+    more, we will assist at no charge for reasonable volumes. We forward any
+    request we receive directly from one of your data principals to you rather
+    than acting on it, and we tell the requester that we have done so.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">7. {% translate "Breach notification" %}</h2>
+  <p>
+    {% blocktranslate %}
+    We notify you without undue delay, and in any event within seventy-two hours
+    of becoming aware of a personal data breach affecting your customer data, with
+    what happened, which data is involved as far as we know it, what we are doing,
+    and what we recommend you do. Further information follows as the investigation
+    proceeds; we will not wait for a complete picture before telling you.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">8. {% translate "Return and deletion" %}</h2>
+  <p>
+    {% blocktranslate %}
+    You may export customer data at any time during the term and for thirty days
+    after it ends. We delete customer data ninety days after termination, or
+    sooner on your written instruction, except where a law requires us to retain
+    it — in which case we tell you what we are keeping and why. Backups age out on
+    their own retention cycle, and remain protected until they do.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">9. {% translate "Audit" %}</h2>
+  <p>
+    {% blocktranslate %}
+    We make available the information reasonably necessary to demonstrate
+    compliance with this addendum, including our security documentation and, for
+    enterprise customers, a penetration test summary and a completed security
+    questionnaire. Where that is genuinely insufficient, an audit may be conducted
+    once a year on reasonable notice, during business hours, under confidentiality,
+    and in a way that does not put other customers' data at risk.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">10. {% translate "Location and transfers" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Customer data for Indian customers is stored and processed in an Indian
+    region. The only routine exception is international card payments, where
+    billing details are processed outside India by the payment provider. No
+    compliance record, document or audit row leaves the country.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">11. {% translate "Signature" %}</h2>
+  <p>
+    {% blocktranslate with email=company.privacy_email %}
+    This addendum applies automatically to every customer; no signature is needed
+    for it to bind us. Where your procurement process requires a countersigned
+    copy, request one at {{ email }} and we will provide it.
+    {% endblocktranslate %}
+  </p>
+</section>
+{% endblock %}

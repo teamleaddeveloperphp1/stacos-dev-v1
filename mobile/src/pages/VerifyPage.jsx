@@ -52,8 +52,7 @@ export default function VerifyPage({ verificationId, email, f7router }) {
       <BlockTitle>Two codes, one step</BlockTitle>
       <Block>
         <p style={{ color: "var(--stacos-text-muted)" }}>
-          We sent a code to {email} and a code to your registered mobile number.
-          Enter both to continue.
+          We sent one code to {email} and one on WhatsApp. Enter both to continue.
         </p>
       </Block>
 
@@ -75,7 +74,7 @@ export default function VerifyPage({ verificationId, email, f7router }) {
           <ListInput
             className="otp-input"
             type="tel"
-            label="Code sent to your phone"
+            label="Code sent on WhatsApp"
             value={phoneCode}
             onInput={(e) => setPhoneCode(e.target.value)}
             maxlength={6}

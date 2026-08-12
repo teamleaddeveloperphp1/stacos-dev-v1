@@ -2,100 +2,220 @@
 {% load i18n %}
 
 {% block content %}
-<section class="hero">
+
+<c-marketing.hero
+  size="lg"
+  title="{% translate 'Every compliance obligation you have. Worked out for you.' %}"
+  lede="{% translate 'Tell us what your business is, where it operates and how big it is. STACOS builds the complete statutory calendar — tax, corporate, payroll, labour and establishment — and keeps your CA in the same workspace instead of on WhatsApp.' %}">
+  <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">
+    {% translate "Start free trial" %}
+  </a>
+  <a class="btn btn-outline-secondary btn-lg" href="{% url 'marketing:product' %}">
+    {% translate "See the platform" %}
+  </a>
+  <p class="hero__footnote">{% translate "14 days free · no card required · your CA joins free" %}</p>
+</c-marketing.hero>
+
+{# ------------------------------------------------------------------ #}
+<section class="section section--sunken">
   <div class="container">
-    <div class="row">
-      <div class="col-12 col-lg-8">
-        <h1 class="hero__title mb-3">
-          {% translate "Every compliance obligation you have. Worked out for you." %}
-        </h1>
-        <p class="hero__lede mb-4">
-          {% blocktranslate %}
-          Tell us what your business is, where it operates and how big it is.
-          STACOS builds the complete statutory calendar — GST, TDS, income tax,
-          ROC, PF, ESIC, labour, factory, environment — and keeps your CA in the
-          same workspace instead of on WhatsApp.
-          {% endblocktranslate %}
-        </p>
-        <div class="d-flex flex-wrap gap-2">
-          <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">
-            {% translate "Start free trial" %}
-          </a>
-          <a class="btn btn-outline-secondary btn-lg" href="{% url 'marketing:pricing' %}">
-            {% translate "See pricing" %}
-          </a>
+    <div class="row g-4">
+      <div class="col-12 col-md-4">
+        <c-marketing.feature-card
+          icon="calendar"
+          title="{% translate 'Nothing to set up' %}"
+          body="{% translate 'You answer a short profile — entity type, states, industry, turnover, headcount, a few flags. The calendar is generated from that. You edit exceptions; you never build it from an empty page.' %}" />
+      </div>
+      <div class="col-12 col-md-4">
+        <c-marketing.feature-card
+          icon="shield"
+          title="{% translate 'Your CA works inside it' %}"
+          body="{% translate 'Invite your chartered accountant or company secretary with a scoped, revocable engagement. They prepare, you approve. When the engagement ends, their access ends with it.' %}" />
+      </div>
+      <div class="col-12 col-md-4">
+        <c-marketing.feature-card
+          icon="history"
+          title="{% translate 'An audit trail that holds up' %}"
+          body="{% translate 'Every filing, notice, register and approval is recorded with who did it, when, and what changed — the record you hand a regulator, or an acquirer during due diligence.' %}" />
+      </div>
+    </div>
+  </div>
+</section>
+
+{# --- How it works ------------------------------------------------- #}
+<section class="section">
+  <div class="container">
+    <c-marketing.section-head
+      eyebrow="{% translate 'How it works' %}"
+      title="{% translate 'From an empty account to a complete calendar, the same afternoon' %}"
+      lede="{% translate 'Four steps. Only the first one needs anybody to think.' %}" />
+
+    <ol class="steps">
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "Describe the entity" %}</h3>
+        <p>{% translate "Constitution, the states you operate in, industry, turnover band, headcount, registrations and premises. Facts, not opinions." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "The calendar generates" %}</h3>
+        <p>{% translate "Applicability and due dates are derived from those facts, per registration and per premises — not handed to you as one generic checklist." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "Assign and invite" %}</h3>
+        <p>{% translate "Give each obligation an internal owner, then invite your CA or CS to the entities and categories they should see." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "Work the deadlines" %}</h3>
+        <p>{% translate "Reminders escalate, evidence is attached to the obligation it proves, and every change is written to a record that cannot be edited." %}</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+{# --- Modules -------------------------------------------------------- #}
+<section class="section section--sunken">
+  <div class="container">
+    <c-marketing.section-head
+      eyebrow="{% translate 'The platform' %}"
+      title="{% translate 'One system instead of six' %}"
+      lede="{% translate 'A spreadsheet for deadlines, a drive for documents, a chat thread for your CA, and an inbox for notices — replaced by records that reference each other.' %}" />
+
+    <div class="row g-4">
+      {% for module in modules %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <c-marketing.feature-card
+            icon="{{ module.icon }}"
+            title="{{ module.name }}"
+            body="{{ module.nav_summary }}"
+            href="{% url 'marketing:module' module.slug %}" />
         </div>
-      </div>
+      {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="py-5 border-top">
+{# --- Audiences ------------------------------------------------------ #}
+<section class="section">
   <div class="container">
+    <c-marketing.section-head
+      eyebrow="{% translate 'Who it is for' %}"
+      title="{% translate 'Both sides of the same relationship' %}"
+      lede="{% translate 'The business that owes the obligation and the firm that prepares it are working from different copies of the same list. That is the problem worth solving.' %}" />
+
     <div class="row g-4">
-      <div class="col-12 col-md-4">
-        <h2 class="h5">{% translate "Nothing to set up" %}</h2>
-        <p class="text-muted">
-          {% blocktranslate %}
-          You answer a short profile — entity type, states, industry, turnover,
-          headcount, a few flags. The calendar is generated from that. You edit
-          exceptions; you never build it from an empty page.
-          {% endblocktranslate %}
-        </p>
-      </div>
-      <div class="col-12 col-md-4">
-        <h2 class="h5">{% translate "Your CA works inside it" %}</h2>
-        <p class="text-muted">
-          {% blocktranslate %}
-          Invite your chartered accountant or company secretary with a scoped,
-          revocable engagement. They prepare, you approve. Nothing is filed
-          unilaterally, and when the engagement ends their access ends with it.
-          {% endblocktranslate %}
-        </p>
-      </div>
-      <div class="col-12 col-md-4">
-        <h2 class="h5">{% translate "An audit trail that holds up" %}</h2>
-        <p class="text-muted">
-          {% blocktranslate %}
-          Every filing, notice, register and approval is recorded with who did
-          it, when, and what changed — the record you hand a regulator, or an
-          acquirer during due diligence.
-          {% endblocktranslate %}
-        </p>
-      </div>
+      {% for audience in audiences %}
+        <div class="col-12 col-lg-4">
+          <div class="audience-card">
+            <h3 class="audience-card__title">{{ audience.name }}</h3>
+            <p class="audience-card__lede">{{ audience.nav_summary }}</p>
+            <ul class="tick-list">
+              {% for heading, body in audience.outcomes %}
+                <li>{{ heading }}</li>
+              {% endfor %}
+            </ul>
+            <a class="btn btn-outline-secondary w-100 mt-3" href="{% url 'marketing:audience' audience.slug %}">
+              {% blocktranslate with name=audience.name %}Explore {{ name }}{% endblocktranslate %}
+            </a>
+          </div>
+        </div>
+      {% endfor %}
     </div>
   </div>
 </section>
 
-<section class="py-5 border-top">
+{# --- Trust ---------------------------------------------------------- #}
+<section class="section section--sunken">
   <div class="container">
-    <h2 class="h4 mb-4">{% translate "For professional firms" %}</h2>
-    <div class="row g-4">
-      <div class="col-12 col-md-6 col-lg-3">
-        <h3 class="h6">{% translate "One board, every client" %}</h3>
-        <p class="text-muted small">{% translate "Every obligation across your whole client book, ranked by what is closest to breaching." %}</p>
+    <div class="row g-5 align-items-start">
+      <div class="col-12 col-lg-5">
+        <c-marketing.section-head
+          eyebrow="{% translate 'Security' %}"
+          title="{% translate 'Built so that a mistake is an error, not a leak' %}"
+          lede="{% translate 'A query that has not been scoped to an account raises an exception rather than returning rows, and the database enforces the same boundary again independently.' %}" />
+        <a class="btn btn-outline-secondary" href="{% url 'marketing:security' %}">
+          {% translate "Read the security page" %}
+        </a>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
-        <h3 class="h6">{% translate "Stop chasing documents" %}</h3>
-        <p class="text-muted small">{% translate "Raise an information request once. It reminds, escalates, and files the response straight into the vault." %}</p>
-      </div>
-      <div class="col-12 col-md-6 col-lg-3">
-        <h3 class="h6">{% translate "Time, WIP and billing" %}</h3>
-        <p class="text-muted small">{% translate "Log time against a client and an obligation, then turn it into a GST-compliant invoice." %}</p>
-      </div>
-      <div class="col-12 col-md-6 col-lg-3">
-        <h3 class="h6">{% translate "Know what you actually earned" %}</h3>
-        <p class="text-muted small">{% translate "Realisation and recovery per client and per engagement — the report that changes how a firm quotes." %}</p>
+      <div class="col-12 col-lg-7">
+        <ul class="tick-list tick-list--lg">
+          <li>{% translate "Row-level security in PostgreSQL, using a role that cannot bypass it" %}</li>
+          <li>{% translate "An adversarial test suite that demands another account's rows on every build" %}</li>
+          <li>{% translate "A code to your email and a code to your mobile on every new device" %}</li>
+          <li>{% translate "Re-authentication on approvals, role changes, exports and access grants" %}</li>
+          <li>{% translate "An audit table the database refuses to update or delete from" %}</li>
+          <li>{% translate "Support access only with your consent, time-boxed and shown to you" %}</li>
+          <li>{% translate "Data for Indian customers stored in an Indian region" %}</li>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
-<section class="py-5 border-top" style="background: var(--stacos-surface-sunken)">
-  <div class="container text-center">
-    <h2 class="h3 mb-3">{% translate "Start with one entity, free for 14 days." %}</h2>
-    <p class="text-muted mb-4">{% translate "No card required. Add your CA whenever you are ready." %}</p>
-    <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">{% translate "Create your account" %}</a>
+{# --- Pricing teaser -------------------------------------------------- #}
+<section class="section">
+  <div class="container">
+    <c-marketing.section-head
+      align="center"
+      eyebrow="{% translate 'Pricing' %}"
+      title="{% translate 'Priced per entity and per user' %}"
+      lede="{% translate 'Your CA is never charged a seat on your plan.' %}" />
+
+    <div class="row g-4 justify-content-center">
+      {% for plan in plans %}
+        <div class="col-12 col-md-6 col-xl-3">
+          <div class="plan-teaser {% if plan.highlight %}plan-teaser--highlight{% endif %}">
+            <h3 class="plan-teaser__name">{{ plan.name }}</h3>
+            <p class="plan-teaser__price">
+              {% if plan.monthly_inr %}
+                ₹{{ plan.monthly_inr|floatformat:0 }}<span class="plan-teaser__unit">{% translate "/ month" %}</span>
+              {% else %}
+                {% translate "Let's talk" %}
+              {% endif %}
+            </p>
+            <p class="plan-teaser__tagline">{{ plan.tagline }}</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="text-center mt-4">
+      <a class="btn btn-outline-secondary btn-lg" href="{% url 'marketing:pricing' %}">
+        {% translate "Compare every plan" %}
+      </a>
+    </div>
   </div>
 </section>
+
+{# --- Guides ---------------------------------------------------------- #}
+<section class="section section--sunken">
+  <div class="container">
+    <c-marketing.section-head
+      eyebrow="{% translate 'Guides' %}"
+      title="{% translate 'Written for the person who has to do this' %}" />
+    <div class="row g-4">
+      {% for guide in guides %}
+        <div class="col-12 col-md-4"><c-marketing.guide-card :guide="guide" /></div>
+      {% endfor %}
+    </div>
+    <div class="mt-4">
+      <a href="{% url 'marketing:resources' %}">{% translate "All guides" %} <span aria-hidden="true">&rarr;</span></a>
+    </div>
+  </div>
+</section>
+
+{# --- FAQ ------------------------------------------------------------- #}
+<section class="section">
+  <div class="container container--reading">
+    <c-marketing.section-head title="{% translate 'Questions we are asked first' %}" />
+    <c-marketing.faq-list :faqs="faqs" />
+    <p class="mt-4">
+      <a href="{% url 'marketing:faq' %}">{% translate "Every question we are asked" %} <span aria-hidden="true">&rarr;</span></a>
+    </p>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'Start with one entity, free for 14 days.' %}"
+  body="{% translate 'No card required. Add your CA whenever you are ready.' %}"
+  primary_label="{% translate 'Create your account' %}" />
+
 {% endblock %}

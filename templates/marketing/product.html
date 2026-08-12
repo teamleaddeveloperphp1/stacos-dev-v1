@@ -1,0 +1,91 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+
+<c-marketing.hero
+  eyebrow="{% translate 'The platform' %}"
+  title="{% translate 'Nine parts of one record, not nine products' %}"
+  lede="{% translate 'An obligation references the registration it belongs to, the documents that evidence it, the notice that questioned it and the person who approved it. That cross-referencing is the product; the modules are just where you look at it from.' %}">
+  <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">{% translate "Start free trial" %}</a>
+  <a class="btn btn-outline-secondary btn-lg" href="{% url 'marketing:contact' %}">{% translate "Book a walkthrough" %}</a>
+</c-marketing.hero>
+
+<section class="section">
+  <div class="container">
+    <div class="row g-4">
+      {% for module in modules %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <c-marketing.feature-card
+            icon="{{ module.icon }}"
+            title="{{ module.name }}"
+            body="{{ module.nav_summary }}"
+            href="{% url 'marketing:module' module.slug %}" />
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+{# --- What holds it together ----------------------------------------- #}
+<section class="section section--sunken">
+  <div class="container">
+    <c-marketing.section-head
+      eyebrow="{% translate 'Underneath' %}"
+      title="{% translate 'Four decisions that shape everything above' %}"
+      lede="{% translate 'These are the parts a demonstration does not show you and a procurement review asks about.' %}" />
+
+    <div class="row g-4">
+      <div class="col-12 col-md-6">
+        <c-marketing.feature-card
+          icon="lock"
+          title="{% translate 'Scope is structural' %}"
+          body="{% translate 'A query that has not been scoped to an account raises an exception instead of returning rows, and PostgreSQL row-level security enforces the same boundary again. A forgotten scope is a crash, never a leak.' %}" />
+      </div>
+      <div class="col-12 col-md-6">
+        <c-marketing.feature-card
+          icon="calendar"
+          title="{% translate 'Rules are data, not code' %}"
+          body="{% translate 'Applicability and due-date logic live in versioned rule data evaluated by an engine that takes the date as an argument. Coverage grows by publishing rules rather than by shipping a release.' %}" />
+      </div>
+      <div class="col-12 col-md-6">
+        <c-marketing.feature-card
+          icon="document"
+          title="{% translate 'Dates are dates' %}"
+          body="{% translate '“Due on the twentieth” is a legal date in a jurisdiction, not an instant in time. Storing it as a date is why month-boundary deadlines do not drift by a day.' %}" />
+      </div>
+      <div class="col-12 col-md-6">
+        <c-marketing.feature-card
+          icon="history"
+          title="{% translate 'History cannot be rewritten' %}"
+          body="{% translate 'The audit table rejects updates and deletes at the database level. Nobody can quietly revise what happened — including us.' %}" />
+      </div>
+    </div>
+  </div>
+</section>
+
+{# --- Audiences ------------------------------------------------------- #}
+<section class="section">
+  <div class="container">
+    <c-marketing.section-head
+      eyebrow="{% translate 'Solutions' %}"
+      title="{% translate 'Where to start reading, depending on who you are' %}" />
+    <div class="row g-4">
+      {% for audience in audiences %}
+        <div class="col-12 col-lg-4">
+          <c-marketing.feature-card
+            title="{{ audience.name }}"
+            body="{{ audience.nav_summary }}"
+            href="{% url 'marketing:audience' audience.slug %}"
+            cta="{% translate 'See the detail' %}" />
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'See it against your own entity.' %}"
+  body="{% translate 'Create an account and answer the profile — the calendar you get is yours, not a demonstration dataset.' %}" />
+
+{% endblock %}

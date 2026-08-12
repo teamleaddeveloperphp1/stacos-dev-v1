@@ -1,14 +1,14 @@
-{#
+<c-vars level="info" title="" message="" />
+{% comment %}
   A toast. Matches the markup the JS toast bridge produces, so a message
   delivered by a full page render and one delivered by HX-Trigger look identical.
-#}
-{% var lvl=level|default:"info" %}
-<div class="toast show align-items-center border-0 status-chip--{% if lvl == 'error' or lvl == 'danger' %}overdue{% elif lvl == 'warning' %}due-soon{% elif lvl == 'success' %}on-track{% else %}in-progress{% endif %}"
+{% endcomment %}
+<div class="toast show align-items-center border-0 status-chip--{% if level == 'error' or level == 'danger' %}overdue{% elif level == 'warning' %}due-soon{% elif level == 'success' %}on-track{% else %}in-progress{% endif %}"
      role="status" aria-live="polite" aria-atomic="true" data-bs-autohide="true" data-bs-delay="5000">
   <div class="d-flex">
     <div class="toast-body">
       {% if title %}<strong class="d-block">{{ title }}</strong>{% endif %}
-      {{ message|default:slot }}
+      {% if message %}{{ message }}{% else %}{{ slot }}{% endif %}
     </div>
     <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
   </div>

@@ -1,0 +1,66 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% comment %}
+  Shared chrome for every legal document: the title, the effective date, a
+  sidebar listing the other documents, and the prose block each page fills.
+
+  These texts describe how the product actually behaves — data residency,
+  export, retention, engagement scoping — so they must be re-read whenever that
+  behaviour changes, and reviewed by counsel before they are relied on in a
+  signed agreement. They are written to be readable by the customer who has to
+  follow them, not only by the lawyer who reviews them.
+{% endcomment %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <div class="row g-5">
+      <div class="col-12 col-lg-8">
+        <h1 class="hero__title mb-2">{{ document.title }}</h1>
+        <p class="legal__effective">
+          {% blocktranslate with effective=document.effective|date:"j F Y" %}
+          In effect from {{ effective }}
+          {% endblocktranslate %}
+        </p>
+        <p class="hero__lede mb-5">{{ document.summary }}</p>
+
+        <div class="prose legal__body">
+          {% block legal %}{% endblock %}
+        </div>
+
+        <div class="callout mt-5">
+          <strong>{% translate "Questions about this document" %}</strong>
+          <p class="mb-0 mt-2">
+            {% blocktranslate with email=company.privacy_email %}
+            Write to {{ email }}, or use the contact form and choose the topic that
+            fits. We answer questions about these terms before you sign, not only
+            after.
+            {% endblocktranslate %}
+          </p>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <nav class="legal__nav" aria-label="{% translate 'Legal documents' %}">
+          <h2 class="legal__nav-title">{% translate "All legal documents" %}</h2>
+          <ul>
+            {% for other in documents %}
+              <li {% if other.slug == document.slug %}aria-current="page"{% endif %}>
+                <a href="{% url 'marketing:legal' other.slug %}">{{ other.title }}</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </nav>
+
+        <div class="legal__contact">
+          <h2 class="legal__nav-title">{% translate "Contracting entity" %}</h2>
+          <address class="mb-0">
+            {% for line in company.address_lines %}{{ line }}<br>{% endfor %}
+          </address>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+<section class="section">
+  <div class="container container--reading">
+    <h1 class="hero__title mb-3">{% translate "Legal" %}</h1>
+    <p class="hero__lede mb-5">
+      {% blocktranslate %}
+      Every document that governs your use of STACOS, in one place, each with the
+      date it took effect. They are written to be read by the person who has to
+      follow them.
+      {% endblocktranslate %}
+    </p>
+
+    <ul class="legal__index">
+      {% for document in documents %}
+        <li>
+          <a href="{% url 'marketing:legal' document.slug %}">
+            <span class="legal__index-title">{{ document.title }}</span>
+            <span class="legal__index-summary">{{ document.summary }}</span>
+            <span class="legal__index-date">
+              {% blocktranslate with effective=document.effective|date:"j F Y" %}
+              In effect from {{ effective }}
+              {% endblocktranslate %}
+            </span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <div class="callout mt-5">
+      <strong>{% translate "Changes" %}</strong>
+      <p class="mb-0 mt-2">
+        {% blocktranslate %}
+        Material changes to these documents are notified by email to account
+        administrators at least thirty days before they take effect, and the
+        previous version is available on request. We do not change terms silently.
+        {% endblocktranslate %}
+      </p>
+    </div>
+  </div>
+</section>
+{% endblock %}

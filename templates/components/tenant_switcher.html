@@ -1,12 +1,12 @@
 {% load i18n %}
-{#
+{% comment %}
   The tenant switcher — always visible, top left.
 
   A user is one global identity that may belong to many tenants: a partner at
   their firm, a director of their own company, a consultant to three clients.
   Switching context has to be one click and always in the same place, or people
   end up keeping several browser profiles open.
-#}
+{% endcomment %}
 <div class="tenant-switcher" x-data="{ open: false }" @keydown.escape="open = false">
   <button type="button" class="tenant-switcher__button"
           @click="open = !open"
@@ -14,7 +14,9 @@
           aria-haspopup="listbox">
     <span class="avatar">{{ tenant.name|slice:":1"|upper|default:"?" }}</span>
     <span class="flex-grow-1 overflow-hidden">
-      <span class="tenant-switcher__name d-block">{{ tenant.name|default:_("No organisation") }}</span>
+      <span class="tenant-switcher__name d-block">
+        {% if tenant %}{{ tenant.name }}{% else %}{% translate "No organisation" %}{% endif %}
+      </span>
       <span class="tenant-switcher__type">
         {% if tenant.type == "PRACTICE" %}{% translate "Professional firm" %}
         {% elif tenant.type == "DEALER" %}{% translate "Channel partner" %}

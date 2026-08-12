@@ -71,7 +71,7 @@ class Command(BaseCommand):
     anand@sharma-associates.example   {PASSWORD}   Partner, Sharma & Associates
     nikhil@sharma-associates.example  {PASSWORD}   Staff
 
-  With SMS_PROVIDER=console the verification codes are printed to this terminal.
+  With WHATSAPP_PROVIDER=console the verification codes are printed to this terminal.
 """
         )
 

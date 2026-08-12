@@ -27,8 +27,8 @@ from django.utils.translation import gettext_lazy as _
 from stacos.core.ids import uuid7
 
 __all__ = [
+    "MessageSpendLedger",
     "PendingVerification",
-    "SmsSpendLedger",
     "TrustedDevice",
     "User",
     "UserSession",
@@ -197,10 +197,11 @@ class User(AbstractBaseUser, PermissionsMixin):
 class PendingVerification(models.Model):
     """State for one combined email + phone verification attempt.
 
-    STACOS requires **both** an email OTP and a phone OTP, satisfied *together*
-    as a single step, to complete registration and to complete sign-in on an
-    unrecognised device. That is one screen, one submission, one rate limit —
-    which is why no off-the-shelf package covers it and this model exists.
+    STACOS requires **both** an email code and a WhatsApp code, satisfied
+    *together* as a single step, to complete registration and to complete
+    sign-in on an unrecognised device. That is one screen, one submission, one
+    rate limit — which is why no off-the-shelf package covers it and this model
+    exists.
 
     Social sign-in proves the provider identity and satisfies **neither** channel.
     """
@@ -363,28 +364,46 @@ class UserSession(models.Model):
         return f"{self.user} from {self.ip_address or 'unknown'}"
 
 
-class SmsSpendLedger(models.Model):
-    """Daily SMS volume and cost, per provider.
+class MessageSpendLedger(models.Model):
+    """Daily outbound message volume and cost, per channel and provider.
 
-    SMS is both a real expense and a real fraud vector: an attacker who can make
-    the platform send unlimited messages costs money directly. The daily cap
-    reads from here and **fails closed** — refusing to send with a clear message
-    rather than quietly degrading.
+    Verification messaging is both a real expense and a real fraud vector: an
+    attacker who can make the platform send unlimited WhatsApp authentication
+    messages costs money directly. The daily cap reads from here and **fails
+    closed** — refusing to send with a clear message rather than quietly
+    degrading to a weaker single-channel flow.
+
+    ``channel`` exists so this stays the right table if a fallback is ever added
+    for numbers that turn out not to be on WhatsApp.
     """
+
+    class Channel(models.TextChoices):
+        WHATSAPP = "WHATSAPP", _("WhatsApp")
+        SMS = "SMS", _("SMS")
+        EMAIL = "EMAIL", _("Email")
 
     id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     day = models.DateField(db_index=True)
+    channel = models.CharField(max_length=16, choices=Channel.choices, default=Channel.WHATSAPP)
     provider = models.CharField(max_length=32)
     messages_sent = models.PositiveIntegerField(default=0)
     cost_units = models.DecimalField(max_digits=12, decimal_places=4, default=0)
     failures = models.PositiveIntegerField(default=0)
+    #: Numbers with no WhatsApp account. Tracked separately from failures because
+    #: it is a different problem needing a different remedy.
+    unreachable = models.PositiveIntegerField(default=0)
 
     objects = models.Manager()
 
     class Meta:
+        verbose_name = _("message spend entry")
+        verbose_name_plural = _("message spend entries")
         constraints = [
-            models.UniqueConstraint(fields=["day", "provider"], name="sms_spend_day_provider_uniq"),
+            models.UniqueConstraint(
+                fields=["day", "channel", "provider"],
+                name="message_spend_day_channel_provider_uniq",
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.day} {self.provider}: {self.messages_sent} messages"
+        return f"{self.day} {self.channel}/{self.provider}: {self.messages_sent} messages"

@@ -2,9 +2,9 @@
 Rate limiting and cost control for verification codes.
 
 A six-digit code has a million possibilities, so what actually protects it is the
-attempt limit — not the hash. And because every SMS costs money, an unthrottled
-send endpoint is a way to spend someone else's budget as well as a way to spam a
-phone number.
+attempt limit — not the hash. And because every WhatsApp authentication message
+costs money, an unthrottled send endpoint is a way to spend someone else's budget
+as well as a way to spam a phone number.
 
 Four independent limits, because each closes a different hole:
 
@@ -32,8 +32,8 @@ logger = structlog.get_logger(__name__)
 __all__ = [
     "ThrottleDecision",
     "check_otp_send_allowed",
+    "record_message_spend",
     "record_otp_send",
-    "record_sms_spend",
 ]
 
 
@@ -93,7 +93,7 @@ def check_otp_send_allowed(
     if not _within_daily_spend_cap():
         # Fails closed, loudly. A silent downgrade to "email only" would weaken
         # the security model without anyone noticing.
-        logger.error("sms.daily_spend_cap_reached")
+        logger.error("whatsapp.daily_spend_cap_reached")
         return ThrottleDecision(
             False,
             "Verification is temporarily unavailable. Our team has been notified.",
@@ -133,26 +133,28 @@ def _increment(key: str, ttl: int) -> int:
 
 
 def _within_daily_spend_cap() -> bool:
-    cap = getattr(settings, "SMS_DAILY_SPEND_CAP_UNITS", 0)
+    cap = settings.WHATSAPP.get("DAILY_SPEND_CAP_UNITS", 0)
     if not cap:
         return True
     spent = cache.get(_key("spend", str(timezone.localdate())), 0)
     return spent < cap
 
 
-def record_sms_spend(*, provider: str, cost_units: Decimal, failed: bool = False) -> None:
+def record_message_spend(*, provider: str, cost_units: Decimal, failed: bool = False) -> None:
     """Record one message against today's spend, in cache and in the ledger.
 
     The cache counter is the fast path the throttle reads; the ledger row is the
-    durable record finance reconciles against the provider's invoice.
+    durable record finance reconciles against Meta's conversation billing.
     """
-    from stacos.accounts.models import SmsSpendLedger
+    from stacos.accounts.models import MessageSpendLedger
 
     today: date = timezone.localdate()
     _increment_by(_key("spend", str(today)), int(cost_units) or 1, ttl=90000)
 
-    ledger, _ = SmsSpendLedger.objects.get_or_create(day=today, provider=provider)
-    SmsSpendLedger.objects.filter(pk=ledger.pk).update(
+    ledger, _ = MessageSpendLedger.objects.get_or_create(
+        day=today, channel=MessageSpendLedger.Channel.WHATSAPP, provider=provider
+    )
+    MessageSpendLedger.objects.filter(pk=ledger.pk).update(
         messages_sent=F("messages_sent") + 1,
         cost_units=F("cost_units") + cost_units,
         failures=F("failures") + (1 if failed else 0),

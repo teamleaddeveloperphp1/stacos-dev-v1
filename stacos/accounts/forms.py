@@ -54,9 +54,12 @@ class RegistrationForm(_CrispyForm):
     full_name = forms.CharField(label=_("Full name"), max_length=200)
     email = forms.EmailField(label=_("Work email"))
     phone = forms.CharField(
-        label=_("Mobile number"),
+        label=_("WhatsApp number"),
         max_length=20,
-        help_text=_("We will text a verification code. Include the country code if outside India."),
+        help_text=_(
+            "We send your verification code on WhatsApp, so this must be a number "
+            "with WhatsApp on it. Include the country code if outside India."
+        ),
     )
     password = forms.CharField(label=_("Password"), widget=forms.PasswordInput, min_length=10)
 
@@ -76,7 +79,7 @@ class RegistrationForm(_CrispyForm):
         # be able to lock a real owner out of their own number.
         if User.objects.filter(phone_e164=phone, phone_verified=True).exists():
             raise forms.ValidationError(
-                _("This mobile number is already verified on another account.")
+                _("This WhatsApp number is already verified on another account.")
             )
         return phone
 
@@ -132,7 +135,7 @@ class DualOtpForm(_CrispyForm):
         ),
     )
     phone_code = forms.CharField(
-        label=_("Code sent to your phone"),
+        label=_("Code sent on WhatsApp"),
         max_length=8,
         widget=forms.TextInput(
             attrs={"inputmode": "numeric", "autocomplete": "one-time-code", "pattern": "[0-9]*"}

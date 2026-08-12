@@ -1,22 +1,25 @@
+<c-vars title="" body="" />
 {% load i18n %}
-{#
+{% comment %}
   Empty state — always with exactly one clear action.
 
   An empty list with no next step is a dead end, and dead ends are where trial
-  users stop. Every use of this component passes an action.
+  users stop. Every use of this component passes an action in the slot.
 
   Usage:
     <c-empty-state title="No entities yet" body="Add the first company…">
       <a class="btn btn-primary" href="…">Add an entity</a>
     </c-empty-state>
-#}
+{% endcomment %}
 <div class="empty-state">
   <svg class="empty-state__icon" viewBox="0 0 48 48" fill="none" stroke="currentColor"
        stroke-width="1.5" aria-hidden="true">
     <rect x="9" y="7" width="30" height="34" rx="3"/>
     <path d="M16 16h16M16 23h16M16 30h10"/>
   </svg>
-  <div class="empty-state__title">{{ title|default:_("Nothing here yet") }}</div>
+  <div class="empty-state__title">
+    {% if title %}{{ title }}{% else %}{% translate "Nothing here yet" %}{% endif %}
+  </div>
   {% if body %}<p class="empty-state__body">{{ body }}</p>{% endif %}
   {{ slot }}
 </div>

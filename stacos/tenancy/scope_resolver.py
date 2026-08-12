@@ -29,6 +29,7 @@ from uuid import UUID
 import structlog
 from django.http import HttpRequest
 
+from stacos.core.rls import rls_bootstrap
 from stacos.core.scope import AccessScope
 from stacos.tenancy.models import Membership, Tenant
 
@@ -72,20 +73,25 @@ def _select_membership(request: HttpRequest) -> Membership | None:
     because the lookup is always filtered by ``user``.
     """
     user = request.user
-    base = (
-        Membership.objects_unscoped.filter(user=user, status=Membership.Status.ACTIVE)
-        .select_related("tenant", "role")
-        .order_by("created_at")
-    )
 
-    selected = request.session.get(SESSION_TENANT_KEY)
-    if selected:
-        membership = cast("Membership | None", base.filter(tenant_id=selected).first())
-        if membership is not None:
-            return membership
-        logger.info("tenancy.stale_tenant_selection", user_id=str(user.pk), tenant_id=selected)
+    # The bootstrap read: memberships are themselves RLS-protected, and nothing
+    # is bound yet. Anchored on the authenticated user, so it can only ever
+    # return rows about them.
+    with rls_bootstrap():
+        base = (
+            Membership.objects_unscoped.filter(user=user, status=Membership.Status.ACTIVE)
+            .select_related("tenant", "role")
+            .order_by("created_at")
+        )
 
-    return cast("Membership | None", base.first())
+        selected = request.session.get(SESSION_TENANT_KEY)
+        if selected:
+            membership = cast("Membership | None", base.filter(tenant_id=selected).first())
+            if membership is not None:
+                return membership
+            logger.info("tenancy.stale_tenant_selection", user_id=str(user.pk), tenant_id=selected)
+
+        return cast("Membership | None", base.first())
 
 
 def resolve_scope_for_membership(membership: Membership, *, reason: str) -> AccessScope:
@@ -126,6 +132,9 @@ def resolve_scope_for_membership(membership: Membership, *, reason: str) -> Acce
         principal_tenant_id=tenant.id,
         readable_tenant_ids=frozenset(readable),
         writable_tenant_ids=frozenset(writable),
+        # Only the tenant the user actually belongs to. Engagement-reached
+        # tenants are in `readable_tenant_ids` and stop at entity-scoped records.
+        member_tenant_ids=frozenset({tenant.id}),
         entity_ids=frozenset(entity_ids) if entity_ids is not None else None,
         categories=frozenset(categories) if categories is not None else None,
         permissions=frozenset(permissions),
@@ -145,34 +154,38 @@ def _resolve_engagements(
     """
     from stacos.engagements.models import Engagement
 
-    queryset = Engagement.objects_unscoped.filter(
-        practice_tenant_id=membership.tenant_id,
-        status=Engagement.Status.ACTIVE,
-    ).select_related("entity")
-
-    # A practice member may be limited to part of the client book.
-    client_tenant_ids = set(membership.client_tenants.values_list("id", flat=True))
-    if client_tenant_ids:
-        queryset = queryset.filter(tenant_id__in=client_tenant_ids)
-
     entities: set[UUID] = set()
     tenants: set[UUID] = set()
     permissions: set[str] = set()
     categories: set[str] = set()
     unrestricted_categories = False
 
-    for engagement in queryset:
-        if not engagement.is_live:
-            continue
-        entities.add(engagement.entity_id)
-        tenants.add(engagement.tenant_id)
-        permissions.update(engagement.permissions)
-        if engagement.categories:
-            categories.update(engagement.categories)
-        else:
-            # An unrestricted engagement means the practice is not category
-            # limited, so no category filter can be applied at all.
-            unrestricted_categories = True
+    # Same bootstrap problem as memberships: engagements are RLS-protected and
+    # nothing is bound yet. Anchored on the practice tenant the user is already
+    # an active member of.
+    with rls_bootstrap():
+        queryset = Engagement.objects_unscoped.filter(
+            practice_tenant_id=membership.tenant_id,
+            status=Engagement.Status.ACTIVE,
+        ).select_related("entity")
+
+        # A practice member may be limited to part of the client book.
+        client_tenant_ids = set(membership.client_tenants.values_list("id", flat=True))
+        if client_tenant_ids:
+            queryset = queryset.filter(tenant_id__in=client_tenant_ids)
+
+        for engagement in queryset:
+            if not engagement.is_live:
+                continue
+            entities.add(engagement.entity_id)
+            tenants.add(engagement.tenant_id)
+            permissions.update(engagement.permissions)
+            if engagement.categories:
+                categories.update(engagement.categories)
+            else:
+                # An unrestricted engagement means the practice is not category
+                # limited, so no category filter can be applied at all.
+                unrestricted_categories = True
 
     from stacos.core.permissions import permission_registry
 

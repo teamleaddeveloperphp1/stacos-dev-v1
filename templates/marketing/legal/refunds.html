@@ -1,0 +1,109 @@
+{% extends "marketing/legal/_base.html" %}
+{% load i18n %}
+
+{% block legal %}
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Trial first, so nobody has to ask for a refund" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Every plan starts with a fourteen-day trial that needs no card. It is the full
+    product on one entity, including inviting your professional firm. We would
+    much rather you decided before paying than argued about it afterwards.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Cancelling" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Cancel from Billing in your account, at any time, without contacting anyone." %}</li>
+    <li>{% translate "Your subscription continues to the end of the period you have paid for; it simply does not renew." %}</li>
+    <li>{% translate "You keep full access — including export — for the whole of that remaining period." %}</li>
+    <li>{% translate "Recurring payment mandates, including UPI AutoPay and e-mandates, are cancelled with the subscription." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "When we refund" %}</h2>
+  <ul class="prose__list">
+    <li>
+      {% blocktranslate %}
+      <strong>Duplicate or incorrect charge</strong> — refunded in full, as soon
+      as we confirm it. Tell us and we will not make you prove it twice.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>Annual plan, cancelled within thirty days of the first payment</strong>
+      — refunded in full, provided the account has not been used to manage more
+      than one entity.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>We materially change terms to your disadvantage</strong> — you may
+      terminate before the change takes effect and receive a prorated refund of
+      the unused period.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>Sustained failure to meet our availability target</strong> — service
+      credits as set out on the service levels page.
+      {% endblocktranslate %}
+    </li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "When we do not refund" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Monthly subscriptions part-way through a paid month." %}</li>
+    <li>{% translate "Annual subscriptions after the first thirty days, except where something above applies." %}</li>
+    <li>{% translate "Add-ons already consumed in the current period." %}</li>
+    <li>{% translate "Implementation and onboarding services already delivered." %}</li>
+    <li>{% translate "Accounts terminated by us for breach of the acceptable use policy." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "How a refund is paid" %}</h2>
+  <p>
+    {% blocktranslate %}
+    To the original payment method, in INR, within seven working days of approval.
+    Your bank or card issuer may take longer to show it. Where the original method
+    has expired we will ask for bank details in writing before paying.
+    {% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate %}
+    A credit note is issued for every refund, and the GST originally charged is
+    adjusted on it.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Your data after cancellation" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Export everything — records, documents and the audit trail — at any point
+    until thirty days after your subscription ends. We delete customer data ninety
+    days after termination, sooner if you ask, and later only where a law requires
+    it. Cancelling never deletes anything immediately, because a cancellation made
+    in error should be recoverable.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Asking for a refund" %}</h2>
+  <p>
+    {% blocktranslate with email=company.support_email %}
+    Write to {{ email }} with the invoice number and what went wrong. We
+    acknowledge within two working days and decide within seven. If we say no, we
+    will say why.
+    {% endblocktranslate %}
+  </p>
+</section>
+{% endblock %}

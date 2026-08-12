@@ -1,0 +1,35 @@
+<c-vars title="" body="" primary_label="" primary_url="" secondary_label="" secondary_url="" note="" />
+{% load i18n %}
+{% comment %}
+  The closing call to action. Every marketing page ends with exactly one, so a
+  visitor who reads to the bottom of any page has somewhere to go that is not
+  the back button.
+
+  Usage:
+    <c-marketing.cta-band title="Start with one entity."
+                          body="Free for 14 days."
+                          primary_url="/auth/register/" />
+{% endcomment %}
+<section class="cta-band">
+  <div class="container">
+    <div class="cta-band__inner">
+      <div>
+        <h2 class="cta-band__title">
+          {% if title %}{{ title }}{% else %}{% translate "Start with one entity, free for 14 days." %}{% endif %}
+        </h2>
+        <p class="cta-band__body">
+          {% if body %}{{ body }}{% else %}{% translate "No card required. Add your CA whenever you are ready." %}{% endif %}
+        </p>
+      </div>
+      <div class="cta-band__actions">
+        <a class="btn btn-primary btn-lg" href="{% if primary_url %}{{ primary_url }}{% else %}{% url 'accounts:register' %}{% endif %}">
+          {% if primary_label %}{{ primary_label }}{% else %}{% translate "Start free trial" %}{% endif %}
+        </a>
+        <a class="btn btn-outline-secondary btn-lg" href="{% if secondary_url %}{{ secondary_url }}{% else %}{% url 'marketing:contact' %}{% endif %}">
+          {% if secondary_label %}{{ secondary_label }}{% else %}{% translate "Talk to us" %}{% endif %}
+        </a>
+      </div>
+    </div>
+    {% if note %}<p class="cta-band__note">{{ note }}</p>{% endif %}
+  </div>
+</section>

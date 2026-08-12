@@ -64,6 +64,11 @@ class AccessScope:
     principal_tenant_id: UUID | None = None
     readable_tenant_ids: frozenset[UUID] = field(default_factory=frozenset)
     writable_tenant_ids: frozenset[UUID] = field(default_factory=frozenset)
+    #: Tenants the user is actually a *member* of, as opposed to ones reachable
+    #: through an engagement. Tenant-level records — memberships, roles, billing —
+    #: are filtered on this rather than on ``readable_tenant_ids``: an engagement
+    #: grants access to named entities, never to the client's own administration.
+    member_tenant_ids: frozenset[UUID] = field(default_factory=frozenset)
     entity_ids: frozenset[UUID] | None = None
     categories: frozenset[str] | None = None
     permissions: frozenset[str] = field(default_factory=frozenset)
@@ -151,6 +156,9 @@ def tenant_context(
         principal_tenant_id=principal_tenant_id or next(iter(readable), None),
         readable_tenant_ids=readable,
         writable_tenant_ids=writable,
+        # Outside a request there is no engagement indirection, so everything
+        # readable is also a membership.
+        member_tenant_ids=readable,
         entity_ids=frozenset(entity_ids) if entity_ids is not None else None,
         categories=frozenset(categories) if categories is not None else None,
         permissions=frozenset(permissions),

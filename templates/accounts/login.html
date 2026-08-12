@@ -16,11 +16,11 @@
 
   <div class="auth-divider">{% translate "or continue with" %}</div>
 
-  {#
+  {% comment %}
     Social sign-in proves the provider knows this person. It proves nothing about
-    control of the email address and phone number STACOS holds, so it lands in
-    the same dual-OTP gate as a password sign-in from a new device.
-  #}
+    control of the email address and WhatsApp number STACOS holds, so it lands in
+    the same dual-code gate as a password sign-in from a new device.
+  {% endcomment %}
   <div class="d-grid gap-2">
     <a class="btn btn-social" href="/accounts/google/login/?process=login" hx-boost="false">
       {% translate "Google" %}

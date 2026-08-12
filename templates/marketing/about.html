@@ -1,0 +1,112 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+
+<c-marketing.hero
+  eyebrow="{% translate 'About' %}"
+  title="{% translate 'Two people are keeping the same list, and neither can see the other’s.' %}"
+  lede="{% translate 'That is the whole problem. A business tracks its deadlines in a spreadsheet; its CA tracks them in another; documents move by chat; approvals happen by “ok”. Nothing is reconstructable a year later, and the first person to find out is whoever receives the notice.' %}" />
+
+<section class="section">
+  <div class="container container--reading">
+    <div class="prose">
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Why we built it this way" %}</h2>
+        <p>
+          {% blocktranslate %}
+          The obvious product here is a to-do list with due dates. We think that
+          product fails, because the hard question is not “what is due” but “what
+          applies to this business, right now, given what it has become”. A company
+          that opens in a second state or crosses a headcount threshold owes
+          different things, and nothing tells it so.
+          {% endblocktranslate %}
+        </p>
+        <p>
+          {% blocktranslate %}
+          So applicability is derived from facts about the entity, evaluated against
+          versioned rules, rather than typed once into a template. Coverage grows by
+          publishing rules; it does not wait for a release.
+          {% endblocktranslate %}
+        </p>
+      </section>
+
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "The second decision" %}</h2>
+        <p>
+          {% blocktranslate %}
+          The business and its professional firm had to be in one system, without
+          either one losing ownership of anything. That made cross-organisation
+          access the most dangerous thing the product does, so it is a first-class,
+          client-approved, time-boxed record with a defined scope — and the client
+          keeps every record when it ends.
+          {% endblocktranslate %}
+        </p>
+      </section>
+
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "The third" %}</h2>
+        <p>
+          {% blocktranslate %}
+          A compliance record is only worth anything if it can be trusted years
+          later. The audit table is append-only at the database, so nobody — us
+          included — can quietly revise what happened. It is the feature customers
+          notice last and value most.
+          {% endblocktranslate %}
+        </p>
+      </section>
+
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "What we will not do" %}</h2>
+        <ul class="prose__list">
+          <li>{% translate "Sell your data, or use it to train anything." %}</li>
+          <li>{% translate "Browse your account without your consent." %}</li>
+          <li>{% translate "Hold your records hostage: export everything, any time." %}</li>
+          <li>{% translate "Claim a certification we do not hold." %}</li>
+          <li>{% translate "Charge your CA for a seat on your plan." %}</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</section>
+
+<section class="section section--sunken">
+  <div class="container">
+    <c-marketing.section-head
+      title="{% translate 'The company' %}"
+      lede="{% translate 'Built in Mumbai, for Indian businesses first — with a core that carries no India-specific assumptions, because a compliance product that hard-codes one jurisdiction can never serve a second.' %}" />
+
+    <div class="row g-4">
+      <div class="col-12 col-md-6 col-lg-3">
+        <c-marketing.feature-card title="{% translate 'Registered as' %}" body="{{ company.legal_name }}" />
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <c-marketing.feature-card
+          title="{% translate 'Where' %}"
+          body="{% translate 'Mumbai, Maharashtra, with a remote engineering team across India.' %}" />
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <c-marketing.feature-card
+          title="{% translate 'Since' %}"
+          body="{{ company.founded }}" />
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <c-marketing.feature-card
+          title="{% translate 'Working here' %}"
+          body="{% translate 'Engineering, compliance content, design and customer success.' %}"
+          href="{% url 'marketing:careers' %}"
+          cta="{% translate 'See open roles' %}" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'Ask us anything about how it works.' %}"
+  body="{% translate 'Enquiries are answered by the people who build the product.' %}"
+  primary_label="{% translate 'Contact us' %}"
+  primary_url="{% url 'marketing:contact' %}"
+  secondary_label="{% translate 'Start free trial' %}"
+  secondary_url="{% url 'accounts:register' %}" />
+
+{% endblock %}

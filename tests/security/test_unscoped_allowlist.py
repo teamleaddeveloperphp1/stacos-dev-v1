@@ -19,7 +19,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALLOWLIST = REPO_ROOT / "tests" / "unscoped_allowlist.txt"
-USAGE = re.compile(r"\bobjects_unscoped\b")
+#: Requires a leading dot, so `Model.objects_unscoped` counts as a use while
+#: ``objects_unscoped`` mentioned in prose does not.
+USAGE = re.compile(r"\.objects_unscoped\b")
 
 #: Directories that legitimately mention the name without using the hatch.
 EXCLUDED = ("migrations", "tests", "__pycache__")

@@ -74,3 +74,6 @@ desktop.ini
 # --- Local scratch ---
 /scratch/
 /tmp/
+
+# --- Dev stack supervision (start.ps1 / start.sh): pids and detached logs ---
+/.run/

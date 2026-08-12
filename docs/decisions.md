@@ -71,7 +71,11 @@ Short records of the choices that would be expensive to revisit, and why they we
 
 **Why per-field errors are still shown.** Revealing which code was wrong buys an attacker almost nothing against a five-attempt limit, and saves a legitimate user retyping two codes on a phone. The attempt counts **once** either way.
 
-**What makes it workable.** Trusted devices. Two codes on every sign-in, in a market where SMS delivery is genuinely unreliable, would produce a support queue rather than a security control. Device trust carries the large majority of sign-ins; the codes appear on first use of a browser and then not for thirty days.
+**Why WhatsApp and not SMS.** The phone-side code goes over WhatsApp. For Indian businesses that is the channel people actually read — an SMS competes with a hundred promotional messages a day. It also renders as an authentication template with a copy-code button, which removes the transcription error that makes six-digit codes irritating on a phone.
+
+The trade-off, stated plainly: **a number with no WhatsApp account cannot be reached at all.** Rare for an Indian business contact, not impossible. `WhatsAppResult.not_on_whatsapp` is a distinct outcome from a delivery failure precisely so an SMS fallback can be added later without changing a single caller — but no fallback exists today, and a user whose number is not on WhatsApp currently cannot complete sign-up.
+
+**What makes it workable.** Trusted devices. Two codes on every sign-in would produce a support queue rather than a security control. Device trust carries the large majority of sign-ins; the codes appear on first use of a browser and then not for thirty days.
 
 **Rate limiting, not hashing, is the protection.** A six-digit code has a million possibilities. Codes are HMAC'd with a server pepper — a slow hash would be theatre. Four independent limits: per identity per hour and per day, per IP per hour, exponential resend backoff, and a global daily spend cap that **fails closed**, because an unthrottled send endpoint is a way to spend someone else's money.
 
@@ -148,9 +152,11 @@ Things that need a decision from the product owner before the module they affect
 
 ### Before launch
 
-4. **TRAI DLT registration.** Every commercial SMS to an Indian number must use a pre-registered sender header *and* a pre-registered content template, with the template id passed to the aggregator. Unregistered traffic is discarded by the operator — no vendor change fixes it at send time. Registration is a multi-week external process and **should start now**, in parallel with development, not when the code is ready to test. The `SmsProvider` interface already carries `template_id`.
+4. **WhatsApp template approval.** Business-initiated messages require templates pre-approved by Meta, and one-time passcodes must use the **AUTHENTICATION** category — Meta rejects OTPs sent through marketing or utility templates. Approval is per WhatsApp Business Account and takes days to weeks, so it **should start now**, in parallel with development, not when the code is ready to test. It blocks exactly the way TRAI DLT registration blocks SMS. The three templates STACOS needs are named in `stacos/accounts/whatsapp.py`: `stacos_registration_code`, `stacos_login_code`, `stacos_step_up_code`.
 5. **Apple Sign in client secret expiry.** It is a JWT valid for at most six months and needs a rotation job. Everyone forgets this and it fails at 3 a.m. six months after launch.
-6. **Passkeys.** django-allauth ≥65 ships WebAuthn. SMS OTP is the most-phished second factor there is; passkeys are phishing-resistant, cost nothing per authentication, and Indian professionals on Windows Hello can use them today. Worth considering as an *additional* factor even though the dual-OTP requirement stands.
+6. **Passkeys.** django-allauth ≥65 ships WebAuthn. A one-time code delivered to a device is phishable whatever the channel; passkeys are not, cost nothing per authentication, and Indian professionals on Windows Hello can use them today. Worth considering as an *additional* factor even though the dual-channel requirement stands.
+
+7. **A fallback for numbers not on WhatsApp.** See decision 6 above. Either accept that WhatsApp is a hard requirement for sign-up and say so on the registration form, or add SMS as a fallback for the `not_on_whatsapp` case. The interface already distinguishes it; the product decision has not been made.
 
 ### Product shape
 

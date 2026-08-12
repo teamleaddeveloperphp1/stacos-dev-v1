@@ -1,23 +1,21 @@
 {% extends "layouts/public.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Pricing" %} · STACOS{% endblock %}
-
 {% block content %}
-<section class="py-5">
+<section class="section">
   <div class="container">
     <div class="text-center mb-5">
-      <h1 class="h2 mb-3">{% translate "Pricing" %}</h1>
-      <p class="text-muted mb-4">
-        {% translate "Priced per entity and per user. Everything is billed in INR, inclusive of GST at checkout." %}
+      <h1 class="hero__title mb-3">{% translate "Pricing" %}</h1>
+      <p class="hero__lede mx-auto mb-4">
+        {% translate "Priced per entity and per user. Billed in INR, exclusive of tax; GST is applied at checkout. Your CA is never charged a seat on your plan." %}
       </p>
 
-      {#
+      {% comment %}
         Annual/monthly is a client-side toggle over figures that are already on
         the page — no request, no flicker. Alpine holds the state; the server
         rendered both numbers.
-      #}
-      <div x-data="{ annual: true }" class="d-inline-block">
+      {% endcomment %}
+      <div x-data="{ annual: true }" class="d-inline-block w-100">
         <div class="billing-toggle mb-4">
           <button type="button" @click="annual = false" :aria-pressed="(!annual).toString()">
             {% translate "Monthly" %}
@@ -69,7 +67,7 @@
                 </ul>
 
                 <a class="btn {% if plan.highlight %}btn-primary{% else %}btn-outline-secondary{% endif %} w-100 mt-4"
-                   href="{% url 'accounts:register' %}">{{ plan.cta }}</a>
+                   href="{% if plan.monthly_inr %}{% url 'accounts:register' %}{% else %}{% url 'marketing:contact' %}{% endif %}">{{ plan.cta }}</a>
               </div>
             </div>
           {% endfor %}
@@ -80,9 +78,9 @@
 </section>
 
 {# ------------------------------------------------------------------ #}
-<section class="py-5 border-top">
+<section class="section section--sunken">
   <div class="container">
-    <h2 class="h4 mb-4">{% translate "Compare plans" %}</h2>
+    <c-marketing.section-head title="{% translate 'Compare plans' %}" />
     <div style="overflow-x:auto">
       <table class="table comparison-table align-middle">
         <thead>
@@ -114,9 +112,9 @@
 </section>
 
 {# ------------------------------------------------------------------ #}
-<section class="py-5 border-top">
+<section class="section">
   <div class="container">
-    <h2 class="h4 mb-4">{% translate "Add-ons" %}</h2>
+    <c-marketing.section-head title="{% translate 'Add-ons' %}" />
     <div class="row g-3">
       {% for name, price, note in add_ons %}
         <div class="col-12 col-md-6 col-lg-4">
@@ -134,23 +132,44 @@
 </section>
 
 {# ------------------------------------------------------------------ #}
-<section class="py-5 border-top" style="background: var(--stacos-surface-sunken)">
+<section class="section section--sunken">
   <div class="container">
-    <h2 class="h4 mb-4">{% translate "Paying" %}</h2>
+    <c-marketing.section-head title="{% translate 'Paying' %}" />
     <div class="row g-4">
       <div class="col-12 col-md-4">
-        <h3 class="h6">{% translate "Cards, UPI and netbanking" %}</h3>
-        <p class="text-muted small">{% translate "Through PayU, including UPI AutoPay and e-mandate for recurring payments." %}</p>
+        <c-marketing.feature-card
+          title="{% translate 'Cards, UPI and netbanking' %}"
+          body="{% translate 'Through PayU, including UPI AutoPay and e-mandate for recurring payments.' %}" />
       </div>
       <div class="col-12 col-md-4">
-        <h3 class="h6">{% translate "International cards" %}</h3>
-        <p class="text-muted small">{% translate "Through Stripe, for customers billing outside India." %}</p>
+        <c-marketing.feature-card
+          title="{% translate 'International cards' %}"
+          body="{% translate 'Through Stripe, for customers billing outside India.' %}" />
       </div>
       <div class="col-12 col-md-4">
-        <h3 class="h6">{% translate "Cheque, NEFT and purchase order" %}</h3>
-        <p class="text-muted small">{% translate "We raise a proforma invoice, you record the payment reference, and finance verifies it. Common for larger organisations." %}</p>
+        <c-marketing.feature-card
+          title="{% translate 'Cheque, NEFT and purchase order' %}"
+          body="{% translate 'We raise a proforma invoice, you record the payment reference, and finance verifies it. Common for larger organisations.' %}" />
       </div>
     </div>
   </div>
 </section>
+
+{# ------------------------------------------------------------------ #}
+<section class="section">
+  <div class="container container--reading">
+    <c-marketing.section-head title="{% translate 'Pricing questions' %}" />
+    <c-marketing.faq-list :faqs="faqs" />
+    <p class="mt-4">
+      <a href="{% url 'marketing:legal' 'refunds' %}">{% translate "Cancellation and refund policy" %}</a>
+      &nbsp;·&nbsp;
+      <a href="{% url 'marketing:faq' %}">{% translate "All questions" %}</a>
+    </p>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'Fourteen days, one entity, no card.' %}"
+  body="{% translate 'If it does not build a calendar you recognise, you have lost an afternoon.' %}" />
+
 {% endblock %}

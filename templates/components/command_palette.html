@@ -1,54 +1,51 @@
 {% load i18n %}
-{#
+{% comment %}
   Command palette, opened with Ctrl/Cmd-K or `/`.
 
   The single feature that makes power users describe an application as fast, and
   a CA carrying three hundred clients is a power user by definition. Search runs
-  server-side against PostgreSQL full-text plus trigram, debounced at 250ms, and
-  returns a fragment — there is no client-side index to build or keep fresh.
-#}
-<div x-data="{
-       open: false,
-       init() {
-         document.addEventListener('stacos:palette-open', () => this.show());
-       },
-       show() {
-         this.open = true;
-         this.$nextTick(() => this.$refs.input?.focus());
-       }
-     }"
-     @keydown.escape.window="open = false"
-     x-cloak>
+  server-side against PostgreSQL trigram similarity, debounced at 200ms, and
+  returns a fragment — there is no client-side index to build or keep fresh, and
+  the results are tenant-scoped by the same manager as everything else.
 
-  <div x-show="open" x-transition.opacity.duration.120ms
-       class="palette-backdrop" @click.self="open = false"
-       role="dialog" aria-modal="true" aria-label="{% translate 'Search and commands' %}">
-    <div class="palette">
+  The keyboard behaviour advertised in the footer is implemented by the `palette`
+  Alpine component in app.js: ↑/↓ move, Enter opens, Escape closes.
+{% endcomment %}
+<div x-data="palette" @keydown.escape.window="hide()" x-cloak>
+
+  <div x-show="open"
+       x-transition.opacity.duration.120ms
+       class="palette-backdrop"
+       @click.self="hide()"
+       role="dialog"
+       aria-modal="true"
+       aria-label="{% translate 'Search and commands' %}">
+
+    <div class="palette"
+         @keydown.down.prevent="move(1)"
+         @keydown.up.prevent="move(-1)"
+         @keydown.enter.prevent="choose()">
+
       <input type="search"
              x-ref="input"
              class="palette__input"
+             name="q"
              placeholder="{% translate 'Search clients, entities, obligations, notices…' %}"
              autocomplete="off"
              aria-label="{% translate 'Search' %}"
-             hx-get="{% url 'app:dashboard' %}"
-             hx-trigger="keyup changed delay:250ms, search"
+             aria-controls="palette-results"
+             hx-get="{% url 'app:search' %}"
+             hx-trigger="keyup changed delay:200ms, search"
              hx-target="#palette-results"
-             hx-indicator="#palette-spinner"
-             name="q">
+             hx-indicator="#palette-spinner">
 
-      <div id="palette-results" class="palette__results" role="listbox" aria-live="polite">
-        <div class="palette__group-label">{% translate "Jump to" %}</div>
-        <a class="palette__item" href="{% url 'app:dashboard' %}" role="option">
-          <c-icon name="home" size="14" /><span>{% translate "Dashboard" %}</span>
-          <span class="palette__hint"><kbd>g</kbd> <kbd>o</kbd></span>
-        </a>
-        <a class="palette__item" href="{% url 'app:entity_list' %}" role="option">
-          <c-icon name="building" size="14" /><span>{% translate "Entities" %}</span>
-          <span class="palette__hint"><kbd>g</kbd> <kbd>e</kbd></span>
-        </a>
-        <a class="palette__item" href="{% url 'accounts:security' %}" role="option">
-          <c-icon name="shield" size="14" /><span>{% translate "Security and devices" %}</span>
-        </a>
+      <div id="palette-results"
+           x-ref="results"
+           class="palette__results"
+           role="listbox"
+           aria-live="polite"
+           @htmx:after-swap="reset()">
+        {% include "tenancy/_fragments/palette_results.html" %}
       </div>
 
       <div class="palette__footer">

@@ -1,4 +1,5 @@
-{#
+<c-vars swap="outerHTML" />
+{% comment %}
   Wraps content for an out-of-band swap.
 
   Lets one response update several regions at once — a row, a sidebar counter, a
@@ -6,5 +7,5 @@
   and racing them. Pairs with `stacos.core.htmx.oob()`.
 
   Usage:  <c-oob id="entity-count">{{ count }}</c-oob>
-#}
+{% endcomment %}
 <div id="{{ id }}" hx-swap-oob="{{ swap|default:'outerHTML' }}:#{{ id }}">{{ slot }}</div>

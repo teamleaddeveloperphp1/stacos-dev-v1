@@ -1,119 +1,195 @@
 {% extends "layouts/public.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Security" %} · STACOS{% endblock %}
-
-{#
+{% comment %}
   The page an enterprise procurement team asks for. Written to be handed over
-  directly, so it states what is true today rather than what is planned.
-#}
+  directly, so it states what is true today rather than what is planned — and
+  claims no certification we do not hold.
+
+  No {% templatetag openblock %} block title {% templatetag closeblock %} here:
+  the title, description and canonical come from the view's PageMeta, so that
+  every public page describes itself the same way.
+{% endcomment %}
 
 {% block content %}
-<section class="py-5">
-  <div class="container" style="max-width: 52rem">
-    <h1 class="h2 mb-3">{% translate "Security and privacy" %}</h1>
-    <p class="text-muted mb-5">
+<section class="section">
+  <div class="container container--reading">
+    <h1 class="hero__title mb-3">{% translate "Security and privacy" %}</h1>
+    <p class="hero__lede mb-4">
       {% blocktranslate %}
       STACOS holds tax identifiers, filings, statutory registers and board
       minutes. This page describes how that data is separated, protected and
       accounted for.
       {% endblocktranslate %}
     </p>
-
-    <h2 class="h5 mt-5">{% translate "Tenant isolation" %}</h2>
-    <p class="text-muted">
+    <p class="text-muted small">
       {% blocktranslate %}
-      Every customer-owned record carries the identifier of the account that owns
-      it. The application's default database manager refuses to run a query that
-      has not been scoped to an account — an unscoped query raises an error
-      rather than returning data. PostgreSQL row-level security enforces the same
-      boundary independently at the database, using a role that cannot bypass it.
-      A dedicated test suite attempts cross-account reads and writes against every
-      model on every build and fails the build if any of them succeeds.
+      Everything below describes the system as it is deployed today. Where we
+      have no certification, we say so rather than implying one.
       {% endblocktranslate %}
     </p>
 
-    <h2 class="h5 mt-5">{% translate "Access between organisations" %}</h2>
-    <p class="text-muted">
-      {% blocktranslate %}
-      A professional firm can only see a client's records through an engagement:
-      a record the client approves, scoped to named entities and named compliance
-      categories, with a start date and an end date. There is no other route.
-      Ending an engagement removes access on the same request — not on a nightly
-      job — and the organisation keeps everything.
-      {% endblocktranslate %}
-    </p>
+    <div class="prose mt-5">
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Tenant isolation" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Every customer-owned record carries the identifier of the account that owns
+          it. The application's default database manager refuses to run a query that
+          has not been scoped to an account — an unscoped query raises an error
+          rather than returning data. PostgreSQL row-level security enforces the same
+          boundary independently at the database, using a role that cannot bypass it.
+          A dedicated test suite attempts cross-account reads and writes against every
+          model on every build and fails the build if any of them succeeds.
+          {% endblocktranslate %}
+        </p>
+      </section>
 
-    <h2 class="h5 mt-5">{% translate "Authentication" %}</h2>
-    <p class="text-muted">
-      {% blocktranslate %}
-      Registering, and signing in from a device we do not recognise, requires a
-      code sent to your email address and a code sent to your mobile number,
-      entered together as one step. Signing in with Google, Microsoft or Apple
-      does not substitute for either — it proves the provider knows you, not that
-      you control those two channels.
-      {% endblocktranslate %}
-    </p>
-    <p class="text-muted">
-      {% blocktranslate %}
-      Approving a return, changing someone's role, changing a payment method,
-      exporting data and granting access all require re-authentication at the
-      moment you do them. Passwords are hashed with Argon2. Every trusted device
-      and active session is listed in your account, and can be ended remotely —
-      which takes effect immediately, including on the mobile app.
-      {% endblocktranslate %}
-    </p>
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Access between organisations" %}</h2>
+        <p>
+          {% blocktranslate %}
+          A professional firm can only see a client's records through an engagement:
+          a record the client approves, scoped to named entities and named compliance
+          categories, with a start date and an end date. There is no other route.
+          Ending an engagement removes access on the same request — not on a nightly
+          job — and the organisation keeps everything.
+          {% endblocktranslate %}
+        </p>
+      </section>
 
-    <h2 class="h5 mt-5">{% translate "Audit trail" %}</h2>
-    <p class="text-muted">
-      {% blocktranslate %}
-      Every state change is recorded with the person who made it, the time, the
-      network address and what changed. The audit table is append-only: the
-      database rejects attempts to update or delete a row, so the record cannot be
-      quietly revised. You can export the full trail for your account at any time.
-      {% endblocktranslate %}
-    </p>
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Authentication" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Registering, and signing in from a device we do not recognise, requires a
+          code sent to your email address and a code sent to your mobile number,
+          entered together as one step. Signing in with Google, Microsoft or Apple
+          does not substitute for either — it proves the provider knows you, not that
+          you control those two channels.
+          {% endblocktranslate %}
+        </p>
+        <p>
+          {% blocktranslate %}
+          Approving a return, changing someone's role, changing a payment method,
+          exporting data and granting access all require re-authentication at the
+          moment you do them. Passwords are hashed with Argon2. Every trusted device
+          and active session is listed in your account, and can be ended remotely —
+          which takes effect immediately, including on the mobile app.
+          {% endblocktranslate %}
+        </p>
+      </section>
 
-    <h2 class="h5 mt-5">{% translate "Support access" %}</h2>
-    <p class="text-muted">
-      {% blocktranslate %}
-      Our staff cannot browse your data. Support access requires your consent, is
-      time-boxed, is shown to you in the interface while it is active, and is
-      logged. There is no silent impersonation.
-      {% endblocktranslate %}
-    </p>
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Authorisation" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Permissions are codes, not job titles, and roles are bundles of codes that
+          a customer can compose. Access is scoped by entity, by department and by
+          compliance category at the same time, so a payroll manager sees payroll and
+          not a tax demand. Every routable view declares the permission it requires,
+          and the build fails if one does not.
+          {% endblocktranslate %}
+        </p>
+      </section>
 
-    <h2 class="h5 mt-5">{% translate "Data residency and the DPDP Act" %}</h2>
-    <p class="text-muted">
-      {% blocktranslate %}
-      Data belonging to Indian customers is stored in an Indian region. Consent
-      records, purpose limitation, and the data-principal rights of access,
-      correction and erasure are product features rather than policy statements.
-      A documented retention schedule applies per class of data.
-      {% endblocktranslate %}
-    </p>
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Audit trail" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Every state change is recorded with the person who made it, the time, the
+          network address and what changed. The audit table is append-only: the
+          database rejects attempts to update or delete a row, so the record cannot be
+          quietly revised. You can export the full trail for your account at any time.
+          {% endblocktranslate %}
+        </p>
+      </section>
 
-    <h2 class="h5 mt-5">{% translate "Encryption" %}</h2>
-    <p class="text-muted">
-      {% blocktranslate %}
-      Traffic is encrypted in transit. Storage is encrypted at rest. Tax
-      identifiers, bank details and any credentials held for government portals
-      receive additional field-level encryption. We would rather not hold
-      Aadhaar-adjacent data at all, and store only what a filing genuinely
-      requires.
-      {% endblocktranslate %}
-    </p>
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Support access" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Our staff cannot browse your data. Support access requires your consent, is
+          time-boxed, is shown to you in the interface while it is active, and is
+          logged. There is no silent impersonation.
+          {% endblocktranslate %}
+        </p>
+      </section>
 
-    <div class="border rounded p-4 mt-5" style="background: var(--stacos-surface-sunken)">
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Data residency and the DPDP Act" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Data belonging to Indian customers is stored in an Indian region. Consent
+          records, purpose limitation, and the data-principal rights of access,
+          correction and erasure are product features rather than policy statements.
+          A documented retention schedule applies per class of data.
+          {% endblocktranslate %}
+        </p>
+        <p>
+          {% blocktranslate %}
+          We act as a processor for the customer data held in your account, on your
+          documented instructions. The data processing addendum sets out those
+          instructions, and the sub-processor list names every third party involved.
+          {% endblocktranslate %}
+        </p>
+      </section>
+
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Encryption" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Traffic is encrypted in transit. Storage is encrypted at rest. Tax
+          identifiers, bank details and any credentials held for government portals
+          receive additional field-level encryption. We would rather not hold
+          Aadhaar-adjacent data at all, and store only what a filing genuinely
+          requires.
+          {% endblocktranslate %}
+        </p>
+      </section>
+
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Availability and recovery" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Databases are backed up continuously with point-in-time recovery, and
+          restores are exercised rather than assumed. Availability targets, planned
+          maintenance windows and support response times are written down on the
+          service levels page instead of being agreed per customer.
+          {% endblocktranslate %}
+        </p>
+      </section>
+
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Reporting a vulnerability" %}</h2>
+        <p>
+          {% blocktranslate with email=company.security_email %}
+          Write to {{ email }} with enough detail to reproduce the issue. We
+          acknowledge within two working days, we will not pursue anyone acting in
+          good faith under these terms, and we will credit you if you would like to
+          be credited. Please do not test against another customer's account.
+          {% endblocktranslate %}
+        </p>
+      </section>
+    </div>
+
+    <div class="callout mt-5">
       <strong>{% translate "Procurement questions" %}</strong>
-      <p class="text-muted small mb-0 mt-2">
+      <p class="mb-3 mt-2">
         {% blocktranslate %}
-        For a data processing agreement, penetration test summary, or completed
-        security questionnaire, contact us through your account manager or from
-        the address on your invoice.
+        For a data processing addendum, a penetration test summary, or a completed
+        security questionnaire, use the contact form and choose “Security or
+        procurement questionnaire”. It reaches the security inbox directly.
         {% endblocktranslate %}
       </p>
+      <a class="btn btn-primary" href="{% url 'marketing:contact' %}">{% translate "Send a questionnaire" %}</a>
+      <a class="btn btn-outline-secondary" href="{% url 'marketing:subprocessors' %}">{% translate "See sub-processors" %}</a>
     </div>
   </div>
 </section>
+
+<c-marketing.cta-band
+  title="{% translate 'Evaluate it against your own controls.' %}"
+  body="{% translate 'A trial account gives you the audit trail, the session list and the engagement model to inspect directly.' %}" />
+
 {% endblock %}

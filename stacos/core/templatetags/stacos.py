@@ -49,6 +49,20 @@ def western(value: Decimal | float | int | str | None, decimals: int = 0) -> str
     return format_number(value, grouping=DigitGrouping.WESTERN, decimals=int(decimals))
 
 
+@register.filter(name="abs")
+def absolute(value: Any) -> Any:
+    """Magnitude, for rendering a signed countdown as "12 days late".
+
+    Django has no built-in ``abs``. Returns the value untouched if it is not a
+    number, so a component can pass an optional attribute through without
+    guarding first.
+    """
+    try:
+        return abs(value)
+    except TypeError:
+        return value
+
+
 # ---------------------------------------------------------------------------
 # Permissions
 # ---------------------------------------------------------------------------

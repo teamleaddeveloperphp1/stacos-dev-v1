@@ -32,12 +32,24 @@ from stacos.tenancy.models import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_sms_outbox() -> Iterator[None]:
-    from stacos.accounts.sms import MemorySmsProvider
+def _reset_messaging_state() -> Iterator[None]:
+    """Clear the outbox and the rate-limit counters between tests.
 
-    MemorySmsProvider.clear()
+    The cache is not reset by pytest-django, so throttle state leaks forward:
+    every test signs in from 127.0.0.1, and after twenty verification sends the
+    per-IP hourly limit starts silently refusing to send. The symptom is a later
+    test failing with an empty outbox while passing perfectly well on its own —
+    so this is a correctness fixture, not tidiness.
+    """
+    from django.core.cache import cache
+
+    from stacos.accounts.whatsapp import MemoryWhatsAppProvider
+
+    MemoryWhatsAppProvider.clear()
+    cache.clear()
     yield
-    MemorySmsProvider.clear()
+    MemoryWhatsAppProvider.clear()
+    cache.clear()
 
 
 @pytest.fixture(scope="session")
@@ -49,7 +61,14 @@ def django_db_setup(django_db_setup: Any, django_db_blocker: Any) -> None:
 
 @pytest.fixture
 def platform(db: Any) -> Iterator[AccessScope]:
-    """Unrestricted scope, for building fixtures."""
+    """An explicitly held platform scope, for tests that need one.
+
+    Data fixtures deliberately do **not** use this. ``platform_scope`` sets
+    PostgreSQL's ``stacos.bypass_rls`` flag, and a fixture that yields from
+    inside it holds that flag on for the entire test — which would silently
+    disable Row-Level Security in exactly the tests written to prove it works.
+    Fixtures below open and close the scope around their own writes instead.
+    """
     with platform_scope(reason="test-fixture") as scope:
         yield scope
 
@@ -60,7 +79,7 @@ def platform(db: Any) -> Iterator[AccessScope]:
 
 
 @pytest.fixture
-def india(platform: AccessScope) -> JurisdictionPack:
+def india(db: Any) -> JurisdictionPack:
     return JurisdictionPack.objects.create(
         country="IN",
         name="India",
@@ -80,7 +99,7 @@ def india(platform: AccessScope) -> JurisdictionPack:
 
 
 @pytest.fixture
-def org(platform: AccessScope, india: JurisdictionPack) -> Tenant:
+def org(india: JurisdictionPack) -> Tenant:
     return Tenant.objects.create(
         type=Tenant.Type.ORGANISATION,
         name="Acme Manufacturing",
@@ -91,7 +110,7 @@ def org(platform: AccessScope, india: JurisdictionPack) -> Tenant:
 
 
 @pytest.fixture
-def other_org(platform: AccessScope, india: JurisdictionPack) -> Tenant:
+def other_org(india: JurisdictionPack) -> Tenant:
     """A completely unrelated customer. The one that must never be reachable."""
     return Tenant.objects.create(
         type=Tenant.Type.ORGANISATION,
@@ -103,7 +122,7 @@ def other_org(platform: AccessScope, india: JurisdictionPack) -> Tenant:
 
 
 @pytest.fixture
-def practice(platform: AccessScope, india: JurisdictionPack) -> Tenant:
+def practice(india: JurisdictionPack) -> Tenant:
     return Tenant.objects.create(
         type=Tenant.Type.PRACTICE,
         name="Mehta & Co",
@@ -119,40 +138,46 @@ def practice(platform: AccessScope, india: JurisdictionPack) -> Tenant:
 
 
 def _make_entity(tenant: Tenant, name: str, code: str) -> Entity:
-    entity = Entity.objects.create(
-        tenant=tenant,
-        name=name,
-        short_code=code,
-        entity_type="PVT_LTD",
-        country="IN",
-        incorporation_date=date(2015, 4, 1),
-        registered_office_state="IN-GJ",
-    )
-    EntityProfile.objects.create(
-        tenant=tenant,
-        entity=entity,
-        aggregate_turnover=Decimal("120000000"),
-        employee_count=90,
-        states_of_operation=["IN-GJ"],
-        facts={"gst_scheme": "REGULAR", "qrmp_opted": False},
-    )
-    return entity
+    """Create an entity and its profile inside a short-lived platform scope.
+
+    Opened and closed here rather than held by a fixture, so the RLS bypass is
+    off again by the time the test body runs.
+    """
+    with platform_scope(reason="test-fixture"):
+        entity = Entity.objects.create(
+            tenant=tenant,
+            name=name,
+            short_code=code,
+            entity_type="PVT_LTD",
+            country="IN",
+            incorporation_date=date(2015, 4, 1),
+            registered_office_state="IN-GJ",
+        )
+        EntityProfile.objects.create(
+            tenant=tenant,
+            entity=entity,
+            aggregate_turnover=Decimal("120000000"),
+            employee_count=90,
+            states_of_operation=["IN-GJ"],
+            facts={"gst_scheme": "REGULAR", "qrmp_opted": False},
+        )
+        return entity
 
 
 @pytest.fixture
-def entity_a(platform: AccessScope, org: Tenant) -> Entity:
+def entity_a(org: Tenant) -> Entity:
     """The entity the practice IS engaged on."""
     return _make_entity(org, "Acme Textiles Pvt Ltd", "ATPL")
 
 
 @pytest.fixture
-def entity_b(platform: AccessScope, org: Tenant) -> Entity:
+def entity_b(org: Tenant) -> Entity:
     """A sibling entity in the same tenant that the practice is NOT engaged on."""
     return _make_entity(org, "Acme Logistics Pvt Ltd", "ALPL")
 
 
 @pytest.fixture
-def rival_entity(platform: AccessScope, other_org: Tenant) -> Entity:
+def rival_entity(other_org: Tenant) -> Entity:
     return _make_entity(other_org, "Rival Steel Pvt Ltd", "RSPL")
 
 
@@ -162,69 +187,69 @@ def rival_entity(platform: AccessScope, other_org: Tenant) -> Entity:
 
 
 def _system_role(code: str, tenant_type: str) -> Role:
-    return Role.objects.get(tenant__isnull=True, code=code, tenant_type=tenant_type)
+    """Fetch a system role, loading the catalogue if it is missing.
+
+    Self-healing because transactional tests truncate every table, including the
+    roles loaded once at database setup.
+    """
+    role = Role.objects.filter(tenant__isnull=True, code=code, tenant_type=tenant_type).first()
+    if role is None:
+        call_command("sync_system_roles", verbosity=0)
+        role = Role.objects.get(tenant__isnull=True, code=code, tenant_type=tenant_type)
+    return role
+
+
+def _make_member(tenant: Tenant, email: str, name: str, phone: str, role_code: str) -> User:
+    with platform_scope(reason="test-fixture"):
+        user = User.objects.create_user(
+            email=email,
+            password="test-password-12345",
+            full_name=name,
+            phone_e164=phone,
+            email_verified=True,
+            phone_verified=True,
+        )
+        Membership.objects.create(
+            tenant=tenant,
+            user=user,
+            role=_system_role(role_code, tenant.type),
+            status=Membership.Status.ACTIVE,
+        )
+        return user
 
 
 @pytest.fixture
-def org_owner(platform: AccessScope, org: Tenant) -> User:
-    user = User.objects.create_user(
-        email="owner@acme.example",
-        password="test-password-12345",
-        full_name="Anita Rao",
-        phone_e164="+919800000001",
-        email_verified=True,
-        phone_verified=True,
-    )
-    Membership.objects.create(
-        tenant=org,
-        user=user,
-        role=_system_role("org-owner", Tenant.Type.ORGANISATION),
-        status=Membership.Status.ACTIVE,
-    )
-    return user
+def org_owner(org: Tenant) -> User:
+    return _make_member(org, "owner@acme.example", "Anita Rao", "+919800000001", "org-owner")
 
 
 @pytest.fixture
-def rival_owner(platform: AccessScope, other_org: Tenant) -> User:
-    user = User.objects.create_user(
-        email="owner@rival.example",
-        password="test-password-12345",
-        full_name="Vikram Singh",
-        phone_e164="+919800000002",
-        email_verified=True,
-        phone_verified=True,
+def rival_owner(other_org: Tenant) -> User:
+    return _make_member(
+        other_org, "owner@rival.example", "Vikram Singh", "+919800000002", "org-owner"
     )
-    Membership.objects.create(
-        tenant=other_org,
-        user=user,
-        role=_system_role("org-owner", Tenant.Type.ORGANISATION),
-        status=Membership.Status.ACTIVE,
-    )
-    return user
 
 
 @pytest.fixture
-def practice_staff(platform: AccessScope, practice: Tenant) -> User:
-    user = User.objects.create_user(
-        email="staff@mehta.example",
-        password="test-password-12345",
-        full_name="Nikhil Mehta",
-        phone_e164="+919800000003",
-        email_verified=True,
-        phone_verified=True,
+def practice_staff(practice: Tenant) -> User:
+    return _make_member(
+        practice, "staff@mehta.example", "Nikhil Mehta", "+919800000003", "practice-staff"
     )
-    Membership.objects.create(
-        tenant=practice,
-        user=user,
-        role=_system_role("practice-staff", Tenant.Type.PRACTICE),
-        status=Membership.Status.ACTIVE,
-    )
-    return user
 
 
 @pytest.fixture
 def practice_membership(practice_staff: User, practice: Tenant) -> Membership:
-    return Membership.objects.get(user=practice_staff, tenant=practice)
+    """Fetch the membership the scope resolver will be asked about.
+
+    Needs a platform scope even though it uses ``objects_unscoped``: that manager
+    bypasses the *application* filter, but Row-Level Security still applies at
+    the database and returns nothing with no tenant bound. Both layers have to be
+    satisfied, which is the whole point of having two.
+    """
+    with platform_scope(reason="test-fixture"):
+        return Membership.objects_unscoped.select_related("tenant", "role").get(
+            user=practice_staff, tenant=practice
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +258,12 @@ def practice_membership(practice_staff: User, practice: Tenant) -> Membership:
 
 
 @pytest.fixture
-def engagement(platform: AccessScope, practice: Tenant, entity_a: Entity) -> Engagement:
+def engagement(practice: Tenant, entity_a: Entity) -> Engagement:
+    with platform_scope(reason="test-fixture"):
+        return _make_engagement(practice, entity_a)
+
+
+def _make_engagement(practice: Tenant, entity_a: Entity) -> Engagement:
     return Engagement.objects.create(
         tenant=entity_a.tenant,
         practice_tenant=practice,

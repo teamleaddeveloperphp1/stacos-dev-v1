@@ -1,0 +1,67 @@
+{% extends "marketing/legal/_base.html" %}
+{% load i18n %}
+
+{% block legal %}
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "The short version" %}</h2>
+  <p>
+    {% blocktranslate %}
+    This website sets no advertising cookies, no analytics cookies and no
+    third-party trackers. There is no consent banner because there is nothing to
+    consent to. The application behind sign-in sets the few cookies it cannot
+    function without.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "What the public site sets" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Nothing, until you interact with a form. Submitting the contact form sets a
+    session cookie and a cross-site request forgery token, both strictly necessary
+    to accept the submission safely, and both discarded when you close the
+    browser.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "What the application sets" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "A session cookie that keeps you signed in. It is marked HttpOnly, Secure and SameSite, and it expires when the session ends." %}</li>
+    <li>{% translate "A CSRF token, which is what stops another site from submitting a form as you." %}</li>
+    <li>{% translate "A trusted-device token, if you asked us to remember the device, so you are not asked for two verification codes every time. You can revoke it from your account, and revoking it takes effect immediately." %}</li>
+    <li>{% translate "A short-lived preference cookie for interface choices such as light or dark appearance." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Why there is no analytics cookie" %}</h2>
+  <p>
+    {% blocktranslate %}
+    We would rather understand the product from server-side, aggregated request
+    logs that carry no identifier we could tie back to a person. That is enough to
+    know which pages are read; it is not enough to follow anyone around, which is
+    the point.
+    {% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate %}
+    If that ever changes, this page changes first, a consent mechanism appears
+    before any such cookie is set, and nothing is set until you agree.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Controlling cookies" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Every browser lets you block or delete cookies. Blocking the strictly
+    necessary ones will stop you signing in, because the sign-in mechanism is the
+    cookie. That is a limitation of the web rather than a choice we made.
+    {% endblocktranslate %}
+  </p>
+</section>
+{% endblock %}

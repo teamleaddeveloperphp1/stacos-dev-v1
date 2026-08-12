@@ -1,0 +1,106 @@
+{% extends "marketing/legal/_base.html" %}
+{% load i18n %}
+
+{% block legal %}
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Availability" %}</h2>
+  <p>
+    {% blocktranslate %}
+    We target 99.9% monthly availability of the application and the API, measured
+    over each calendar month and excluding planned maintenance notified in advance
+    and events genuinely outside our control.
+    {% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate %}
+    Unavailability means the service returns errors or fails to respond for
+    requests that should succeed. A slow page is not unavailability; a page that
+    will not load is.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Service credits" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Below 99.9% but at or above 99.0% in a month: 10% of that month's fee, as a credit." %}</li>
+    <li>{% translate "Below 99.0% but at or above 95.0%: 25%." %}</li>
+    <li>{% translate "Below 95.0%: 50%." %}</li>
+  </ul>
+  <p>
+    {% blocktranslate %}
+    Claim within thirty days of the end of the affected month. Credits are applied
+    to your next invoice. Where availability falls below 95% in two consecutive
+    months you may terminate immediately and receive a prorated refund of the
+    unused period.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Planned maintenance" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Notified at least forty-eight hours in advance, scheduled outside Indian
+    business hours, and kept short. We avoid maintenance entirely in the days
+    around common statutory deadlines, because that is precisely when the service
+    matters most.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Support" %}</h2>
+  <p>
+    {% blocktranslate with hours=company.support_hours %}
+    Support hours are {{ hours }}. Security incidents are handled outside those
+    hours.
+    {% endblocktranslate %}
+  </p>
+  <ul class="prose__list">
+    <li>{% translate "Critical — the service is unusable for you: first response within 2 hours during support hours, worked continuously until resolved or worked around." %}</li>
+    <li>{% translate "High — a core function is broken with no workaround: first response within 4 support hours." %}</li>
+    <li>{% translate "Normal — something is wrong but you can proceed: first response within one working day." %}</li>
+    <li>{% translate "Low — a question or a request: first response within two working days." %}</li>
+  </ul>
+  <p>
+    {% blocktranslate %}
+    These are response commitments, not resolution promises: a fix takes as long
+    as the fix takes, and we would rather tell you honestly where it stands than
+    quote a date we invented.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Backups and recovery" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Continuous database backup with point-in-time recovery, retained for thirty days." %}</li>
+    <li>{% translate "Documents replicated within the Indian region." %}</li>
+    <li>{% translate "Recovery point objective: 5 minutes. Recovery time objective: 4 hours." %}</li>
+    <li>{% translate "Restores are exercised on a schedule, because an untested backup is a belief rather than a backup." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Incident communication" %}</h2>
+  <p>
+    {% blocktranslate %}
+    During an incident we publish updates until it is resolved, and afterwards we
+    write up what happened, why, and what changes as a result. Enterprise
+    customers receive that write-up directly.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Enterprise agreements" %}</h2>
+  <p>
+    {% blocktranslate %}
+    These are the standard commitments. Enterprise customers may negotiate
+    different targets, a named contact, and defined escalation paths; where a
+    signed agreement says something different, it prevails over this page.
+    {% endblocktranslate %}
+  </p>
+</section>
+{% endblock %}

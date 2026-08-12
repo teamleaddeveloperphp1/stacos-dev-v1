@@ -11,16 +11,22 @@ from __future__ import annotations
 from typing import Any, cast
 
 from django.contrib import messages
+from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import Count, Q, QuerySet
-from django.http import HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView
 
+from stacos.core.audit import record_event
 from stacos.core.htmx import Fragment, HtmxFragmentMixin, Toast, oob
+from stacos.core.models import AuditAction
 from stacos.core.permissions import RequirePermissionMixin, require_permission
-from stacos.tenancy.models import Entity, Membership
+from stacos.core.typing import current_user
+from stacos.tenancy.forms import EntityForm
+from stacos.tenancy.models import Entity, EntityProfile, Membership
 from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
 
 
@@ -128,6 +134,115 @@ def switch_tenant(request: HttpRequest) -> HttpResponse:
         return response
 
     return redirect("/app/")
+
+
+#: Fixed destinations the palette always offers, filtered by what was typed.
+PALETTE_DESTINATIONS: tuple[tuple[str, str, str, str], ...] = (
+    ("Dashboard", "app:dashboard", "home", "g o"),
+    ("Entities", "app:entity_list", "building", "g e"),
+    ("Security and devices", "accounts:security", "shield", ""),
+)
+
+
+@require_permission("core.search")
+def palette_search(request: HttpRequest) -> HttpResponse:
+    """Search behind the command palette.
+
+    Trigram similarity as well as substring matching, so "vaibav" still finds
+    "Vaibhav" — a CA typing fast from memory across three hundred clients will
+    misspell things, and an exact-match-only palette is one they stop using.
+
+    Scoped by the default manager like everything else, so a practice user
+    searching only ever reaches the client entities their engagements cover.
+    """
+    query = request.GET.get("q", "").strip()
+
+    entities: list[Entity] = []
+    if query:
+        entities = list(
+            Entity.objects.filter(archived_at__isnull=True)
+            .annotate(similarity=TrigramSimilarity("name", query))
+            .filter(
+                Q(name__icontains=query)
+                | Q(short_code__icontains=query)
+                | Q(legal_name__icontains=query)
+                | Q(similarity__gt=0.2)
+            )
+            .order_by("-similarity", "name")[:8]
+        )
+
+    lowered = query.lower()
+    destinations = [
+        {"label": label, "url": reverse(route), "icon": icon, "keys": keys}
+        for label, route, icon, keys in PALETTE_DESTINATIONS
+        if not query or lowered in label.lower()
+    ]
+
+    return render(
+        request,
+        "tenancy/_fragments/palette_results.html",
+        {"query": query, "entities": entities, "destinations": destinations},
+    )
+
+
+@require_permission("tenancy.entity.create")
+@require_http_methods(["GET", "POST"])
+def entity_create(request: HttpRequest) -> HttpResponse:
+    """Create an entity, in a modal loaded on demand.
+
+    The two render paths differ here in a way worth noting: a GET returns just
+    the modal markup for injection, and a successful POST returns the new row
+    plus out-of-band updates for the sidebar counter and a toast — one request,
+    three regions, no refetch.
+
+    A validation failure re-renders **only the form fragment** with a 422, so the
+    modal stays open and the user keeps what they typed.
+    """
+    tenant = getattr(request, "tenant", None)
+    if tenant is None:
+        raise Http404
+
+    form = EntityForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        entity = form.save(commit=False)
+        entity.tenant = tenant
+        entity.country = tenant.country
+        entity.full_clean(exclude=["tenant"])
+        entity.save()
+
+        # An entity with no profile has nothing for the compliance engine to
+        # evaluate, so one is always created alongside it.
+        EntityProfile.objects.get_or_create(entity=entity, defaults={"tenant": tenant})
+
+        record_event(action=AuditAction.CREATE, actor=current_user(request), obj=entity)
+
+        remaining = Entity.objects.filter(archived_at__isnull=True).count()
+
+        return oob(
+            request,
+            # `registration_count` is a queryset annotation on the list view,
+            # not a model field. A brand-new entity has none, and the template
+            # falls back to zero.
+            Fragment("tenancy/_fragments/entity_row.html", {"entity": entity}),
+            also=[
+                Fragment(
+                    "tenancy/_fragments/entity_count.html",
+                    {"entity_count": remaining},
+                    oob_target="entity-count",
+                )
+            ],
+            toast=Toast(_("%(name)s added.") % {"name": entity.name}),
+            triggers={"stacos:modal-close": True},
+        )
+
+    status = 422 if request.method == "POST" else 200
+    return render(
+        request,
+        "tenancy/_fragments/entity_form_modal.html",
+        {"form": form, "tenant": tenant},
+        status=status,
+    )
 
 
 @require_permission("tenancy.entity.view")

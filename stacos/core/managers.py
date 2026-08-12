@@ -107,15 +107,21 @@ def _apply_scope(
     tenant_field = getattr(model, "TENANT_FIELD", "tenant_id")
     entity_field = getattr(model, "ENTITY_FIELD", None)
 
-    if not scope.readable_tenant_ids:
+    if entity_field:
+        # Entity-scoped: reachable through an engagement, but only for the named
+        # entities that engagement covers.
+        if not scope.readable_tenant_ids:
+            return queryset.none()
+        queryset = queryset.filter(**{f"{tenant_field}__in": scope.readable_tenant_ids})
+        if scope.entity_ids is not None:
+            queryset = queryset.filter(**{f"{entity_field}__in": scope.entity_ids})
+        return queryset
+
+    # Tenant-level: memberships, settings, billing. An engagement grants a
+    # practice access to a client's *compliance records*, never to the client's
+    # own administration — so these are filtered on membership, not on the
+    # broader engagement reach. Without this distinction a firm engaged on one
+    # subsidiary could read the whole client's staff directory.
+    if not scope.member_tenant_ids:
         return queryset.none()
-
-    queryset = queryset.filter(**{f"{tenant_field}__in": scope.readable_tenant_ids})
-
-    # An engagement grants access to named entities, not to a whole tenant, so
-    # entity-scoped models take a second filter. Models without an entity are
-    # tenant-level by nature (roles, settings) and are unaffected.
-    if entity_field and scope.entity_ids is not None:
-        queryset = queryset.filter(**{f"{entity_field}__in": scope.entity_ids})
-
-    return queryset
+    return queryset.filter(**{f"{tenant_field}__in": scope.member_tenant_ids})

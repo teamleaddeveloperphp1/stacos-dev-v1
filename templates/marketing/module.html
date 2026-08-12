@@ -1,0 +1,73 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% comment %}
+  One template for every product module. The page differs only in the data the
+  view selected, which is what keeps nine pages consistent — and keeps a tenth
+  module from needing a tenth template.
+{% endcomment %}
+
+{% block content %}
+
+<c-marketing.hero
+  eyebrow="{{ module.name }}"
+  title="{{ module.headline }}"
+  lede="{{ module.lede }}">
+  <a class="btn btn-primary btn-lg" href="{% url 'accounts:register' %}">{% translate "Start free trial" %}</a>
+  <a class="btn btn-outline-secondary btn-lg" href="{% url 'marketing:contact' %}">{% translate "Ask a question" %}</a>
+  <p class="hero__footnote">{% blocktranslate with who=module.audience %}For: {{ who }}{% endblocktranslate %}</p>
+</c-marketing.hero>
+
+{% if module.highlights %}
+  <section class="section section--sunken">
+    <div class="container">
+      <div class="row g-4">
+        {% for title, body in module.highlights %}
+          <div class="col-12 col-md-6">
+            <c-marketing.feature-card title="{{ title }}" body="{{ body }}" icon="check" />
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endif %}
+
+{% if module.sections %}
+  <section class="section">
+    <div class="container container--reading">
+      <c-marketing.prose :sections="module.sections" />
+    </div>
+  </section>
+{% endif %}
+
+{% if module.faqs %}
+  <section class="section section--sunken">
+    <div class="container container--reading">
+      <c-marketing.section-head title="{% translate 'Questions about this' %}" />
+      <c-marketing.faq-list :faqs="module.faqs" />
+    </div>
+  </section>
+{% endif %}
+
+<section class="section">
+  <div class="container">
+    <c-marketing.section-head
+      title="{% translate 'The rest of the platform' %}"
+      lede="{% translate 'Each of these references the same records rather than holding its own copy.' %}" />
+    <div class="row g-4">
+      {% for other in others %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <c-marketing.feature-card
+            icon="{{ other.icon }}"
+            title="{{ other.name }}"
+            body="{{ other.nav_summary }}"
+            href="{% url 'marketing:module' other.slug %}" />
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<c-marketing.cta-band />
+
+{% endblock %}

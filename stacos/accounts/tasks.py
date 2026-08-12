@@ -42,12 +42,14 @@ def purge_expired_trusted_devices() -> int:
     return deleted
 
 
-@shared_task(name="stacos.accounts.roll_sms_spend_ledger")
-def roll_sms_spend_ledger() -> None:
+@shared_task(name="stacos.accounts.roll_message_spend_ledger")
+def roll_message_spend_ledger() -> None:
     """Open today's ledger rows so the spend cap has something to read."""
-    from stacos.accounts.models import SmsSpendLedger
-    from stacos.accounts.sms import _PROVIDERS
+    from stacos.accounts.models import MessageSpendLedger
+    from stacos.accounts.whatsapp import _PROVIDERS
 
     today = timezone.localdate()
     for provider in _PROVIDERS:
-        SmsSpendLedger.objects.get_or_create(day=today, provider=provider)
+        MessageSpendLedger.objects.get_or_create(
+            day=today, channel=MessageSpendLedger.Channel.WHATSAPP, provider=provider
+        )

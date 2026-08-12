@@ -5,10 +5,15 @@ The rule from the product brief, implemented literally: **one screen, one
 verification call, one rate limit**. A user submits both codes together; the
 attempt counts once; neither channel can be satisfied and then deferred.
 
-Per-field errors *are* shown ("the code sent to your phone is incorrect"). The
+The two channels are **email and WhatsApp**. WhatsApp rather than SMS because for
+Indian businesses it is the channel people actually read — and because a WhatsApp
+authentication template renders with a copy-code button, which removes the
+transcription error that makes six-digit codes annoying on a phone.
+
+Per-field errors *are* shown ("the code we sent on WhatsApp is incorrect"). The
 alternative — an opaque "one of these is wrong" — buys almost nothing against an
-attacker who is already rate-limited to five attempts, and costs a great deal
-for a legitimate user retyping two codes on a phone.
+attacker who is already rate-limited to five attempts, and costs a great deal for
+a legitimate user retyping two codes.
 """
 
 from __future__ import annotations
@@ -26,13 +31,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from stacos.accounts.models import PendingVerification, User
-from stacos.accounts.sms import SmsMessage, get_sms_provider
 from stacos.accounts.throttle import (
     ThrottleDecision,
     check_otp_send_allowed,
+    record_message_spend,
     record_otp_send,
-    record_sms_spend,
 )
+from stacos.accounts.whatsapp import WhatsAppMessage, get_whatsapp_provider
 from stacos.core.audit import record_event
 from stacos.core.models import AuditAction
 
@@ -138,7 +143,7 @@ def start_verification(
         action=AuditAction.OTP_SENT,
         actor=user,
         obj=verification,
-        context={"purpose": purpose, "channels": ["email", "sms"]},
+        context={"purpose": purpose, "channels": ["email", "whatsapp"]},
     )
     return verification, decision
 
@@ -200,26 +205,34 @@ def _dispatch_codes(verification: PendingVerification) -> None:
         message=(
             f"Your STACOS verification code is {email_code}.\n\n"
             f"It expires in {minutes} minutes. If you did not request it, ignore this email.\n\n"
-            f"You will also need the code sent to your phone — both are required."
+            f"You will also need the code we sent on WhatsApp — both are required."
         ),
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[verification.email],
         fail_silently=False,
     )
 
-    provider = get_sms_provider()
+    provider = get_whatsapp_provider()
     result = provider.send(
-        SmsMessage(
+        WhatsAppMessage(
             to_e164=verification.phone_e164,
             template_key=_TEMPLATE_FOR_PURPOSE.get(verification.purpose, "otp_login"),
             params={"code": phone_code, "minutes": str(minutes)},
         )
     )
-    record_sms_spend(
+    record_message_spend(
         provider=result.provider,
         cost_units=result.cost_units,
         failed=not result.accepted,
     )
+
+    if result.not_on_whatsapp:
+        # Distinct from a delivery failure: the number has no WhatsApp account,
+        # so retrying will never work. Recorded so the view can say so plainly
+        # rather than leaving the user waiting for a message that is not coming.
+        logger.warning("otp.recipient_not_on_whatsapp", verification_id=str(verification.id))
+    elif not result.accepted:
+        logger.warning("otp.whatsapp_send_failed", error=result.error)
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +311,7 @@ def verify_codes(
             False,
             verification=verification,
             email_error="" if email_ok else "This code does not match the one we emailed you.",
-            phone_error="" if phone_ok else "This code does not match the one we texted you.",
+            phone_error="" if phone_ok else "This code does not match the one we sent on WhatsApp.",
             error=f"{remaining} attempt{plural} remaining.",
             locked_out=False,
         )

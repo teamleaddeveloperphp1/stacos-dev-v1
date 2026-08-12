@@ -1,0 +1,36 @@
+<c-vars title="" body="" icon="" href="" cta="" />
+{% load i18n %}
+{% comment %}
+  One claim, its explanation, and optionally a way to read more.
+
+  When `href` is given the whole card is the link target rather than only the
+  title: a 40px-tall link inside a 200px-tall card is a needlessly small target
+  on a phone.
+
+  Usage:
+    <c-marketing.feature-card title="Nothing to set up" icon="calendar"
+                              body="The calendar is generated from your profile."
+                              href="/product/compliance-calendar/" />
+{% endcomment %}
+{% if href %}
+  <a class="feature-card feature-card--link" href="{{ href }}">
+{% else %}
+  <div class="feature-card">
+{% endif %}
+
+  {% if icon %}
+    <span class="feature-card__icon"><c-icon name="{{ icon }}" size="20" /></span>
+  {% endif %}
+
+  <h3 class="feature-card__title">{{ title }}</h3>
+  {% if body %}<p class="feature-card__body">{{ body }}</p>{% endif %}
+  {{ slot }}
+
+  {% if href %}
+    <span class="feature-card__cta">
+      {% if cta %}{{ cta }}{% else %}{% translate "Read more" %}{% endif %}
+      <span aria-hidden="true">&rarr;</span>
+    </span>
+  {% endif %}
+
+{% if href %}</a>{% else %}</div>{% endif %}

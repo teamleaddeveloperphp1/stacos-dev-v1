@@ -1,0 +1,66 @@
+{% extends "marketing/legal/_base.html" %}
+{% load i18n %}
+
+{% block legal %}
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "The principle" %}</h2>
+  <p>
+    {% blocktranslate %}
+    STACOS holds other organisations' tax records, notices and registers on the
+    same infrastructure as yours. Everything below follows from that: do not use
+    the service in a way that endangers another customer's data, our ability to
+    keep the service running, or anyone's legal position.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "You must not" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Attempt to access data belonging to another customer, or any account you have not been granted access to." %}</li>
+    <li>{% translate "Probe, scan or test the security of the service except under the responsible-disclosure terms on the security page." %}</li>
+    <li>{% translate "Share credentials, or let more people use one account than it was licensed for." %}</li>
+    <li>{% translate "Upload malware, or content you have no right to upload." %}</li>
+    <li>{% translate "Use the service to store data you have no lawful basis to hold." %}</li>
+    <li>{% translate "Impersonate another person or organisation, including when engaging a professional firm or accepting an engagement." %}</li>
+    <li>{% translate "Scrape, resell or redistribute the rule data, the interface or the documentation, or use them to build a competing product." %}</li>
+    <li>{% translate "Send bulk unsolicited messages through any messaging feature we provide." %}</li>
+    <li>{% translate "Place a load on the service, including through the API, that degrades it for others; published rate limits exist for that reason." %}</li>
+    <li>{% translate "Circumvent a limit, quota or billing control, including by creating accounts to extend a trial." %}</li>
+    <li>{% translate "Use the service for anything unlawful under Indian law." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Automated access" %}</h2>
+  <p>
+    {% blocktranslate %}
+    Use the API rather than driving the web interface with a script: it is
+    documented, versioned, authenticated and rate limited, so we can tell your
+    traffic from an attack. Automation that imitates a browser is indistinguishable
+    from abuse and may be blocked without notice.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "What happens if this is breached" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "For most breaches, we contact you, explain what we have seen, and give you a reasonable period to put it right." %}</li>
+    <li>{% translate "Where a breach threatens the security or availability of the service for other customers, we may suspend access immediately and tell you afterwards." %}</li>
+    <li>{% translate "Serious or repeated breaches allow us to terminate the agreement. You still keep your export window unless a law prevents it." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Reporting abuse" %}</h2>
+  <p>
+    {% blocktranslate with email=company.security_email %}
+    If you believe someone is using STACOS in breach of this policy, tell us at
+    {{ email }}. Reports about a security weakness are handled under the
+    responsible-disclosure terms on the security page, and we do not pursue anyone
+    acting in good faith under them.
+    {% endblocktranslate %}
+  </p>
+</section>
+{% endblock %}

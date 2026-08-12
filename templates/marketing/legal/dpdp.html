@@ -1,0 +1,123 @@
+{% extends "marketing/legal/_base.html" %}
+{% load i18n %}
+
+{% block legal %}
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "What this notice is" %}</h2>
+  <p>
+    {% blocktranslate %}
+    This is the notice we give you as a data principal under India's Digital
+    Personal Data Protection Act: what personal data we process about you, on what
+    basis, what you can ask of us, and how to complain if we get it wrong. It sits
+    alongside the privacy policy and repeats nothing that policy already covers.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "When we are the fiduciary, and when we are not" %}</h2>
+  <p>
+    {% blocktranslate %}
+    We are the data fiduciary for the personal data of the people who deal with us
+    directly — account users, website visitors and people who contact us. For the
+    personal data our customers hold in their accounts, the customer is the
+    fiduciary and we are a processor acting on their documented instructions.
+    {% endblocktranslate %}
+  </p>
+  <p>
+    {% blocktranslate %}
+    That distinction decides where a request should go. A request about data
+    inside a customer's account goes to that customer; we will help them answer it
+    and will not act on it independently, because acting would mean disclosing
+    their records to whoever asked.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "The basis on which we process" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Performance of the service you or your organisation asked for — creating your account, authenticating you, billing you." %}</li>
+    <li>{% translate "Compliance with our own legal obligations, including tax record keeping." %}</li>
+    <li>{% translate "Your consent, where we rely on it — for example, marketing email. Consent can be withdrawn at any time, and withdrawing it is as easy as giving it." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Your rights, and how to use them" %}</h2>
+  <ul class="prose__list">
+    <li>
+      {% blocktranslate %}
+      <strong>Access</strong> — a summary of the personal data we hold about you,
+      what we do with it, and who else has received it.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>Correction and completion</strong> — have inaccurate or incomplete
+      data corrected. Most of it you can edit yourself in your account.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>Erasure</strong> — have data deleted where we no longer need it for
+      the purpose it was collected for and no law requires us to keep it.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>Nomination</strong> — nominate someone to exercise these rights on
+      your behalf if you die or become incapacitated.
+      {% endblocktranslate %}
+    </li>
+    <li>
+      {% blocktranslate %}
+      <strong>Grievance redressal</strong> — complain to us first, and to the Data
+      Protection Board if we do not resolve it.
+      {% endblocktranslate %}
+    </li>
+  </ul>
+  <p>
+    {% blocktranslate with email=company.privacy_email %}
+    Send a request to {{ email }} from the address associated with your account.
+    We acknowledge within two working days and respond substantively within
+    thirty. If we need to verify who you are before acting, we will ask for the
+    least we can get away with — never a copy of an identity document unless
+    nothing else will do.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Your duties, stated fairly" %}</h2>
+  <p>
+    {% blocktranslate %}
+    The Act asks data principals not to impersonate anyone, not to suppress
+    material information when providing data, and not to file false or frivolous
+    complaints. We mention it because the Act does, not because we expect a
+    problem.
+    {% endblocktranslate %}
+  </p>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "What we do to make these rights real" %}</h2>
+  <ul class="prose__list">
+    <li>{% translate "Purpose limitation is enforced by the system: engagements are scoped to named entities and categories, so access follows purpose rather than good intentions." %}</li>
+    <li>{% translate "Retention is a schedule per class of record, applied automatically rather than by anyone remembering." %}</li>
+    <li>{% translate "Consent records — who consented, to what, when, and through which interface — are stored and exportable." %}</li>
+    <li>{% translate "Every access to a record is written to an append-only audit trail, so “who saw this” is answerable." %}</li>
+  </ul>
+</section>
+
+<section class="prose__section">
+  <h2 class="prose__heading">{% translate "Grievance officer" %}</h2>
+  <p>
+    {% blocktranslate with officer=company.grievance_officer email=company.grievance_email %}
+    {{ officer }}, {{ email }}. Complaints are acknowledged within two working
+    days and resolved within thirty. If you are not satisfied with the outcome,
+    you may complain to the Data Protection Board of India.
+    {% endblocktranslate %}
+  </p>
+</section>
+{% endblock %}

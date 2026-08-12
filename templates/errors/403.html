@@ -1,0 +1,51 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Not permitted" %} · STACOS{% endblock %}
+
+{% comment %}
+  Shown to a signed-in user who lacks a permission. Deliberately not a redirect
+  to the sign-in page: bouncing someone who is already signed in to a login form
+  is the most confusing thing an application can do, and it teaches users to
+  distrust the session.
+
+  The message names what is missing and who can grant it, because "access
+  denied" with no next step generates a support ticket every single time.
+{% endcomment %}
+{% block main %}
+<div class="empty-state" style="max-width: 34rem; margin: 4rem auto;">
+  <svg class="empty-state__icon" viewBox="0 0 48 48" fill="none" stroke="currentColor"
+       stroke-width="1.5" aria-hidden="true">
+    <rect x="12" y="21" width="24" height="17" rx="3"/>
+    <path d="M17 21v-5a7 7 0 0114 0v5"/>
+  </svg>
+
+  <h1 class="empty-state__title">{% translate "You don't have access to this" %}</h1>
+
+  <p class="empty-state__body">
+    {% if permission %}
+      {% blocktranslate %}
+      Your role in this organisation doesn't include the permission needed for
+      this page. Someone with user-management rights can grant it.
+      {% endblocktranslate %}
+    {% else %}
+      {% translate "Your role in this organisation doesn't include access to this page." %}
+    {% endif %}
+  </p>
+
+  {% if permission %}
+    <p class="text-muted-subtle" style="font-size:.75rem">
+      {% translate "Required permission" %}: <code>{{ permission }}</code>
+    </p>
+  {% endif %}
+
+  <div class="d-flex gap-2 justify-content-center mt-4">
+    <a class="btn btn-primary" href="{% url 'app:dashboard' %}">{% translate "Back to dashboard" %}</a>
+    {% if current_tenant %}
+      <span class="btn btn-outline-secondary disabled">
+        {% blocktranslate with name=current_tenant.name %}Signed in to {{ name }}{% endblocktranslate %}
+      </span>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

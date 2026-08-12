@@ -37,6 +37,11 @@ logger = structlog.get_logger(__name__)
 
 SAFE_REDIRECT_DEFAULT = "/app/"
 
+#: Django's own backend. Named explicitly wherever `login()` is called with a
+#: user that did not come from `authenticate()`, since more than one backend is
+#: configured and Django refuses to guess.
+DJANGO_AUTH_BACKEND = "django.contrib.auth.backends.ModelBackend"
+
 
 def _safe_next(request: HttpRequest) -> str:
     """Only ever redirect within this site.
@@ -197,7 +202,10 @@ def _complete_verification(
 
     user.refresh_from_db()
     if not request.user.is_authenticated:
-        login(request, user)
+        # The backend must be named explicitly. Two are configured (Django's own
+        # and allauth's), and this user came from the database rather than from
+        # `authenticate()`, so it carries no `.backend` for Django to infer.
+        login(request, user, backend=DJANGO_AUTH_BACKEND)
 
     request.session[SESSION_VERIFIED_KEY] = True
     request.session.pop(SESSION_PENDING_KEY, None)

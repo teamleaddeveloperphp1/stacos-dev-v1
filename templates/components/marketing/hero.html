@@ -1,0 +1,24 @@
+<c-vars eyebrow="" title="" lede="" size="" />
+{% comment %}
+  The opening block of a page: one h1, one paragraph of context, and whatever
+  actions the page passes in its slot.
+
+  `size="lg"` is the home page; everything else uses the default, which is
+  smaller on purpose — a subpage that shouts as loudly as the home page makes the
+  site feel like a series of landing pages rather than one product.
+
+  Usage:
+    <c-marketing.hero eyebrow="Product" title="…" lede="…">
+      <a class="btn btn-primary btn-lg" href="…">Start free trial</a>
+    </c-marketing.hero>
+{% endcomment %}
+<section class="hero {% if size == 'lg' %}hero--lg{% endif %}">
+  <div class="container">
+    <div class="hero__inner">
+      {% if eyebrow %}<p class="hero__eyebrow">{{ eyebrow }}</p>{% endif %}
+      <h1 class="hero__title">{{ title }}</h1>
+      {% if lede %}<p class="hero__lede">{{ lede }}</p>{% endif %}
+      {% if slot %}<div class="hero__actions">{{ slot }}</div>{% endif %}
+    </div>
+  </div>
+</section>

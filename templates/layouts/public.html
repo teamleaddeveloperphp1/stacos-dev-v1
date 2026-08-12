@@ -1,73 +1,199 @@
-{% load i18n static %}<!doctype html>
-<html lang="{{ LANGUAGE_CODE|default:'en-in' }}" data-bs-theme="light">
+{% load i18n static marketing %}<!doctype html>
+{% comment %}
+  The public layout.
+
+  Everything a crawler, a link preview or a retrieval system ever sees of STACOS
+  is rendered through this file, so the head is treated as an interface rather
+  than as decoration: title, description, canonical, Open Graph, Twitter card and
+  JSON-LD all come from the view's `meta` object (stacos.marketing.seo.PageMeta)
+  and none of them are hand-typed in a page template.
+
+  Pages that forget to pass `meta` still render — they fall back to the site
+  defaults below — but a test asserts that no routed marketing page does.
+{% endcomment %}
+<html lang="en-in" data-bs-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}STACOS — {% translate "Tax and compliance software" %}{% endblock %}</title>
-  <meta name="description" content="{% block description %}{% translate 'The shared workspace between businesses and the professionals who keep them compliant. Every obligation, every due date, every filing — in one auditable place.' %}{% endblock %}">
+
+  <title>{% block title %}{% if meta %}{{ meta.title }} · STACOS{% else %}STACOS — {% translate "Tax and compliance software" %}{% endif %}{% endblock %}</title>
+  <meta name="description" content="{% block description %}{% if meta %}{{ meta.description }}{% else %}{% translate 'The shared workspace between businesses and the professionals who keep them compliant. Every obligation, every due date, every filing — in one auditable place.' %}{% endif %}{% endblock %}">
+  <meta name="robots" content="{% if meta %}{{ meta.robots }}{% else %}index,follow{% endif %}">
+
+  <link rel="canonical" href="{{ canonical_url|default:request.build_absolute_uri }}">
   <link rel="stylesheet" href="{% static 'css/marketing.css' %}">
-  <link rel="canonical" href="{{ request.build_absolute_uri }}">
-  <meta property="og:title" content="{% block og_title %}STACOS{% endblock %}">
-  <meta property="og:type" content="website">
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+  <link rel="sitemap" type="application/xml" href="{% url 'sitemap' %}">
+
+  {% comment %}
+    Open Graph and Twitter. Same title and description as the page itself —
+    a preview that says something different from the page is a preview people
+    stop trusting.
+  {% endcomment %}
+  <meta property="og:site_name" content="STACOS">
+  <meta property="og:type" content="{% if meta %}{{ meta.og_type }}{% else %}website{% endif %}">
+  <meta property="og:title" content="{% if meta %}{{ meta.title }} · STACOS{% else %}STACOS{% endif %}">
+  <meta property="og:description" content="{% if meta %}{{ meta.description }}{% endif %}">
+  <meta property="og:url" content="{{ canonical_url|default:request.build_absolute_uri }}">
+  <meta property="og:locale" content="en_IN">
+  <meta property="og:image" content="{{ og_image_url|default:'' }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{% if meta %}{{ meta.title }} · STACOS{% else %}STACOS{% endif %}">
+  <meta name="twitter:description" content="{% if meta %}{{ meta.description }}{% endif %}">
+  <meta name="twitter:image" content="{{ og_image_url|default:'' }}">
+  {% if meta.published %}<meta property="article:published_time" content="{{ meta.published }}">{% endif %}
+  {% if meta.modified %}<meta property="article:modified_time" content="{{ meta.modified }}">{% endif %}
+
+  <meta name="theme-color" content="#1d4ed8">
+
+  {% for block in jsonld_blocks %}
+    <script type="application/ld+json">{{ block }}</script>
+  {% endfor %}
+  {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="marketing">
 
-<nav class="navbar navbar-expand-lg border-bottom">
-  <div class="container">
-    <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="/">
-      <span class="app-brand__mark" style="width:26px;height:26px;border-radius:5px;background:var(--stacos-accent);color:#fff;display:grid;place-items:center;font-size:13px">S</span>
-      STACOS
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-            data-bs-target="#public-nav" aria-controls="public-nav"
-            aria-expanded="false" aria-label="{% translate 'Toggle navigation' %}">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="public-nav">
-      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
-        <li class="nav-item"><a class="nav-link" href="{% url 'marketing:pricing' %}">{% translate "Pricing" %}</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'marketing:security' %}">{% translate "Security" %}</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'accounts:login' %}">{% translate "Sign in" %}</a></li>
-        <li class="nav-item">
-          <a class="btn btn-primary btn-sm" href="{% url 'accounts:register' %}">
-            {% translate "Start free trial" %}
-          </a>
-        </li>
-      </ul>
+<a class="skip-link" href="#main">{% translate "Skip to content" %}</a>
+
+<header class="site-header">
+  <nav class="navbar navbar-expand-lg" aria-label="{% translate 'Primary' %}">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="{% url 'marketing:home' %}">
+        <span class="site-header__mark" aria-hidden="true">S</span>
+        <span>STACOS</span>
+      </a>
+
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+              data-bs-target="#public-nav" aria-controls="public-nav"
+              aria-expanded="false" aria-label="{% translate 'Toggle navigation' %}">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="public-nav">
+        <ul class="navbar-nav ms-auto align-items-lg-center">
+          {% for section in nav_sections %}
+            <li class="nav-item dropdown mega">
+              <button class="nav-link dropdown-toggle" type="button"
+                      data-bs-toggle="dropdown" aria-expanded="false">
+                {{ section.label }}
+              </button>
+              {% comment %}
+                Right-aligned deliberately: a 32rem menu opened from the
+                right-most nav item and aligned to its left edge runs off the
+                viewport, and Popper does not shift it back inside a collapsed
+                navbar. Aligning to the toggle's right edge is correct for every
+                item, including the first.
+              {% endcomment %}
+              <div class="dropdown-menu dropdown-menu-end mega__menu">
+                <ul class="mega__grid">
+                  {% for item in section.items %}
+                    <li>
+                      <a class="mega__item" href="{% nav_url item %}">
+                        <span class="mega__label">{{ item.label }}</span>
+                        {% if item.summary %}<span class="mega__summary">{{ item.summary }}</span>{% endif %}
+                      </a>
+                    </li>
+                  {% endfor %}
+                </ul>
+                {% if section.footer_note %}
+                  <a class="mega__footer" href="{% url 'marketing:product' %}">
+                    {{ section.footer_note }} <span aria-hidden="true">&rarr;</span>
+                  </a>
+                {% endif %}
+              </div>
+            </li>
+          {% endfor %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'marketing:pricing' %}">{% translate "Pricing" %}</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'accounts:login' %}">{% translate "Sign in" %}</a></li>
+          <li class="nav-item ms-lg-2">
+            <a class="btn btn-primary btn-sm" href="{% url 'accounts:register' %}">
+              {% translate "Start free trial" %}
+            </a>
+          </li>
+        </ul>
+      </div>
     </div>
+  </nav>
+</header>
+
+{% if messages %}
+  <div class="container mt-3" role="status" aria-live="polite">
+    {% for message in messages %}
+      <div class="alert alert-{% if message.level_tag == 'error' %}danger{% else %}{{ message.level_tag }}{% endif %} mb-2">
+        {{ message }}
+      </div>
+    {% endfor %}
   </div>
-</nav>
+{% endif %}
 
-{% block content %}{% endblock %}
+{% if meta.breadcrumbs %}
+  <nav class="container breadcrumbs" aria-label="{% translate 'Breadcrumb' %}">
+    <ol>
+      {% for crumb in meta.breadcrumbs %}
+        <li>
+          {% if crumb.url and not forloop.last %}
+            <a href="{{ crumb.url }}">{{ crumb.label }}</a>
+          {% else %}
+            <span aria-current="page">{{ crumb.label }}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  </nav>
+{% endif %}
 
-<footer class="border-top py-5 mt-5">
+<main id="main">
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
   <div class="container">
-    <div class="row g-4">
-      <div class="col-12 col-md-4">
-        <div class="fw-bold mb-2">STACOS</div>
-        <p class="text-muted small mb-0">
-          {% translate "Skorydov Tax and Compliance Software. Built for Indian businesses and the professionals who serve them." %}
+    <div class="row g-4 g-lg-5">
+      <div class="col-12 col-lg-3">
+        <div class="d-flex align-items-center gap-2 fw-bold mb-2">
+          <span class="site-header__mark" aria-hidden="true">S</span> STACOS
+        </div>
+        <p class="site-footer__blurb">
+          {% blocktranslate %}
+          Skorydov Tax and Compliance Software. Built for Indian businesses and the
+          professionals who serve them.
+          {% endblocktranslate %}
         </p>
-      </div>
-      <div class="col-6 col-md-2">
-        <div class="fw-semibold small mb-2">{% translate "Product" %}</div>
-        <ul class="list-unstyled small">
-          <li><a class="text-muted text-decoration-none" href="{% url 'marketing:pricing' %}">{% translate "Pricing" %}</a></li>
-          <li><a class="text-muted text-decoration-none" href="{% url 'marketing:security' %}">{% translate "Security" %}</a></li>
+        <address class="site-footer__address">
+          {% for line in company.address_lines %}{{ line }}<br>{% endfor %}
+        </address>
+        <ul class="site-footer__social list-unstyled d-flex gap-3 mt-3 mb-0">
+          <li><a href="{{ company.linkedin_url }}" rel="noopener me">LinkedIn</a></li>
+          <li><a href="{{ company.x_url }}" rel="noopener me">X</a></li>
+          <li><a href="{{ company.youtube_url }}" rel="noopener me">YouTube</a></li>
         </ul>
       </div>
-      <div class="col-6 col-md-2">
-        <div class="fw-semibold small mb-2">{% translate "Account" %}</div>
-        <ul class="list-unstyled small">
-          <li><a class="text-muted text-decoration-none" href="{% url 'accounts:login' %}">{% translate "Sign in" %}</a></li>
-          <li><a class="text-muted text-decoration-none" href="{% url 'accounts:register' %}">{% translate "Create account" %}</a></li>
-        </ul>
-      </div>
+
+      {% for column in footer_sections %}
+        <div class="col-6 col-md-4 col-lg">
+          <h2 class="site-footer__heading">{{ column.label }}</h2>
+          <ul class="list-unstyled site-footer__links">
+            {% for item in column.items %}
+              <li><a href="{% nav_url item %}">{{ item.label }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endfor %}
     </div>
+
     <hr class="my-4">
-    <p class="text-muted small mb-0">
-      {% translate "Data for Indian customers is stored in an Indian region." %}
-    </p>
+
+    <div class="d-flex flex-wrap justify-content-between gap-3 site-footer__base">
+      <p class="mb-0">
+        &copy; {% now "Y" %} {{ company.legal_name }}.
+        {% translate "Data for Indian customers is stored in an Indian region." %}
+      </p>
+      <p class="mb-0">
+        <a href="mailto:{{ company.support_email }}">{{ company.support_email }}</a>
+        &nbsp;·&nbsp;
+        <a href="{% url 'marketing:contact' %}">{% translate "Contact" %}</a>
+      </p>
+    </div>
   </div>
 </footer>
 

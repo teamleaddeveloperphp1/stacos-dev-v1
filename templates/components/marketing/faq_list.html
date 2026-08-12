@@ -1,0 +1,22 @@
+<c-vars faqs="" />
+{% comment %}
+  A list of questions and answers, as native <details> elements.
+
+  No JavaScript: <details> is keyboard operable, announced correctly by screen
+  readers, searchable with the browser's own find-in-page in every current
+  browser, and printable. An Alpine accordion would be more code and less
+  accessible.
+
+  The matching FAQPage JSON-LD is emitted by the view, not here — structured data
+  is built in Python so it is validated once rather than hand-typed per page.
+
+  Usage:  <c-marketing.faq-list :faqs="faqs" />
+{% endcomment %}
+<div class="faq-list">
+  {% for faq in faqs %}
+    <details class="faq-list__item" name="faq">
+      <summary class="faq-list__question">{{ faq.question }}</summary>
+      <div class="faq-list__answer"><p>{{ faq.answer }}</p></div>
+    </details>
+  {% endfor %}
+</div>

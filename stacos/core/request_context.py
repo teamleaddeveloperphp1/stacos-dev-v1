@@ -20,7 +20,30 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from uuid import UUID
 
-__all__ = ["RequestMeta", "bind_request_meta", "clear_request_meta", "current_request_meta"]
+from django.http import HttpRequest
+
+__all__ = [
+    "RequestMeta",
+    "bind_request_meta",
+    "clear_request_meta",
+    "client_ip",
+    "current_request_meta",
+]
+
+
+def client_ip(request: HttpRequest) -> str | None:
+    """Best-effort client IP address.
+
+    ``X-Forwarded-For`` is trusted only because the deployment terminates TLS at
+    a known proxy; the left-most entry is the original client. Lives here rather
+    than in the middleware because rate limiting and audit both need it, and
+    neither should import a middleware module to get it.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()[:45]
+    remote: str | None = request.META.get("REMOTE_ADDR")
+    return remote
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,7 +13,7 @@ Read this before writing code. These are the conventions that, if broken, cost f
 
 Never call `python manage.py migrate` directly: the app connects as `stacos_app`, which does not own the schema. `tasks.ps1 migrate` swaps in the owner role.
 
-## The five rules
+## The six rules
 
 ### 1. Never write an unscoped query
 
@@ -56,7 +56,15 @@ No `if industry == "pharma"`, no hardcoded definition codes, no `financial_year_
 
 Core tables carry no India-specific column names. Tax IDs go in `EntityRegistration {type, value, jurisdiction, valid_from, valid_to}` with per-type validators.
 
-### 5. Audit every state change
+### 5. The second auth channel is WhatsApp, not SMS
+
+Verification codes go by **email and WhatsApp**, together, in one step. `stacos/accounts/whatsapp.py` owns delivery; `WHATSAPP_PROVIDER=console` prints codes to the terminal in development.
+
+Business-initiated WhatsApp messages need templates pre-approved by Meta, and one-time passcodes must use the **AUTHENTICATION** category. Approval takes days to weeks — treat it like DLT registration for SMS and start it early.
+
+A number with no WhatsApp account cannot be reached. `WhatsAppResult.not_on_whatsapp` reports that separately from a delivery failure, so a fallback can be added without changing callers. No fallback exists yet.
+
+### 6. Audit every state change
 
 `record_event()` on every transition, with actor, timestamp, IP, and before/after. `AuditLog` is append-only — a database trigger denies `UPDATE` and `DELETE`. This is what a business shows a regulator during due diligence; it is a feature, not plumbing.
 

@@ -1,0 +1,59 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+<article class="section">
+  <div class="container container--reading">
+    <p class="guide-header__meta">
+      <span class="guide-card__topic">{{ guide.topic }}</span>
+      <span aria-hidden="true">·</span>
+      <span>{% blocktranslate with minutes=guide.minutes %}{{ minutes }} min read{% endblocktranslate %}</span>
+      <span aria-hidden="true">·</span>
+      <span>
+        {% blocktranslate with updated=guide.updated|date:"j F Y" %}Updated {{ updated }}{% endblocktranslate %}
+      </span>
+    </p>
+
+    <h1 class="hero__title mb-3">{{ guide.title }}</h1>
+    <p class="hero__lede mb-5">{{ guide.summary }}</p>
+
+    <c-marketing.prose :sections="guide.sections" />
+
+    {% if guide.faqs %}
+      <div class="mt-5">
+        <c-marketing.section-head title="{% translate 'Related questions' %}" level="3" />
+        <c-marketing.faq-list :faqs="guide.faqs" />
+      </div>
+    {% endif %}
+
+    <div class="callout mt-5">
+      <strong>{% translate "How STACOS handles this" %}</strong>
+      <p class="mb-3 mt-2">
+        {% blocktranslate %}
+        Everything described above is how the product works, not an aspiration.
+        The fastest way to check that claim is to create an account, answer the
+        profile for one of your own entities, and look at the calendar it produces.
+        {% endblocktranslate %}
+      </p>
+      <a class="btn btn-primary" href="{% url 'accounts:register' %}">{% translate "Start free trial" %}</a>
+      <a class="btn btn-outline-secondary" href="{% url 'marketing:product' %}">{% translate "See the platform" %}</a>
+    </div>
+  </div>
+</article>
+
+{% if related %}
+  <section class="section section--sunken">
+    <div class="container">
+      <c-marketing.section-head title="{% translate 'Read next' %}" />
+      <div class="row g-4">
+        {% for other in related %}
+          <div class="col-12 col-md-6"><c-marketing.guide-card :guide="other" /></div>
+        {% endfor %}
+      </div>
+      <p class="mt-4">
+        <a href="{% url 'marketing:resources' %}">{% translate "All guides" %} <span aria-hidden="true">&rarr;</span></a>
+      </p>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+<section class="section">
+  <div class="container container--reading">
+    <h1 class="hero__title mb-3">{% translate "Sub-processors" %}</h1>
+    <p class="hero__lede mb-4">
+      {% blocktranslate %}
+      These are the third parties that process customer data on our behalf, what
+      each one does, and where it is located. We publish the list because a data
+      processing addendum that names no one is not worth signing.
+      {% endblocktranslate %}
+    </p>
+
+    <div style="overflow-x:auto">
+      <table class="table align-middle comparison-table">
+        <thead>
+          <tr>
+            <th>{% translate "Category" %}</th>
+            <th>{% translate "Purpose" %}</th>
+            <th>{% translate "Location" %}</th>
+            <th>{% translate "Data involved" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for category, purpose, location, data in subprocessors %}
+            <tr>
+              <th scope="row" class="fw-normal">{{ category }}</th>
+              <td>{{ purpose }}</td>
+              <td>{{ location }}</td>
+              <td>{{ data }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose mt-5">
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Changes to this list" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Customers on an annual or enterprise agreement are notified at least
+          thirty days before a new sub-processor begins processing customer data,
+          and may object in writing during that period. Vendors are named by
+          category here; the specific vendor names, contract terms and locations are
+          provided in the sub-processor annexe on request under a mutual
+          non-disclosure agreement.
+          {% endblocktranslate %}
+        </p>
+      </section>
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "Transfers outside India" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Customer data is stored in an Indian region. The single exception is
+          international card payments, where billing details are processed by a
+          payment provider outside India because that is where the card networks
+          settle. No compliance record, document or audit row leaves the country.
+          {% endblocktranslate %}
+        </p>
+      </section>
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "How each one is assessed" %}</h2>
+        <p>
+          {% blocktranslate %}
+          Before a vendor processes customer data we assess what it will receive,
+          whether that is the minimum it needs, where it stores it, how it is deleted
+          on termination, and what its own breach notification commitment is. The
+          answers are held with the contract and are available to enterprise
+          customers under the addendum.
+          {% endblocktranslate %}
+        </p>
+      </section>
+    </div>
+
+    <p class="mt-5">
+      <a href="{% url 'marketing:legal' 'data-processing' %}">{% translate "Data processing addendum" %}</a>
+      &nbsp;·&nbsp;
+      <a href="{% url 'marketing:security' %}">{% translate "Security and privacy" %}</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

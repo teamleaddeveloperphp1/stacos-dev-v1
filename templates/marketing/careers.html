@@ -1,0 +1,81 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+
+<c-marketing.hero
+  eyebrow="{% translate 'Careers' %}"
+  title="{% translate 'Small team, unglamorous problem, real consequences.' %}"
+  lede="{% translate 'A missed deadline here costs a real business real money, and a leaked row would end the product. That constraint is what makes the engineering interesting.' %}" />
+
+<section class="section">
+  <div class="container">
+    <c-marketing.section-head title="{% translate 'Open roles' %}" />
+    <div class="role-list">
+      {% for title, team, location, description in roles %}
+        <article class="role">
+          <div class="role__head">
+            <h3 class="role__title">{{ title }}</h3>
+            <p class="role__meta">{{ team }} <span aria-hidden="true">·</span> {{ location }}</p>
+          </div>
+          <p class="role__body">{{ description }}</p>
+          <a class="btn btn-outline-secondary" href="mailto:{{ company.careers_email }}?subject={{ title|urlencode }}">
+            {% translate "Apply by email" %}
+          </a>
+        </article>
+      {% empty %}
+        <c-empty-state
+          title="{% translate 'No open roles right now' %}"
+          body="{% translate 'We still read speculative applications, and we keep them for six months.' %}">
+          <a class="btn btn-primary" href="mailto:{{ company.careers_email }}">{% translate "Write to us" %}</a>
+        </c-empty-state>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section section--sunken">
+  <div class="container container--reading">
+    <c-marketing.section-head title="{% translate 'How hiring goes' %}" />
+    <ol class="steps steps--vertical">
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "A written exchange" %}</h3>
+        <p>{% translate "Two or three questions about work you have actually done. No puzzles." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "A paid exercise" %}</h3>
+        <p>{% translate "Scoped to about four hours, on a problem close to what the role does. We pay for your time whether or not we make an offer." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "Two conversations" %}</h3>
+        <p>{% translate "One about the craft, one about how you like to work. You meet the people you would work with, not a panel." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "A decision, quickly" %}</h3>
+        <p>{% translate "Within a week of the last conversation, either way, with a reason." %}</p>
+      </li>
+    </ol>
+
+    <div class="prose mt-5">
+      <section class="prose__section">
+        <h2 class="prose__heading">{% translate "What we offer" %}</h2>
+        <ul class="prose__list">
+          <li>{% translate "Remote within India, with the Mumbai office for anyone who wants it." %}</li>
+          <li>{% translate "Health cover for you and your immediate family." %}</li>
+          <li>{% translate "A hardware budget, and a real one for books and courses." %}</li>
+          <li>{% translate "Time to fix things properly — the codebase is the product." %}</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'Nothing fits, but you are interested?' %}"
+  body="{% translate 'Tell us what you would want to work on. We keep speculative applications for six months.' %}"
+  primary_label="{% translate 'Email the team' %}"
+  primary_url="mailto:{{ company.careers_email }}"
+  secondary_label="{% translate 'About STACOS' %}"
+  secondary_url="{% url 'marketing:about' %}" />
+
+{% endblock %}

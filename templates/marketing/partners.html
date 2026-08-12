@@ -1,0 +1,85 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+
+<c-marketing.hero
+  eyebrow="{% translate 'Partners' %}"
+  title="{% translate 'Compliance is a relationship business. So is this.' %}"
+  lede="{% translate 'Most of our customers arrive because a professional they trust brought them. Three ways to work with us, with terms written down rather than negotiated per deal.' %}">
+  <a class="btn btn-primary btn-lg" href="{% url 'marketing:contact' %}">{% translate "Talk to the partner team" %}</a>
+</c-marketing.hero>
+
+<section class="section">
+  <div class="container">
+    <div class="row g-4">
+      {% for name, description, benefits in tracks %}
+        <div class="col-12 col-lg-4">
+          <div class="track-card">
+            <h2 class="track-card__title">{{ name }}</h2>
+            <p class="track-card__body">{{ description }}</p>
+            <ul class="tick-list">
+              {% for benefit in benefits %}<li>{{ benefit }}</li>{% endfor %}
+            </ul>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section section--sunken">
+  <div class="container container--reading">
+    <c-marketing.section-head
+      title="{% translate 'What we will not do' %}"
+      lede="{% translate 'Worth stating plainly, because it is the question every professional firm asks second.' %}" />
+    <div class="prose">
+      <p>
+        {% blocktranslate %}
+        We do not sell compliance services, and we do not intend to. STACOS is
+        software; the professional advice is yours. We will not approach your
+        clients to sell them anything, and a client who signs up independently is
+        never told who else works with us.
+        {% endblocktranslate %}
+      </p>
+      <p>
+        {% blocktranslate %}
+        Client data belongs to the client. If a client leaves your firm, they keep
+        their records and you keep yours; neither of you loses history because the
+        relationship changed. That protects the client, and in the long run it
+        protects you too.
+        {% endblocktranslate %}
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container container--reading">
+    <c-marketing.section-head title="{% translate 'How a partnership starts' %}" />
+    <ol class="steps steps--vertical">
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "A conversation" %}</h3>
+        <p>{% translate "Thirty minutes on what you do, how many entities you handle and where the work currently leaks." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "A pilot" %}</h3>
+        <p>{% translate "Two or three of your clients, onboarded with us alongside you, so the terms are argued over real work rather than a slide." %}</p>
+      </li>
+      <li class="steps__item">
+        <h3 class="steps__title">{% translate "Terms" %}</h3>
+        <p>{% translate "Written margin, written support route, written escalation contact. Nothing that depends on remembering a conversation." %}</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'Bring one client and see how it goes.' %}"
+  body="{% translate 'Partner conversations start with a pilot, not a contract.' %}"
+  primary_label="{% translate 'Contact the partner team' %}"
+  primary_url="{% url 'marketing:contact' %}"
+  secondary_label="{% translate 'See practice features' %}"
+  secondary_url="{% url 'marketing:audience' 'practice' %}" />
+
+{% endblock %}

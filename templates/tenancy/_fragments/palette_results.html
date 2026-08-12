@@ -1,0 +1,64 @@
+{% load i18n %}
+{% comment %}
+  Command-palette results.
+
+  Every row carries `data-palette-item` so the keyboard handler can find them
+  after an HTMX swap, and `hx-get` targeting #main so choosing one swaps the
+  content region instead of reloading the page. A full reload here would be
+  slower and would look, from the entities page, exactly like nothing happening.
+{% endcomment %}
+
+{% if destinations %}
+  <div class="palette__group-label">{% translate "Jump to" %}</div>
+  {% for destination in destinations %}
+    <a class="palette__item"
+       data-palette-item
+       href="{{ destination.url }}"
+       hx-get="{{ destination.url }}"
+       hx-target="#main"
+       hx-swap="morph:innerHTML"
+       hx-push-url="true"
+       @click="hide()"
+       role="option"
+       aria-selected="false">
+      <c-icon :name="destination.icon" size="14" />
+      <span>{{ destination.label }}</span>
+      {% if destination.keys %}
+        <span class="palette__hint">
+          {% for key in destination.keys.split %}<kbd>{{ key }}</kbd>{% endfor %}
+        </span>
+      {% endif %}
+    </a>
+  {% endfor %}
+{% endif %}
+
+{% if entities %}
+  <div class="palette__group-label">{% translate "Entities" %}</div>
+  {% for entity in entities %}
+    <a class="palette__item"
+       data-palette-item
+       href="{% url 'app:entity_detail' entity.pk %}"
+       hx-get="{% url 'app:entity_detail' entity.pk %}"
+       hx-target="#main"
+       hx-swap="morph:innerHTML"
+       hx-push-url="true"
+       @click="hide()"
+       role="option"
+       aria-selected="false">
+      <span class="avatar">{{ entity.name|slice:":1"|upper }}</span>
+      <span>
+        {{ entity.name }}
+        <span class="d-block text-muted" style="font-size:.75rem">
+          {{ entity.entity_type }}{% if entity.registered_office_state %} · {{ entity.registered_office_state }}{% endif %}
+        </span>
+      </span>
+      {% if entity.short_code %}<span class="palette__hint">{{ entity.short_code }}</span>{% endif %}
+    </a>
+  {% endfor %}
+{% endif %}
+
+{% if query and not entities and not destinations %}
+  <div class="p-3 text-muted small">
+    {% blocktranslate %}Nothing matches “{{ query }}”.{% endblocktranslate %}
+  </div>
+{% endif %}

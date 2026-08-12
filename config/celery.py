@@ -71,8 +71,8 @@ app.conf.beat_schedule = {
         "task": "stacos.accounts.purge_expired_trusted_devices",
         "schedule": crontab(hour=3, minute=0),
     },
-    "reset-daily-sms-spend": {
-        "task": "stacos.accounts.roll_sms_spend_ledger",
+    "reset-daily-message-spend": {
+        "task": "stacos.accounts.roll_message_spend_ledger",
         "schedule": crontab(hour=0, minute=5),
     },
 }

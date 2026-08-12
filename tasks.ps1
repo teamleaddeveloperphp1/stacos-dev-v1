@@ -18,9 +18,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('run', 'migrate', 'makemigrations', 'shell', 'test', 'lint', 'fmt',
-                 'types', 'check', 'worker', 'beat', 'flower', 'css', 'watch',
-                 'seed', 'superuser', 'help')]
+    [ValidateSet('run', 'start', 'stop', 'status', 'migrate', 'makemigrations', 'shell',
+                 'test', 'lint', 'fmt', 'types', 'check', 'worker', 'beat', 'flower',
+                 'css', 'watch', 'seed', 'superuser', 'help')]
     [string]$Task = 'help',
 
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -52,6 +52,12 @@ switch ($Task) {
     'run' {
         uv run python manage.py runserver 0.0.0.0:8000 @Rest
     }
+
+    # `run` is the server alone, in this terminal. `start` is the whole stack --
+    # server, workers, beat, flower, asset watchers -- detached, logging to .run\logs.
+    'start'  { & (Join-Path $PSScriptRoot 'start.ps1') @Rest }
+    'stop'   { & (Join-Path $PSScriptRoot 'stop.ps1') @Rest }
+    'status' { & (Join-Path $PSScriptRoot 'start.ps1') -Status }
 
     'migrate' {
         # Migrations run as the schema owner, not as the runtime role.
@@ -113,7 +119,13 @@ STACOS task runner
     uv sync                         Install Python dependencies
     npm install                     Install Sass/esbuild + Bootstrap/HTMX/Alpine
 
-  Daily
+  Whole stack (detached; logs in .run\logs)
+    .\start.ps1                     web, sse, worker, beat, flower, assets
+    .\start.ps1 -Status             what is running
+    .\stop.ps1                      stop it all
+    (.\tasks.ps1 start/stop/status are aliases; extra arguments pass through)
+
+  One process at a time, in this terminal
     .\tasks.ps1 run                 Django dev server on :8000
     .\tasks.ps1 watch               Rebuild CSS/JS on change
     .\tasks.ps1 worker              Celery worker (--pool=solo, Windows)

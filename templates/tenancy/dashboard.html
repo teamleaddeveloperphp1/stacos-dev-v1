@@ -3,7 +3,7 @@
 
 {% block title %}{% translate "Dashboard" %} · STACOS{% endblock %}
 
-{#
+{% comment %}
   The dual-render pattern, stated once:
 
     * this page template extends the shell and its {% block main %} contains
@@ -12,5 +12,5 @@
 
   Because both paths render the same partial, a deep link and a boosted
   navigation can never drift apart.
-#}
+{% endcomment %}
 {% block main %}{% include "tenancy/_fragments/dashboard_body.html" %}{% endblock %}

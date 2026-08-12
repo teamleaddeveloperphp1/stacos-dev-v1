@@ -1,0 +1,85 @@
+{% extends "layouts/public.html" %}
+{% load i18n crispy_forms_tags %}
+
+{% comment %}
+  The only unauthenticated write on the public surface.
+
+  crispy renders the fields — the form owns its own layout — and everything
+  around them is ordinary markup. The honeypot and timestamp fields are hidden
+  widgets inside the crispy layout, so they travel with the form rather than
+  being remembered here.
+{% endcomment %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <div class="row g-5">
+      <div class="col-12 col-lg-7">
+        <h1 class="hero__title mb-3">{% translate "Contact us" %}</h1>
+        <p class="hero__lede mb-4">
+          {% translate "One form, routed to the inbox that can actually answer. Tell us what you are trying to do rather than which feature you want — it produces a better reply." %}
+        </p>
+
+        {% if request.GET.sent %}
+          <div class="callout callout--success" role="status" aria-live="polite">
+            <strong>{% translate "Your enquiry is with us." %}</strong>
+            <p class="mb-0 mt-2">
+              {% blocktranslate with hours=company.support_hours %}
+              We reply on working days — {{ hours }} — usually within one.
+              {% endblocktranslate %}
+            </p>
+          </div>
+        {% endif %}
+
+        <div class="contact-form mt-4">
+          {% crispy form %}
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-5">
+        <div class="contact-aside">
+          <h2 class="h5">{% translate "Direct routes" %}</h2>
+          <dl class="contact-list">
+            <dt>{% translate "Sales and demonstrations" %}</dt>
+            <dd><a href="mailto:{{ company.sales_email }}">{{ company.sales_email }}</a></dd>
+
+            <dt>{% translate "Customer support" %}</dt>
+            <dd>
+              <a href="mailto:{{ company.support_email }}">{{ company.support_email }}</a><br>
+              <span class="text-muted small">
+                {% translate "Existing customers: raising it from inside the app attaches your account context automatically." %}
+              </span>
+            </dd>
+
+            <dt>{% translate "Security and procurement" %}</dt>
+            <dd><a href="mailto:{{ company.security_email }}">{{ company.security_email }}</a></dd>
+
+            <dt>{% translate "Privacy and data requests" %}</dt>
+            <dd><a href="mailto:{{ company.privacy_email }}">{{ company.privacy_email }}</a></dd>
+
+            <dt>{% translate "Partnerships" %}</dt>
+            <dd><a href="mailto:{{ company.partners_email }}">{{ company.partners_email }}</a></dd>
+
+            <dt>{% translate "Grievance officer" %}</dt>
+            <dd>
+              {{ company.grievance_officer }}<br>
+              <a href="mailto:{{ company.grievance_email }}">{{ company.grievance_email }}</a>
+            </dd>
+          </dl>
+
+          <h2 class="h5 mt-4">{% translate "Registered office" %}</h2>
+          <address class="mb-0">
+            {% for line in company.address_lines %}{{ line }}<br>{% endfor %}
+          </address>
+
+          <p class="text-muted small mt-4 mb-0">
+            {% blocktranslate with hours=company.support_hours %}
+            Support hours: {{ hours }}.
+            {% endblocktranslate %}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

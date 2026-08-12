@@ -28,6 +28,7 @@ the narrower one.
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 from django.conf import settings
@@ -39,6 +40,7 @@ __all__ = [
     "disable_rls_statements",
     "enable_rls_statements",
     "iter_scoped_models",
+    "rls_bootstrap",
     "set_rls_bypass",
     "table_has_rls",
 ]
@@ -97,35 +99,62 @@ def iter_scoped_models() -> Iterator[type[models.Model]]:
 # ---------------------------------------------------------------------------
 
 
-def apply_rls_tenants(tenant_ids: Iterable[UUID]) -> None:
-    """Publish the readable tenant set for the current transaction.
+def _set_guc(name: str, value: str) -> None:
+    """Set a PostgreSQL setting, transaction-local where that is meaningful.
 
-    ``set_config(..., is_local => true)`` is used rather than ``SET LOCAL``
-    because it accepts a bound parameter. Outside a transaction the setting
-    applies only to the implicit single-statement transaction and is immediately
-    discarded — so callers must already be inside ``transaction.atomic()``.
+    ``set_config`` is used rather than ``SET LOCAL`` because it accepts a bound
+    parameter. Its third argument decides the lifetime, and the right answer
+    depends on where we are:
+
+    * **Inside a transaction** (every request, every Celery task) — local, so the
+      value cannot outlive the work or leak to the next user of a pooled
+      connection. This is the only mode production ever uses.
+    * **Outside one** (management commands, some tests) — session-level, because
+      a local setting outside a transaction applies to the implicit
+      single-statement transaction and is discarded before the next statement
+      runs, which would leave the caller with RLS silently unset.
     """
     if not getattr(settings, "STACOS_RLS_ENABLED", True):
         return
-    value = ",".join(sorted(str(t) for t in tenant_ids))
     with connection.cursor() as cursor:
-        cursor.execute(f"SELECT set_config('{TENANT_GUC}', %s, true)", [value])
+        cursor.execute("SELECT set_config(%s, %s, %s)", [name, value, connection.in_atomic_block])
+
+
+def apply_rls_tenants(tenant_ids: Iterable[UUID]) -> None:
+    """Publish the readable tenant set for the current scope."""
+    _set_guc(TENANT_GUC, ",".join(sorted(str(t) for t in tenant_ids)))
 
 
 def clear_rls_tenants() -> None:
     """Reset the tenant set, so subsequent queries see nothing."""
-    if not getattr(settings, "STACOS_RLS_ENABLED", True):
-        return
-    with connection.cursor() as cursor:
-        cursor.execute(f"SELECT set_config('{TENANT_GUC}', '', true)")
+    _set_guc(TENANT_GUC, "")
 
 
 def set_rls_bypass(enabled: bool) -> None:
-    """Turn the platform bypass on or off for the current transaction."""
-    if not getattr(settings, "STACOS_RLS_ENABLED", True):
-        return
-    with connection.cursor() as cursor:
-        cursor.execute(f"SELECT set_config('{BYPASS_GUC}', %s, true)", ["on" if enabled else "off"])
+    """Turn the platform bypass on or off."""
+    _set_guc(BYPASS_GUC, "on" if enabled else "off")
+
+
+@contextmanager
+def rls_bootstrap() -> Iterator[None]:
+    """Briefly lift RLS for the queries that *establish* the tenant scope.
+
+    There is a genuine chicken-and-egg here. "Which tenants may this user read?"
+    is answered by reading their memberships and engagements — but those tables
+    are themselves protected by RLS, and nothing is bound yet. Without this, a
+    signed-in user resolves to an empty scope and sees nothing at all.
+
+    Deliberately narrow: it covers two anchored lookups, both filtered by the
+    authenticated user, and closes immediately afterwards. It is the only place
+    in the request path that lifts RLS.
+
+    Requires an open transaction, since the setting is transaction-local.
+    """
+    set_rls_bypass(True)
+    try:
+        yield
+    finally:
+        set_rls_bypass(False)
 
 
 def table_has_rls(table: str) -> tuple[bool, bool, bool]:

@@ -46,6 +46,10 @@ DJANGO_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.postgres",
     "django.contrib.humanize",
+    # Serves /sitemap.xml for the public surface. No django.contrib.sites: the
+    # framework falls back to the requesting host, which is what we want for a
+    # single-domain deployment.
+    "django.contrib.sitemaps",
 ]
 
 THIRD_PARTY_APPS = [
@@ -106,6 +110,9 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django_htmx.middleware.HtmxMiddleware",
     "stacos.core.middleware.ScopeMiddleware",
+    # Innermost, so it is the first to see an exception raised by a view and can
+    # turn an authorisation failure into a redirect or a 403 rather than a 500.
+    "stacos.core.middleware.AuthorizationExceptionMiddleware",
     "waffle.middleware.WaffleMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -129,6 +136,9 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "stacos.core.context_processors.stacos_context",
+                # Public navigation and footer. Module constants only — no
+                # queries, so it is cheap enough to run on every render.
+                "stacos.marketing.context_processors.marketing_chrome",
             ],
             # django-cotton's loader must precede the app-directories loader.
             # In production these are wrapped by the cached loader (see prod.py).
@@ -272,21 +282,33 @@ STACOS_OTP = {
     "RESEND_BACKOFF_SECONDS": [30, 60, 120, 300, 600],
 }
 
+#: The channel the phone-side code is delivered over. WhatsApp, not SMS.
+OTP_PHONE_CHANNEL = "whatsapp"
+
 TRUSTED_DEVICE_DAYS = env.int("TRUSTED_DEVICE_DAYS", default=30)
 TRUSTED_DEVICE_COOKIE = "stacos_td"
 STEP_UP_MAX_AGE_SECONDS = env.int("STEP_UP_MAX_AGE_SECONDS", default=600)
 
-# --- SMS ----------------------------------------------------------------------
-# India requires TRAI DLT-registered sender IDs and content templates; traffic
-# without a registered template ID is dropped by the operator, so template_id is
-# part of the provider interface rather than a vendor detail.
-SMS_PROVIDER = env("SMS_PROVIDER", default="console")
-SMS_SENDER_ID = env("SMS_SENDER_ID", default="STACOS")
-SMS_DAILY_SPEND_CAP_UNITS = env.int("SMS_DAILY_SPEND_CAP_UNITS", default=1000)
-MSG91_AUTH_KEY = env("MSG91_AUTH_KEY", default="")
-TWILIO_ACCOUNT_SID = env("TWILIO_ACCOUNT_SID", default="")
-TWILIO_AUTH_TOKEN = env("TWILIO_AUTH_TOKEN", default="")
-TWILIO_FROM_NUMBER = env("TWILIO_FROM_NUMBER", default="")
+# --- WhatsApp -----------------------------------------------------------------
+# The second verification channel. WhatsApp rather than SMS because for Indian
+# businesses it is the channel people actually read.
+#
+# `TEMPLATE_APPROVAL` is not a setting, it is a reminder: business-initiated
+# messages require templates pre-approved by Meta, one-time passcodes must use
+# the AUTHENTICATION category, and approval takes days to weeks per WhatsApp
+# Business Account. It blocks exactly the way DLT registration blocks SMS.
+WHATSAPP = {
+    "PROVIDER": env("WHATSAPP_PROVIDER", default="console"),
+    "ACCESS_TOKEN": env("WHATSAPP_ACCESS_TOKEN", default=""),
+    "PHONE_NUMBER_ID": env("WHATSAPP_PHONE_NUMBER_ID", default=""),
+    "BUSINESS_ACCOUNT_ID": env("WHATSAPP_BUSINESS_ACCOUNT_ID", default=""),
+    "API_VERSION": env("WHATSAPP_API_VERSION", default="v21.0"),
+    # Indicative per-message cost for an authentication conversation, used by the
+    # daily spend cap. Reconciled against Meta's billing webhook.
+    "COST_PER_MESSAGE": env("WHATSAPP_COST_PER_MESSAGE", default="0.125"),
+    "DAILY_SPEND_CAP_UNITS": env.int("WHATSAPP_DAILY_SPEND_CAP_UNITS", default=1000),
+}
+
 
 # ---------------------------------------------------------------------------
 # Internationalisation
@@ -378,6 +400,27 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="STACOS <no-reply@stacos.local>")
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# ---------------------------------------------------------------------------
+# Marketing surface
+#
+# Indexing is opt-in per deployment. A staging copy of the site indexed by a
+# search engine competes with production for its own keywords and leaks
+# unreleased copy, so the default is "no" and production says otherwise.
+# ---------------------------------------------------------------------------
+MARKETING_ALLOW_INDEXING = env.bool("MARKETING_ALLOW_INDEXING", default=False)
+
+#: Enquiry routing. Keyed by the topic a visitor chooses on the contact form;
+#: `default` catches anything unrecognised, including a tampered payload.
+MARKETING_ENQUIRY_INBOX = {
+    "default": env("MARKETING_INBOX_SALES", default="sales@stacos.local"),
+    "sales": env("MARKETING_INBOX_SALES", default="sales@stacos.local"),
+    "demo": env("MARKETING_INBOX_SALES", default="sales@stacos.local"),
+    "support": env("MARKETING_INBOX_SUPPORT", default="support@stacos.local"),
+    "security": env("MARKETING_INBOX_SECURITY", default="security@stacos.local"),
+    "partner": env("MARKETING_INBOX_PARTNERS", default="partners@stacos.local"),
+    "press": env("MARKETING_INBOX_PRESS", default="press@stacos.local"),
+}
 
 # ---------------------------------------------------------------------------
 # Feature flags

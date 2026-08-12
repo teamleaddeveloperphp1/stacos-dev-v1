@@ -1,0 +1,19 @@
+<c-vars guide="" />
+{% load i18n %}
+{% comment %}
+  A guide, as it appears in a list. Shows the topic and the reading time up
+  front, because the first thing a reader decides is whether this is for them
+  and whether they have time for it now.
+
+  Usage:  <c-marketing.guide-card :guide="guide" />
+{% endcomment %}
+<a class="guide-card" href="{% url 'marketing:guide' guide.slug %}">
+  <span class="guide-card__meta">
+    <span class="guide-card__topic">{{ guide.topic }}</span>
+    <span aria-hidden="true">·</span>
+    <span>{% blocktranslate with minutes=guide.minutes %}{{ minutes }} min read{% endblocktranslate %}</span>
+  </span>
+  <h3 class="guide-card__title">{{ guide.title }}</h3>
+  <p class="guide-card__summary">{{ guide.summary }}</p>
+  <span class="guide-card__cta">{% translate "Read the guide" %} <span aria-hidden="true">&rarr;</span></span>
+</a>

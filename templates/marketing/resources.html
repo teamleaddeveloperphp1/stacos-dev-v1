@@ -1,0 +1,59 @@
+{% extends "layouts/public.html" %}
+{% load i18n %}
+
+{% block content %}
+
+<c-marketing.hero
+  eyebrow="{% translate 'Guides' %}"
+  title="{% translate 'Written for the person who has to do this' %}"
+  lede="{% translate 'Not thought leadership. Operational writing about how compliance work actually goes wrong, and what a system has to do to stop it — useful whether or not you ever use STACOS.' %}" />
+
+<section class="section">
+  <div class="container">
+    <p class="topic-list">
+      {% for topic in topics %}<span class="topic-list__item">{{ topic }}</span>{% endfor %}
+    </p>
+
+    <div class="row g-4 mt-1">
+      {% for guide in guides %}
+        <div class="col-12 col-md-6 col-lg-4">
+          <c-marketing.guide-card :guide="guide" />
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="section section--sunken">
+  <div class="container">
+    <div class="row g-4">
+      <div class="col-12 col-md-6 col-lg-4">
+        <c-marketing.feature-card
+          icon="check"
+          title="{% translate 'Frequently asked questions' %}"
+          body="{% translate 'What the product does and does not do, how access works, and what happens to your data.' %}"
+          href="{% url 'marketing:faq' %}" />
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <c-marketing.feature-card
+          icon="shield"
+          title="{% translate 'Security and privacy' %}"
+          body="{% translate 'The isolation model, the authentication requirements and the audit guarantee, in the detail procurement asks for.' %}"
+          href="{% url 'marketing:security' %}" />
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <c-marketing.feature-card
+          icon="history"
+          title="{% translate 'What’s new' %}"
+          body="{% translate 'Everything that has shipped, newest first.' %}"
+          href="{% url 'marketing:changelog' %}" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<c-marketing.cta-band
+  title="{% translate 'Reading about it is slower than trying it.' %}"
+  body="{% translate 'Fourteen days, one entity, no card.' %}" />
+
+{% endblock %}

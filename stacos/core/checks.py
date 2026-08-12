@@ -51,7 +51,7 @@ GLOBAL_MODEL_ALLOWLIST: dict[str, str] = {
     "accounts.PendingVerification": "Pre-authentication; no tenant exists yet.",
     "accounts.TrustedDevice": "Belongs to a user across all their tenants.",
     "accounts.UserSession": "Belongs to a user across all their tenants.",
-    "accounts.SmsSpendLedger": "Platform-level cost control.",
+    "accounts.MessageSpendLedger": "Platform-level cost control.",
     # The tenant table cannot be scoped by itself.
     "tenancy.Tenant": "Is the tenant.",
     "tenancy.Role": "System roles are global; tenant roles carry a nullable tenant FK.",

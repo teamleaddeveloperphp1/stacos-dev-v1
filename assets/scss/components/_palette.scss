@@ -91,6 +91,12 @@
   }
 }
 
+// Alpine removes this attribute once it initialises. Without the rule, a
+// component's markup flashes on screen before Alpine has hidden it.
+[x-cloak] {
+  display: none !important;
+}
+
 kbd {
   display: inline-block;
   padding: 1px 5px;

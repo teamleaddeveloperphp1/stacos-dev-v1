@@ -1,0 +1,24 @@
+<c-vars eyebrow="" title="" lede="" align="start" level="2" />
+{% comment %}
+  The heading block every marketing section opens with.
+
+  Exists so that section headings share one type scale and one measure across
+  twenty-odd pages. `level` keeps the document outline correct: a section inside
+  a page whose h1 is the hero is an h2, but a sub-section inside that is an h3,
+  and a component that always emitted h2 would quietly break heading order for
+  screen-reader users.
+
+  Usage:
+    <c-marketing.section-head eyebrow="Product" title="What you get"
+                              lede="One sentence of context." align="center" />
+{% endcomment %}
+<div class="section-head section-head--{{ align }}">
+  {% if eyebrow %}<p class="section-head__eyebrow">{{ eyebrow }}</p>{% endif %}
+  {% if level == "3" %}
+    <h3 class="section-head__title">{{ title }}</h3>
+  {% else %}
+    <h2 class="section-head__title">{{ title }}</h2>
+  {% endif %}
+  {% if lede %}<p class="section-head__lede">{{ lede }}</p>{% endif %}
+  {{ slot }}
+</div>

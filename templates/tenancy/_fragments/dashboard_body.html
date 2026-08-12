@@ -17,12 +17,12 @@
         </div>
       </div>
     </div>
-    {#
+    {% comment %}
       The next three tiles — overdue, due this week, awaiting your approval —
       are driven by the obligation register, which arrives with the compliance
       engine. They are shown as pending rather than omitted so the shape of the
       dashboard is visible from the first release.
-    #}
+    {% endcomment %}
     <div class="col-6 col-lg-3">
       <div class="card h-100">
         <div class="card-body">

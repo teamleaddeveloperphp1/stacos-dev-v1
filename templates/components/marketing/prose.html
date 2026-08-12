@@ -1,0 +1,30 @@
+<c-vars sections="" level="2" />
+{% comment %}
+  Renders a tuple of `stacos.marketing.content.Section` values: a heading, its
+  paragraphs, and an optional bullet list.
+
+  Every long page — product module, solution, guide, legal document — is built
+  from this, which is what keeps the measure, the paragraph spacing and the
+  heading rhythm identical across the site regardless of who wrote the copy.
+
+  Usage:  <c-marketing.prose :sections="module.sections" />
+{% endcomment %}
+<div class="prose">
+  {% for section in sections %}
+    <section class="prose__section">
+      {% if level == "3" %}
+        <h3 class="prose__heading">{{ section.heading }}</h3>
+      {% else %}
+        <h2 class="prose__heading">{{ section.heading }}</h2>
+      {% endif %}
+      {% for paragraph in section.paragraphs %}
+        <p>{{ paragraph }}</p>
+      {% endfor %}
+      {% if section.bullets %}
+        <ul class="prose__list">
+          {% for bullet in section.bullets %}<li>{{ bullet }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+  {% endfor %}
+</div>
