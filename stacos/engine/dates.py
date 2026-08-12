@@ -229,6 +229,30 @@ def shift_to_working_day(
 # ---------------------------------------------------------------------------
 
 
+def _select_offset(rule: Mapping[str, Any], period: Period) -> Mapping[str, Any]:
+    """The offset governing this period, allowing for calendar exceptions.
+
+    Most obligations use one offset for every period. A stubborn minority do not,
+    and they are not edge cases: the TDS return for January–March is due 31 May
+    while the other three quarters are due one month after they close, and the
+    March TDS *payment* is due 30 April rather than 7 April. Expressing that as a
+    second definition would duplicate the applicability rule and guarantee the two
+    copies drift apart.
+
+    Keyed on the **month the period ends in** rather than on an ordinal, because
+    a period's ordinal depends on where the generation window happened to start
+    and would silently mean something different on a different horizon.
+    """
+    overrides = rule.get("offset_by_month") or {}
+    if overrides:
+        # YAML gives integer keys, JSON round-trips them as strings. Accept both
+        # rather than making an author think about which one they are writing.
+        for key in (period.end.month, str(period.end.month)):
+            if key in overrides:
+                return overrides[key]
+    return rule.get("offset", {})
+
+
 def _apply_offset(anchor_date: date, offset: Mapping[str, Any]) -> date:
     """Apply a structured offset to an anchor date."""
     result = anchor_date
@@ -332,7 +356,7 @@ def resolve_due_date(
         # not know is more useful than one that guesses.
         return DueDateResolution(effective_date=None, blocking_input=blocking)
 
-    computed = _apply_offset(base, rule.get("offset", {}))
+    computed = _apply_offset(base, _select_offset(rule, period))
 
     shift = ShiftRule(str(rule.get("shift_if_holiday", ShiftRule.NONE)))
     calendar_keys = [str(key) for key in rule.get("calendars", [])]
@@ -379,10 +403,18 @@ def static_max_lag_days(due_rule: Mapping[str, Any]) -> int:
     horizon. Deliberately generous: over-generating costs a few discarded
     periods, under-generating loses obligations.
     """
-    offset = due_rule.get("offset", {}) or {}
-    days = int(offset.get("days", 0) or 0)
-    months = int(offset.get("months", 0) or 0) + 12 * int(offset.get("years", 0) or 0)
-    lag = abs(days) + abs(months) * 31
+    # The widest offset the rule can produce, including any month-specific
+    # exception. Taking only the default would under-generate for a definition
+    # whose March period is due two months later, and an under-generated window
+    # loses obligations silently.
+    candidates: list[Mapping[str, Any]] = [due_rule.get("offset", {}) or {}]
+    candidates.extend((due_rule.get("offset_by_month") or {}).values())
+
+    lag = 0
+    for offset in candidates:
+        days = int(offset.get("days", 0) or 0)
+        months = int(offset.get("months", 0) or 0) + 12 * int(offset.get("years", 0) or 0)
+        lag = max(lag, abs(days) + abs(months) * 31)
 
     if str(due_rule.get("anchor", "")) in {"FY_END", "FIXED_DATE"}:
         # These can sit a whole year past the period they report on.

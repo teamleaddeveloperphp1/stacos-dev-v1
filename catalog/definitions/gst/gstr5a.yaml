@@ -1,0 +1,43 @@
+code: IN-GST-GSTR5A
+country: IN
+category: TAX_INDIRECT
+family: GST
+authority: CBIC
+version: 1
+title: GSTR-5A — OIDAR services return
+plain_language_summary: >
+  The monthly return for an overseas supplier of online information and database
+  access services to Indian consumers. Filed without any Indian establishment,
+  which is why it sits apart from the ordinary return series.
+statutory_reference: Section 14 IGST Act r/w Rule 64 CGST Rules
+filing_portal_url: "https://www.gst.gov.in"
+periodicity: MONTHLY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: GST
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: GST
+      explain: you hold a GST registration
+    - fact: gst_scheme
+      op: eq
+      value: NON_RESIDENT
+      explain: you are registered as a non-resident supplier
+    - fact: has_ecommerce_sales
+      op: eq
+      value: true
+      explain: you supply digital services to consumers
+due:
+  anchor: PERIOD_END
+  offset: { months: 0, day_of_month: 20 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "₹50 per day (₹20 nil), capped at ₹5,000."
+effective_from: 2017-07-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

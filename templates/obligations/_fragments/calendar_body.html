@@ -1,0 +1,99 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Compliance calendar' %}"
+               subtitle="{% translate 'Everything these entities owe, generated from their profiles. Nothing here was typed in by hand.' %}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:month' %}"
+     hx-get="{% url 'compliance:month' %}" hx-target="#main" hx-push-url="true">
+    <c-icon name="calendar" size="14" /> {% translate "Month view" %}
+  </a>
+</c-page-header>
+
+{% include "obligations/_fragments/status_counts.html" %}
+
+<div class="data-table">
+  <div class="data-table__toolbar">
+    {% comment %}
+      Filters swap only the table body, debounced at 250ms — typing must never
+      cost a navigation, and must never fire a request per keystroke.
+    {% endcomment %}
+    <form class="d-flex gap-2 flex-grow-1 flex-wrap"
+          hx-get="{% url 'compliance:calendar' %}"
+          hx-target="#obligation-rows"
+          hx-select="#obligation-rows"
+          hx-swap="morph"
+          hx-push-url="true"
+          hx-trigger="keyup changed delay:250ms from:find input, change from:find select"
+          hx-indicator="#calendar-spinner">
+      <input type="search" name="q" value="{{ search }}"
+             class="form-control form-control-sm" style="max-width: 18rem"
+             placeholder="{% translate 'Search obligations…' %}"
+             aria-label="{% translate 'Search obligations' %}">
+
+      <select name="status" class="form-select form-select-sm" style="max-width: 14rem"
+              aria-label="{% translate 'Filter by status' %}">
+        {% for value, label in status_filters %}
+          <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="category" class="form-select form-select-sm" style="max-width: 16rem"
+              aria-label="{% translate 'Filter by category' %}">
+        <option value="">{% translate "Every category" %}</option>
+        {% for value, label in categories %}
+          <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <span class="htmx-indicator align-self-center" id="calendar-spinner">
+        <span class="spinner-inline"></span>
+      </span>
+    </form>
+  </div>
+
+  <div class="data-table__scroll" id="obligation-rows" aria-live="polite" aria-atomic="false">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th>{% translate "Obligation" %}</th>
+          <th>{% translate "Entity" %}</th>
+          <th>{% translate "Period" %}</th>
+          <th>{% translate "Due" %}</th>
+          <th>{% translate "Status" %}</th>
+          <th>{% translate "Owner" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if obligations %}
+          {% include "obligations/_fragments/calendar_rows.html" %}
+        {% else %}
+          <tr>
+            <td colspan="6" class="p-0">
+              {% if search or status or category %}
+                <c-empty-state title="{% translate 'Nothing matches that filter' %}"
+                               body="{% translate 'Try a different search term, or clear the status filter.' %}">
+                  <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}"
+                     hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
+                    {% translate "Clear filters" %}
+                  </a>
+                </c-empty-state>
+              {% else %}
+                {% comment %}
+                  An empty calendar during onboarding is the expected state, not
+                  an error — so the empty state explains what is missing rather
+                  than apologising.
+                {% endcomment %}
+                <c-empty-state title="{% translate 'No obligations yet' %}"
+                               body="{% translate 'Complete an entity profile — registrations, states, headcount — and the calendar builds itself from it.' %}">
+                  <a class="btn btn-sm btn-primary" href="{% url 'app:entity_list' %}"
+                     hx-get="{% url 'app:entity_list' %}" hx-target="#main" hx-push-url="true">
+                    {% translate "Go to entities" %}
+                  </a>
+                </c-empty-state>
+              {% endif %}
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>

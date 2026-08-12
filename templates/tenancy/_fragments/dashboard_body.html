@@ -17,17 +17,13 @@
         </div>
       </div>
     </div>
-    {% comment %}
-      The next three tiles — overdue, due this week, awaiting your approval —
-      are driven by the obligation register, which arrives with the compliance
-      engine. They are shown as pending rather than omitted so the shape of the
-      dashboard is visible from the first release.
-    {% endcomment %}
     <div class="col-6 col-lg-3">
       <div class="card h-100">
         <div class="card-body">
           <div class="section-title mb-1">{% translate "Overdue" %}</div>
-          <div class="text-muted small">{% translate "Available with the compliance calendar" %}</div>
+          <div class="figure-value fs-3 fw-semibold {% if counts.overdue %}status-text--overdue{% endif %}">
+            {{ counts.overdue|default:"0"|num }}
+          </div>
         </div>
       </div>
     </div>
@@ -35,18 +31,33 @@
       <div class="card h-100">
         <div class="card-body">
           <div class="section-title mb-1">{% translate "Due this week" %}</div>
-          <div class="text-muted small">{% translate "Available with the compliance calendar" %}</div>
+          <div class="figure-value fs-3 fw-semibold">{{ counts.due_soon|default:"0"|num }}</div>
         </div>
       </div>
     </div>
     <div class="col-6 col-lg-3">
       <div class="card h-100">
         <div class="card-body">
-          <div class="section-title mb-1">{% translate "Awaiting your approval" %}</div>
-          <div class="text-muted small">{% translate "Available with return preparation" %}</div>
+          <div class="section-title mb-1">{% translate "Open" %}</div>
+          <div class="figure-value fs-3 fw-semibold">{{ counts.open|default:"0"|num }}</div>
         </div>
       </div>
     </div>
+  </div>
+
+  {% comment %}
+    Loaded on its own rather than inline, so the shell and the entity tiles paint
+    immediately instead of the whole dashboard waiting on the register. `revealed`
+    rather than `load` means a user who lands and navigates away in 300ms never
+    costs the query.
+  {% endcomment %}
+  <div hx-get="{% url 'compliance:dashboard_panel' %}"
+       hx-trigger="revealed once"
+       hx-swap="outerHTML"
+       class="mb-4">
+    <div class="card"><div class="card-body text-muted small">
+      {% translate "Loading what is due…" %}
+    </div></div>
   </div>
 
   <div class="card">

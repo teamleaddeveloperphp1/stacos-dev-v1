@@ -45,6 +45,9 @@ urlpatterns = [
     path("auth/", include("stacos.accounts.urls", namespace="accounts")),
     path("accounts/", include("allauth.urls")),
     # --- Web application ---
+    # Compliance first: `stacos.tenancy.urls` owns the bare `app/` route, so a
+    # more specific prefix has to be registered before it to be reachable.
+    path("app/compliance/", include("stacos.obligations.urls", namespace="compliance")),
     path("app/", include("stacos.tenancy.urls", namespace="app")),
     # --- API (mobile and webhooks only) ---
     path("api/v1/", include("stacos.api.urls", namespace="api")),

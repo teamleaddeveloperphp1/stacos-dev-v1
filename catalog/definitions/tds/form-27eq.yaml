@@ -1,0 +1,46 @@
+code: IN-TCS-27EQ
+country: IN
+category: TAX_DIRECT
+family: TDS
+authority: CBDT
+version: 1
+title: Form 27EQ — quarterly TCS return
+plain_language_summary: >
+  The quarterly statement of tax collected at source. Due two weeks earlier than
+  the TDS returns, which is the detail most commonly missed by finance teams
+  filing both.
+statutory_reference: Section 206C(3) Income-tax Act r/w Rule 31AA
+filing_portal_url: "https://www.incometax.gov.in"
+periodicity: QUARTERLY
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: TAN
+      explain: you hold a TAN
+    - any:
+        - fact: has_export_import
+          op: eq
+          value: true
+          explain: you deal in imports or exports
+        - fact: has_factory_premises
+          op: eq
+          value: true
+          explain: you operate a factory, where scrap sales attract TCS
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 15 }
+  # Q4 is due 15 May.
+  offset_by_month:
+    3: { months: 2, day_of_month: 15 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: Return acknowledgement (token number), kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "₹200 per day under Section 234E, capped at the TCS amount."
+effective_from: 2010-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

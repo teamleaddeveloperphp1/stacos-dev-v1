@@ -1,0 +1,62 @@
+code: IN-GST-GSTR3B-QRMP-X
+country: IN
+category: TAX_INDIRECT
+family: GST
+authority: CBIC
+version: 1
+title: GSTR-3B — summary return (quarterly, QRMP, 22nd)
+plain_language_summary: >
+  The quarterly summary return for QRMP taxpayers whose place of business is in a
+  category X state. The deadline is staggered by state to spread load on the
+  portal, which is why this is a separate rule from the 24th.
+statutory_reference: Section 39(1) CGST Act r/w Rule 61(1), Notification 29/2021 – Central Tax
+filing_portal_url: "https://www.gst.gov.in"
+periodicity: QUARTERLY
+period_anchor: FY
+# Where jurisdictions[] earns its existence: one obligation, two dates, decided
+# by which state the registration sits in.
+jurisdictions:
+  - IN-CT
+  - IN-MP
+  - IN-GJ
+  - IN-DH
+  - IN-MH
+  - IN-KA
+  - IN-GA
+  - IN-LD
+  - IN-KL
+  - IN-TN
+  - IN-PY
+  - IN-AN
+  - IN-TG
+  - IN-AP
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: GST
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: GST
+      explain: you hold a GST registration
+    - fact: gst_scheme
+      op: eq
+      value: REGULAR
+      explain: you are registered under the regular scheme
+    - fact: qrmp_opted
+      op: eq
+      value: true
+      explain: you have opted for the QRMP scheme
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 22 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
+  - { key: challan, label: Tax payment challan, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "₹50 per day (₹20 nil), capped at ₹5,000, plus interest at 18% a year."
+effective_from: 2021-01-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

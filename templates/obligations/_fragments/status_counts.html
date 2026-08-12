@@ -1,0 +1,45 @@
+{% load i18n %}
+{% comment %}
+  The counter strip above the calendar, and the out-of-band target every action
+  updates. Counts come from one conditional aggregation rather than five
+  `.count()` calls, so the tiles can never disagree with each other.
+
+  `aria-live` matters here: an HTMX swap is invisible to a screen reader
+  otherwise, and "three overdue became two" is exactly the change a user needs
+  announced.
+{% endcomment %}
+<div class="stat-row" id="calendar-counts" aria-live="polite" aria-atomic="true">
+  <a class="stat-tile stat-tile--overdue" href="?status=overdue"
+     hx-get="?status=overdue" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ counts.overdue }}</span>
+    <span class="stat-tile__label">{% translate "Overdue" %}</span>
+  </a>
+  <a class="stat-tile stat-tile--due-soon" href="?status=due_soon"
+     hx-get="?status=due_soon" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ counts.due_soon }}</span>
+    <span class="stat-tile__label">{% translate "Due in 7 days" %}</span>
+  </a>
+  <a class="stat-tile" href="?status="
+     hx-get="?status=" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ counts.open }}</span>
+    <span class="stat-tile__label">{% translate "Open" %}</span>
+  </a>
+  {% if counts.unconfirmed %}
+    <a class="stat-tile stat-tile--attention" href="?status=unconfirmed"
+       hx-get="?status=unconfirmed" hx-target="#main" hx-push-url="true">
+      <span class="stat-tile__value">{{ counts.unconfirmed }}</span>
+      <span class="stat-tile__label">{% translate "Needs confirming" %}</span>
+    </a>
+  {% endif %}
+  {% if counts.needs_input %}
+    <a class="stat-tile stat-tile--attention" href="?status=needs_input"
+       hx-get="?status=needs_input" hx-target="#main" hx-push-url="true">
+      <span class="stat-tile__value">{{ counts.needs_input }}</span>
+      <span class="stat-tile__label">{% translate "Waiting on a date" %}</span>
+    </a>
+  {% endif %}
+  <span class="stat-tile stat-tile--quiet">
+    <span class="stat-tile__value">{{ counts.completed }}</span>
+    <span class="stat-tile__label">{% translate "Completed" %}</span>
+  </span>
+</div>

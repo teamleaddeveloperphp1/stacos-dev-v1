@@ -1,0 +1,30 @@
+{% load i18n %}
+{% comment %}
+  Just the rows, plus the sentinel that fetches the next page.
+
+  Returned on its own for a cursor request, and included by the full list body
+  on a first load. Keyset pagination means the "load more" link carries an opaque
+  cursor rather than a page number: page 400 of an offset-paginated register makes
+  PostgreSQL walk and discard twenty thousand rows, and a practice with three
+  hundred clients gets there within a month.
+{% endcomment %}
+{% for obligation in obligations %}
+  {% include "obligations/_fragments/obligation_row.html" %}
+{% endfor %}
+
+{% if page.has_more %}
+  <tr id="calendar-load-more">
+    <td colspan="6" class="text-center p-2">
+      <button class="btn btn-sm btn-outline-secondary"
+              hx-get="?cursor={{ page.next_cursor|urlencode }}{{ querystring }}"
+              hx-target="#calendar-load-more"
+              hx-swap="outerHTML"
+              hx-indicator="#calendar-more-spinner">
+        {% translate "Load more" %}
+        <span class="htmx-indicator" id="calendar-more-spinner">
+          <span class="spinner-inline"></span>
+        </span>
+      </button>
+    </td>
+  </tr>
+{% endif %}

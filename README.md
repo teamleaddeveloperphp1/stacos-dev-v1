@@ -46,6 +46,51 @@ uv run python manage.py sync_system_roles
 .\tasks.ps1 run
 ```
 
+### Running the whole stack
+
+`.\tasks.ps1 run` is the web server alone, in your terminal. Real work needs the
+workers and the asset watchers too, and starting six terminals by hand gets old:
+
+```powershell
+.\start.ps1                  # web, sse, worker, beat, flower, assets -- detached
+.\start.ps1 -Migrate -Build  # migrate + sync_system_roles + build assets first
+.\start.ps1 -Only web,worker
+.\start.ps1 -Skip flower,sse
+.\start.ps1 -WithMobile      # also the Framework7 dev server on :3002
+.\start.ps1 -SplitWorkers    # one worker per queue, as in docker-compose.yml
+.\start.ps1 -Status
+.\stop.ps1                   # ...and stop them all again
+.\stop.ps1 -Only worker,beat
+.\stop.ps1 -Ports            # report anything still holding 8000/8001/5555/3002
+```
+
+Each service runs detached, writing to `.run/logs/<name>.log` (with stderr in
+`<name>.err.log`) and recording its PID in `.run/<name>.json`. `stop.ps1` kills
+exactly those processes and their children, and matches the recorded start time
+before killing anything, so a recycled PID is never mistaken for a service.
+
+```powershell
+Get-Content .run\logs\worker.log -Wait -Tail 40   # follow one
+```
+
+PostgreSQL and Memurai are Windows services: `start.ps1` starts them if they are
+installed but stopped, and leaves them alone otherwise. `stop.ps1 -Infra` stops
+them, which you usually do not want -- they are machine services, not this
+project's processes.
+
+**Linux and macOS** use `./start.sh` and `./stop.sh`, same layout, long-form
+flags (`--only`, `--skip`, `--with-mobile`, `--split-workers`, `--migrate`,
+`--build`, `--status`, `--restart`). Celery uses the prefork pool there rather
+than `--pool=solo`, and `--docker` brings PostgreSQL, Redis and Mailpit up from
+`docker-compose.yml` first:
+
+```bash
+./start.sh --docker --migrate --build
+./start.sh --status
+./stop.sh --ports
+./stop.sh --docker           # also stop the containers
+```
+
 The seed builds a deliberately awkward world rather than a tidy one: a Gujarat textile manufacturer with **two GST registrations and two factories**, a Bengaluru software LLP, and a CA firm engaged on only *one* of the two entities and limited to tax categories. That is what makes per-registration fan-out and engagement scoping visible from the first run instead of assumed.
 
 | Surface | URL |
@@ -56,7 +101,8 @@ The seed builds a deliberately awkward world rather than a tidy one: a Gujarat t
 | Celery inspector (Flower) | http://localhost:5555/ |
 | Mobile dev server | http://localhost:3002/ |
 
-`.\tasks.ps1` with no arguments lists every task.
+`.\tasks.ps1` with no arguments lists every task. `.\tasks.ps1 start` / `stop` /
+`status` are aliases for the scripts above.
 
 ---
 

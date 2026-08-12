@@ -1,0 +1,42 @@
+code: IN-TCS-PAYMENT-MONTHLY
+country: IN
+category: TAX_DIRECT
+family: TDS
+authority: CBDT
+version: 1
+title: TCS payment — monthly challan
+plain_language_summary: >
+  Tax collected at source — on scrap, on high-value sales, on overseas remittances
+  — has to be deposited by the 7th of the following month. Unlike TDS, there is no
+  extended March date.
+statutory_reference: Section 206C Income-tax Act r/w Rule 37CA
+filing_portal_url: "https://www.incometax.gov.in"
+periodicity: MONTHLY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: TAN
+      explain: you hold a TAN
+    - any:
+        - fact: has_export_import
+          op: eq
+          value: true
+          explain: you deal in imports or exports
+        - fact: has_factory_premises
+          op: eq
+          value: true
+          explain: you operate a factory, where scrap sales attract TCS
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 7 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Challan ITNS-281, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "Interest at 1% per month from collection to deposit."
+effective_from: 2010-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

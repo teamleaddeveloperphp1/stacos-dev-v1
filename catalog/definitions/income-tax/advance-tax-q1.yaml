@@ -1,0 +1,46 @@
+code: IN-IT-ADVANCE-TAX-Q1
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Advance tax — first instalment (15%)
+plain_language_summary: >
+  Fifteen per cent of the year's estimated tax, due 15 June. Advance tax is
+  modelled as four separate obligations rather than one quarterly series because
+  each instalment has its own percentage and its own date, and a client who pays
+  the second on time after missing the first still owes interest on the first.
+statutory_reference: Section 211 Income-tax Act
+filing_portal_url: "https://www.incometax.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PAN
+      explain: you hold a PAN
+    - fact: entity_type
+      op: in
+      value: [PVT_LTD, PUBLIC_LTD, OPC, LLP, PARTNERSHIP, SECTION_8, TRUST, BRANCH_OFFICE]
+      explain: you are a company, LLP, firm or other non-individual assessee
+    - fact: is_dormant
+      op: ne
+      value: true
+      explain: you are not a dormant company
+due:
+  # Anchored to the start of the year it relates to, not to its end: advance tax
+  # is paid during the year, before the return exists.
+  anchor: FY_START
+  offset: { months: 2, day_of_month: 15 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: challan, label: Challan ITNS-280, kind: DOC, mandatory_for_close: true }
+  - { key: computation, label: Estimated income computation, kind: DOC }
+default_owner_role: org-finance
+penalty_summary: "Interest at 1% per month under Section 234C on the shortfall."
+effective_from: 2017-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

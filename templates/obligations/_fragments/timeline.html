@@ -1,0 +1,28 @@
+{% load i18n %}
+{% comment %}
+  The obligation's own timeline.
+
+  Distinct from the tenant-wide audit log, which exists for a regulator. This is
+  the story a colleague picking the work up tomorrow needs: who moved it, when,
+  and what they said about it. Both are written on every transition.
+{% endcomment %}
+<ol class="timeline">
+  {% for event in events %}
+    <li class="timeline__item timeline__item--{{ event.kind|lower }}">
+      <div class="timeline__meta">
+        <time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:"j M Y, H:i" }}</time>
+        <span class="text-muted">{{ event.actor_label|default:"STACOS" }}</span>
+      </div>
+      <div class="timeline__body">
+        {% if event.kind == "TRANSITION" %}
+          {{ event.context.label|default:event.get_kind_display }}
+        {% else %}
+          {{ event.get_kind_display }}
+        {% endif %}
+        {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
+      </div>
+    </li>
+  {% empty %}
+    <li class="text-muted small">{% translate "Nothing has happened yet." %}</li>
+  {% endfor %}
+</ol>

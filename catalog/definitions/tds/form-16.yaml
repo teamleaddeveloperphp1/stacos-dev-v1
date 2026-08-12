@@ -1,0 +1,39 @@
+code: IN-TDS-FORM16
+country: IN
+category: TAX_DIRECT
+family: TDS
+authority: CBDT
+version: 1
+title: Form 16 — annual salary TDS certificate
+plain_language_summary: >
+  The certificate every employee needs to file their own return, issued by 15 June
+  after the year ends. Employees cannot file without it, so a delay here becomes a
+  hundred people's problem rather than one company's.
+statutory_reference: Section 203 Income-tax Act r/w Rule 31
+filing_portal_url: "https://www.tdscpc.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: TAN
+      explain: you hold a TAN
+    - fact: employee_count
+      op: gte
+      value: 1
+      explain: you have employees on payroll
+due:
+  anchor: PERIOD_END
+  offset: { months: 2, day_of_month: 15 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: certificates, label: Part A and Part B downloaded from TRACES, kind: DOC, mandatory_for_close: true }
+  - { key: distribution, label: Proof of issue to employees, kind: DOC }
+default_owner_role: org-hr
+penalty_summary: "₹100 per day per certificate under Section 272A(2)(g)."
+effective_from: 2010-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

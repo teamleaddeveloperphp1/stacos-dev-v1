@@ -34,16 +34,22 @@ from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
 def dashboard(request: HttpRequest) -> HttpResponse:
     """Compliance health at a glance.
 
-    Currently a shell: the counters it will carry come from the obligation
-    register, which is the next milestone. It exists now so the app shell,
-    navigation and fragment convention are exercised end to end.
+    The headline counters come from one conditional aggregation over the register
+    rather than several ``.count()`` calls, so the tiles cannot disagree with each
+    other. "What is due next" loads separately, on reveal, so the shell paints
+    without waiting for it.
     """
+    from django.utils import timezone
+
+    from stacos.obligations.queries import status_counts
+
     entities = Entity.objects.select_related("tenant").filter(archived_at__isnull=True)
 
     context = {
         "entity_count": entities.count(),
         "entities": entities[:6],
         "tenant": getattr(request, "tenant", None),
+        "counts": status_counts(as_of=timezone.localdate()),
     }
 
     template = (

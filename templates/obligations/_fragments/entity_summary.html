@@ -1,0 +1,55 @@
+{% load i18n %}
+{% comment %}
+  Per-category obligation counts for one entity, shown on the entity detail page.
+  One grouped query rather than a count per category.
+{% endcomment %}
+<section class="card" id="entity-obligations" aria-live="polite" aria-atomic="false">
+  <div class="card__header">
+    <h2 class="card__title">{% translate "Compliance" %}</h2>
+    <form hx-post="{% url 'compliance:rebuild' entity.pk %}"
+          hx-target="#entity-obligations"
+          hx-swap="none">
+      {% csrf_token %}
+      <button class="btn btn-sm btn-outline-secondary" type="submit">
+        {% translate "Rebuild calendar" %}
+      </button>
+    </form>
+  </div>
+
+  {% if rows %}
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>{% translate "Category" %}</th>
+          <th class="num">{% translate "Open" %}</th>
+          <th class="num">{% translate "Overdue" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>
+              <a href="{% url 'compliance:calendar' %}?entity={{ entity.pk }}&category={{ row.category }}"
+                 hx-get="{% url 'compliance:calendar' %}?entity={{ entity.pk }}&category={{ row.category }}"
+                 hx-target="#main" hx-push-url="true">{{ row.label }}</a>
+            </td>
+            <td class="num">{{ row.total }}</td>
+            <td class="num">
+              {% if row.overdue %}
+                <span class="status-text--overdue">{{ row.overdue }}</span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <c-empty-state title="{% translate 'No obligations yet' %}"
+                   body="{% translate 'Add registrations and complete the profile, then rebuild — the calendar is generated, never typed in.' %}">
+      <form hx-post="{% url 'compliance:rebuild' entity.pk %}" hx-target="#entity-obligations" hx-swap="none">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-primary" type="submit">{% translate "Build the calendar" %}</button>
+      </form>
+    </c-empty-state>
+  {% endif %}
+</section>

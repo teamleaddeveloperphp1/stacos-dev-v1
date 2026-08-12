@@ -1,0 +1,45 @@
+code: IN-GST-GSTR3B-MONTHLY
+country: IN
+category: TAX_INDIRECT
+family: GST
+authority: CBIC
+version: 1
+title: GSTR-3B — summary return and tax payment (monthly)
+plain_language_summary: >
+  The monthly summary return, and the point at which the tax is actually paid.
+  Interest at 18% a year runs on any shortfall from the day after the due date, so
+  a late GSTR-3B costs money immediately rather than at assessment.
+statutory_reference: Section 39 CGST Act, 2017 r/w Rule 61
+filing_portal_url: "https://www.gst.gov.in"
+periodicity: MONTHLY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: GST
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: GST
+      explain: you hold a GST registration
+    - fact: gst_scheme
+      op: eq
+      value: REGULAR
+      explain: you are registered under the regular scheme
+    - fact: qrmp_opted
+      op: ne
+      value: true
+      explain: you file monthly rather than under QRMP
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 20 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
+  - { key: challan, label: Tax payment challan, kind: DOC, mandatory_for_close: true }
+  - { key: itc_recon, label: ITC reconciliation against GSTR-2B, kind: DOC }
+default_owner_role: org-finance
+penalty_summary: "₹50 per day (₹20 nil), capped at ₹5,000, plus interest at 18% a year on unpaid tax."
+effective_from: 2017-07-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

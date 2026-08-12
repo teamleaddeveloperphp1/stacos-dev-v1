@@ -1,0 +1,40 @@
+code: IN-IT-ITR-COMPANY
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Income tax return — company (ITR-6)
+plain_language_summary: >
+  The annual return for a company, due 31 October when accounts are subject to
+  audit — which they always are for a company. Filing late forfeits the right to
+  carry losses forward, which is usually a larger cost than the fee.
+statutory_reference: Section 139(1) Income-tax Act
+filing_portal_url: "https://www.incometax.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: PAN
+      explain: you hold a PAN
+    - fact: entity_type
+      op: in
+      value: [PVT_LTD, PUBLIC_LTD, OPC]
+      explain: you are a company
+due:
+  anchor: PERIOD_END
+  offset: { months: 7, day_of_month: 31 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: ITR-V acknowledgement, kind: DOC, mandatory_for_close: true }
+  - { key: computation, label: Computation of total income, kind: DOC, mandatory_for_close: true }
+  - { key: audited_accounts, label: Audited financial statements, kind: DOC }
+default_owner_role: org-finance
+penalty_summary: "₹5,000 under Section 234F, interest under 234A, and loss carry-forward is forfeited."
+effective_from: 2021-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

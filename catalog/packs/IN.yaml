@@ -1,0 +1,148 @@
+# India — jurisdiction pack.
+#
+# Everything that varies by country, held as data. The financial year starting in
+# April, the Sunday weekend, the lakh/crore grouping, the entity types and the tax
+# identifiers all live here, so shipping the UAE means adding a file rather than
+# editing code.
+#
+# Weekend rules are effective-dated deliberately. India has not moved its weekend,
+# which is exactly why hardcoding it would go unnoticed until the UAE — which
+# moved the public-sector weekend to Saturday–Sunday in January 2022 — was added.
+
+country: IN
+name: India
+currency: INR
+currency_symbol: "₹"
+default_timezone: Asia/Kolkata
+default_locale: en-in
+digit_grouping: INDIAN
+
+# 1 April – 31 March. Never assumed anywhere in the engine.
+fy_start_month: 4
+fy_start_day: 1
+fy_label_template: "FY{start_year}-{end_year_short}"
+
+is_published: true
+
+sub_jurisdictions:
+  - { code: IN-AN, name: Andaman and Nicobar Islands }
+  - { code: IN-AP, name: Andhra Pradesh }
+  - { code: IN-AR, name: Arunachal Pradesh }
+  - { code: IN-AS, name: Assam }
+  - { code: IN-BR, name: Bihar }
+  - { code: IN-CH, name: Chandigarh }
+  - { code: IN-CT, name: Chhattisgarh }
+  - { code: IN-DH, name: Dadra and Nagar Haveli and Daman and Diu }
+  - { code: IN-DL, name: Delhi }
+  - { code: IN-GA, name: Goa }
+  - { code: IN-GJ, name: Gujarat }
+  - { code: IN-HP, name: Himachal Pradesh }
+  - { code: IN-HR, name: Haryana }
+  - { code: IN-JH, name: Jharkhand }
+  - { code: IN-JK, name: Jammu and Kashmir }
+  - { code: IN-KA, name: Karnataka }
+  - { code: IN-KL, name: Kerala }
+  - { code: IN-LA, name: Ladakh }
+  - { code: IN-LD, name: Lakshadweep }
+  - { code: IN-MH, name: Maharashtra }
+  - { code: IN-ML, name: Meghalaya }
+  - { code: IN-MN, name: Manipur }
+  - { code: IN-MP, name: Madhya Pradesh }
+  - { code: IN-MZ, name: Mizoram }
+  - { code: IN-NL, name: Nagaland }
+  - { code: IN-OR, name: Odisha }
+  - { code: IN-PB, name: Punjab }
+  - { code: IN-PY, name: Puducherry }
+  - { code: IN-RJ, name: Rajasthan }
+  - { code: IN-SK, name: Sikkim }
+  - { code: IN-TG, name: Telangana }
+  - { code: IN-TN, name: Tamil Nadu }
+  - { code: IN-TR, name: Tripura }
+  - { code: IN-UP, name: Uttar Pradesh }
+  - { code: IN-UT, name: Uttarakhand }
+  - { code: IN-WB, name: West Bengal }
+
+entity_types:
+  - { code: PVT_LTD, name: Private limited company }
+  - { code: PUBLIC_LTD, name: Public limited company }
+  - { code: OPC, name: One person company }
+  - { code: LLP, name: Limited liability partnership }
+  - { code: PARTNERSHIP, name: Partnership firm }
+  - { code: PROPRIETORSHIP, name: Sole proprietorship }
+  - { code: TRUST, name: Trust }
+  - { code: SOCIETY, name: Society }
+  - { code: SECTION_8, name: Section 8 company }
+  - { code: BRANCH_OFFICE, name: Branch office of a foreign company }
+  - { code: LIAISON_OFFICE, name: Liaison office }
+  - { code: COOPERATIVE, name: Co-operative society }
+  - { code: HUF, name: Hindu undivided family }
+
+registration_types:
+  - { code: PAN, name: Permanent Account Number }
+  - { code: TAN, name: Tax Deduction Account Number }
+  - { code: GST, name: GST identification number, per_jurisdiction: true }
+  - { code: CIN, name: Corporate Identity Number }
+  - { code: LLPIN, name: LLP Identification Number }
+  - { code: PF, name: EPFO establishment code }
+  - { code: ESIC, name: ESIC employer code }
+  - { code: PT_EC, name: Professional tax — enrolment certificate, per_jurisdiction: true }
+  - { code: PT_RC, name: Professional tax — registration certificate, per_jurisdiction: true }
+  - { code: IEC, name: Importer Exporter Code }
+  - { code: UDYAM, name: Udyam registration }
+  - { code: FACTORY_LICENCE, name: Factory licence, per_jurisdiction: true }
+  - { code: SHOPS_ESTAB, name: Shops and establishments registration, per_jurisdiction: true }
+  - { code: PCB_CONSENT, name: Pollution control board consent, per_jurisdiction: true }
+  - { code: DRUG_LICENCE, name: Drug licence, per_jurisdiction: true }
+  - { code: FSSAI, name: FSSAI licence }
+  - { code: LEGAL_METROLOGY, name: Legal metrology registration, per_jurisdiction: true }
+  - { code: BIS, name: BIS certification }
+  - { code: TRADE_LICENCE, name: Municipal trade licence, per_jurisdiction: true }
+  - { code: FIRE_NOC, name: Fire safety no-objection certificate, per_jurisdiction: true }
+  - { code: CONTRACT_LABOUR, name: Contract labour registration, per_jurisdiction: true }
+
+# Sunday only. Note what this is *not*: a statement that Indian due dates move
+# off a Sunday. They do not — the portals accept filings on a Sunday and relief
+# comes through explicit notifications. This drives the small number of
+# physically-dependent obligations that genuinely need a working day.
+weekend_rules:
+  - weekend_days: [6]
+    valid_from: 1947-08-15
+    note: Sunday only. Saturday is a working day for most statutory purposes.
+
+authorities:
+  - { code: CBIC, name: Central Board of Indirect Taxes and Customs, short_name: CBIC, portal_url: "https://www.gst.gov.in" }
+  - { code: CBDT, name: Central Board of Direct Taxes, short_name: CBDT, portal_url: "https://www.incometax.gov.in" }
+  - { code: MCA, name: Ministry of Corporate Affairs, short_name: MCA, portal_url: "https://www.mca.gov.in" }
+  - { code: EPFO, name: Employees' Provident Fund Organisation, short_name: EPFO, portal_url: "https://unifiedportal-emp.epfindia.gov.in" }
+  - { code: ESIC, name: Employees' State Insurance Corporation, short_name: ESIC, portal_url: "https://www.esic.gov.in" }
+  - { code: RBI, name: Reserve Bank of India, short_name: RBI, portal_url: "https://firms.rbi.org.in" }
+  - { code: DGFT, name: Directorate General of Foreign Trade, short_name: DGFT, portal_url: "https://www.dgft.gov.in" }
+  - { code: FSSAI, name: Food Safety and Standards Authority of India, short_name: FSSAI, portal_url: "https://foscos.fssai.gov.in" }
+  - { code: CPCB, name: Central Pollution Control Board, short_name: CPCB, portal_url: "https://cpcb.nic.in" }
+  - { code: DGFASLI, name: Directorate General Factory Advice Service and Labour Institutes, short_name: DGFASLI }
+  - { code: STATE_LABOUR, name: State labour department, short_name: Labour dept }
+  - { code: STATE_TAX, name: State commercial tax department, short_name: State tax }
+  - { code: STATE_PCB, name: State pollution control board, short_name: State PCB }
+  - { code: MUNICIPAL, name: Municipal corporation, short_name: Municipality }
+  - { code: FIRE, name: State fire and emergency services, short_name: Fire services }
+  - { code: LEGAL_METROLOGY, name: Department of legal metrology, short_name: Legal metrology }
+  - { code: CDSCO, name: Central Drugs Standard Control Organisation, short_name: CDSCO }
+  - { code: INTERNAL, name: Internal governance, short_name: Internal }
+
+# National holidays only. State calendars are substantial and are loaded
+# separately; the three gazetted national holidays are the ones every calendar
+# needs. Note again that these do NOT shift statutory tax dates — they exist for
+# the handful of obligations that require somebody to physically attend an office.
+holiday_calendars:
+  - key: IN-NATIONAL
+    name: India — national holidays
+    holidays:
+      - { date: 2026-01-26, name: Republic Day }
+      - { date: 2026-08-15, name: Independence Day }
+      - { date: 2026-10-02, name: Gandhi Jayanti }
+      - { date: 2027-01-26, name: Republic Day }
+      - { date: 2027-08-15, name: Independence Day }
+      - { date: 2027-10-02, name: Gandhi Jayanti }
+      - { date: 2028-01-26, name: Republic Day }
+      - { date: 2028-08-15, name: Independence Day }
+      - { date: 2028-10-02, name: Gandhi Jayanti }

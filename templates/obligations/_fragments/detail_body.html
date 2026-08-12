@@ -1,0 +1,89 @@
+{% load i18n %}
+
+<c-page-header title="{{ obligation.title }}"
+               subtitle="{{ obligation.entity.name }}{% if obligation.scope_label %} · {{ obligation.scope_label }}{% endif %} · {{ obligation.period_label|default:obligation.period_key }}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}"
+     hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
+    {% translate "Back to calendar" %}
+  </a>
+</c-page-header>
+
+<div class="detail-grid">
+  <div class="detail-grid__main">
+    {% include "obligations/_fragments/detail_panel.html" %}
+  </div>
+
+  <aside class="detail-grid__aside">
+    {% comment %}
+      "Why is this on my calendar" always has an answer. The reasons are the
+      pruned minimal trace the rule evaluator produced — not a hardcoded string,
+      and not the whole decision tree either.
+    {% endcomment %}
+    <section class="card">
+      <h2 class="card__title">{% translate "Why this applies" %}</h2>
+      {% if obligation.reasons %}
+        <ul class="reason-list">
+          {% for reason in obligation.reasons %}<li>{{ reason }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-muted small">{% translate "This applies to every entity of this type." %}</p>
+      {% endif %}
+
+      {% if not obligation.confirmed %}
+        <p class="callout callout--attention small">
+          {% translate "Some details are missing, so we are not certain this applies. It is on your calendar anyway — we would rather show it and be wrong than hide it and be wrong." %}
+        </p>
+      {% endif %}
+    </section>
+
+    {% if definition %}
+      <section class="card">
+        <h2 class="card__title">{% translate "What the law says" %}</h2>
+        {% if definition.plain_language_summary %}
+          <p class="small">{{ definition.plain_language_summary }}</p>
+        {% endif %}
+        <dl class="key-values small">
+          {% if definition.statutory_reference %}
+            <dt>{% translate "Reference" %}</dt><dd>{{ definition.statutory_reference }}</dd>
+          {% endif %}
+          {% if definition.definition.authority %}
+            <dt>{% translate "Authority" %}</dt><dd>{{ definition.definition.authority }}</dd>
+          {% endif %}
+          {% if definition.penalty_summary %}
+            <dt>{% translate "If missed" %}</dt><dd>{{ definition.penalty_summary }}</dd>
+          {% endif %}
+        </dl>
+
+        {% if definition.filing_portal_url %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ definition.filing_portal_url }}"
+             target="_blank" rel="noopener noreferrer">
+            {% translate "Open the filing portal" %}
+          </a>
+        {% endif %}
+
+        {% comment %}
+          The review caveat is not decoration. `plain_language_summary` is
+          guidance a client acts on, so when nobody has checked it against the
+          statute within twelve months, the page says so rather than quietly
+          presenting it as current.
+        {% endcomment %}
+        {% if definition.review_is_stale %}
+          <p class="callout callout--warning small">
+            {% translate "This summary has not been reviewed against the statute recently. Treat it as a guide and check the reference." %}
+          </p>
+        {% else %}
+          <p class="text-muted small">
+            {% blocktranslate with who=definition.reviewed_by when=definition.reviewed_at|date:"j M Y" %}
+              Reviewed by {{ who }} on {{ when }}.
+            {% endblocktranslate %}
+          </p>
+        {% endif %}
+      </section>
+    {% endif %}
+
+    <section class="card">
+      <h2 class="card__title">{% translate "History" %}</h2>
+      {% include "obligations/_fragments/timeline.html" %}
+    </section>
+  </aside>
+</div>

@@ -1,0 +1,110 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The working panel: where it stands, when it is due, and what you can do next.
+
+  Re-rendered on its own after every transition, so it is self-contained and
+  carries the id the swap targets. `aria-live` is on the wrapper because a state
+  change here is the whole point of the interaction and a screen reader would
+  otherwise miss it entirely.
+
+  The action list is filtered by permission on the server. That is a courtesy for
+  rendering, not the security boundary — `apply_transition` re-checks the
+  permission, the guards and the legality of the move, because a button being
+  absent from a page does not make its URL absent from the network.
+{% endcomment %}
+<section class="card" id="obligation-panel" aria-live="polite" aria-atomic="true">
+  {% if error %}
+    <p class="callout callout--danger" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <div class="detail-header">
+    <c-status-chip :status="obligation.display_status" :label="obligation.get_state_display" />
+
+    {% if obligation.due_date %}
+      <c-due-badge :date="obligation.due_date"
+                   :days="obligation.days_to_due"
+                   :original="obligation.original_due_date"
+                   :notification="obligation.applied_extension_reference" />
+    {% endif %}
+
+    {% if obligation.filed_late %}
+      <span class="badge-soft badge-soft--danger">{% translate "Filed late" %}</span>
+    {% endif %}
+  </div>
+
+  {% if obligation.applied_extension_reference %}
+    <p class="callout callout--info small">
+      {% blocktranslate with reference=obligation.applied_extension_reference %}
+        The date was changed by {{ reference }}. The original statutory date is shown struck through.
+      {% endblocktranslate %}
+    </p>
+  {% elif obligation.relief %}
+    {% comment %}
+      A waiver relieves the penalty and leaves the date exactly where it was.
+      Conflating the two is the commonest bug in this space and it tells clients
+      they have longer than they do, so the two cases render differently.
+    {% endcomment %}
+    <p class="callout callout--info small">
+      {% translate "A notification has waived the late fee for this period. The due date is unchanged." %}
+    </p>
+  {% endif %}
+
+  {% if obligation.needs_input %}
+    {% include "obligations/_fragments/needs_input.html" %}
+  {% endif %}
+
+  <dl class="key-values">
+    <dt>{% translate "Period" %}</dt>
+    <dd>{{ obligation.period_label|default:obligation.period_key }}</dd>
+    {% if obligation.scope_label %}
+      <dt>{% translate "Filed for" %}</dt><dd>{{ obligation.scope_label }}</dd>
+    {% endif %}
+    {% if obligation.filed_on %}
+      <dt>{% translate "Filed on" %}</dt><dd>{{ obligation.filed_on|date:"j M Y" }}</dd>
+      <dt>{% translate "Acknowledgement" %}</dt>
+      <dd>{{ obligation.filing_reference|default:"—" }}</dd>
+    {% endif %}
+    <dt>{% translate "Assigned to" %}</dt>
+    <dd>{% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}{% translate "Nobody yet" %}{% endif %}</dd>
+  </dl>
+
+  {% if actions %}
+    <div class="action-bar">
+      {% for action in actions %}
+        <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+              hx-target="#obligation-panel"
+              hx-swap="outerHTML"
+              {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
+              class="action-bar__form">
+          {% csrf_token %}
+          <input type="hidden" name="target" value="{{ action.target }}">
+
+          {% if action.requires_note %}
+            <label class="visually-hidden" for="note-{{ forloop.counter }}">{% translate "Reason" %}</label>
+            <input class="form-control form-control-sm" id="note-{{ forloop.counter }}"
+                   name="note" required
+                   placeholder="{% translate 'Why? (recorded)' %}">
+          {% endif %}
+
+          {% if action.requires_filing_reference %}
+            <label class="visually-hidden" for="ack-{{ forloop.counter }}">
+              {% translate "Acknowledgement number" %}
+            </label>
+            <input class="form-control form-control-sm" id="ack-{{ forloop.counter }}"
+                   name="filing_reference" required
+                   placeholder="{% translate 'Acknowledgement number' %}">
+            <input class="form-control form-control-sm" type="date" name="filed_on"
+                   aria-label="{% translate 'Filed on' %}">
+          {% endif %}
+
+          <button class="btn btn-sm {% if forloop.first %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                  type="submit">{{ action.label }}</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-muted small">
+      {% translate "You do not have permission to change this obligation." %}
+    </p>
+  {% endif %}
+</section>

@@ -75,6 +75,14 @@ app.conf.beat_schedule = {
         "task": "stacos.accounts.roll_message_spend_ledger",
         "schedule": crontab(hour=0, minute=5),
     },
+    # Rolls every tenant's eighteen-month horizon forward. Auto-applied without
+    # review because the nightly delta is additive: one more period appears at
+    # the far end and nothing already in the register changes. Runs at 01:30 IST,
+    # after midnight rollovers have settled and long before anyone is working.
+    "roll-obligation-horizon": {
+        "task": "stacos.obligations.materialise_roll_horizon",
+        "schedule": crontab(hour=1, minute=30),
+    },
 }
 
 app.autodiscover_tasks()

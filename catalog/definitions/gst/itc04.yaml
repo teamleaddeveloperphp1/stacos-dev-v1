@@ -1,0 +1,46 @@
+code: IN-GST-ITC04
+country: IN
+category: TAX_INDIRECT
+family: GST
+authority: CBIC
+version: 1
+title: ITC-04 — goods sent to a job worker
+plain_language_summary: >
+  A declaration of inputs and capital goods sent out for job work and received
+  back. If goods do not return within the statutory period they are treated as a
+  supply and tax becomes payable, so this is a tracking obligation as much as a
+  filing one.
+statutory_reference: Rule 45(3) CGST Rules
+filing_portal_url: "https://www.gst.gov.in"
+periodicity: HALF_YEARLY
+period_anchor: FY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: GST
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: GST
+      explain: you hold a GST registration
+    - fact: has_factory_premises
+      op: eq
+      value: true
+      explain: you operate a factory or plant
+    - fact: aggregate_turnover
+      op: gt
+      value: 50000000
+      explain: your annual aggregate turnover is above ₹5 crore
+due:
+  anchor: PERIOD_END
+  offset: { months: 0, day_of_month: 25 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: Filed declaration acknowledgement, kind: DOC, mandatory_for_close: true }
+  - { key: challans, label: Job-work delivery challans, kind: DOC }
+default_owner_role: org-finance
+penalty_summary: "General penalty up to ₹25,000; unreturned goods become a taxable supply."
+effective_from: 2021-10-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: MEDIUM

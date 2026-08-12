@@ -1,0 +1,6 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Calendar" %} · STACOS{% endblock %}
+
+{% block main %}{% include "obligations/_fragments/month_body.html" %}{% endblock %}

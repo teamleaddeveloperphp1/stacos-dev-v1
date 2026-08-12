@@ -5,11 +5,17 @@ Read this before writing code. These are the conventions that, if broken, cost f
 ## Commands
 
 ```powershell
-.\tasks.ps1 run          # dev server
+.\tasks.ps1 run          # dev server, this terminal
 .\tasks.ps1 migrate      # migrations (runs as stacos_migrator automatically)
 .\tasks.ps1 test         # pytest
 .\tasks.ps1 check        # every CI gate locally — run this before declaring work done
+
+.\start.ps1              # whole stack detached: web, sse, worker, beat, flower, assets
+.\start.ps1 -Status      # what is running (logs in .run\logs\)
+.\stop.ps1               # stop it all
 ```
+
+`start.sh` / `stop.sh` are the Linux and macOS equivalents, with long-form flags.
 
 Never call `python manage.py migrate` directly: the app connects as `stacos_app`, which does not own the schema. `tasks.ps1 migrate` swaps in the owner role.
 

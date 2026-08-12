@@ -1,0 +1,38 @@
+{% load i18n %}
+{% comment %}
+  What the law says, behind one obligation. Loaded into a modal from the detail
+  page. A client asking "why do I have to file this" gets the statutory
+  reference and a dated review, not an assertion.
+{% endcomment %}
+<div class="modal-body">
+  <h2 class="modal-title">{{ version.title }}</h2>
+  <p class="text-muted small">{{ definition.code }} · v{{ version.version }}</p>
+
+  {% if version.plain_language_summary %}
+    <p>{{ version.plain_language_summary }}</p>
+  {% endif %}
+
+  <dl class="key-values small">
+    {% if version.statutory_reference %}
+      <dt>{% translate "Reference" %}</dt><dd>{{ version.statutory_reference }}</dd>
+    {% endif %}
+    {% if definition.authority %}
+      <dt>{% translate "Authority" %}</dt><dd>{{ definition.authority }}</dd>
+    {% endif %}
+    <dt>{% translate "Frequency" %}</dt><dd>{{ version.periodicity|title }}</dd>
+    <dt>{% translate "In force from" %}</dt>
+    <dd>
+      {{ version.effective_from|date:"j M Y" }}
+      {% if version.effective_to %} — {{ version.effective_to|date:"j M Y" }}{% endif %}
+    </dd>
+    {% if version.penalty_summary %}
+      <dt>{% translate "If missed" %}</dt><dd>{{ version.penalty_summary }}</dd>
+    {% endif %}
+  </dl>
+
+  {% if version.review_is_stale %}
+    <p class="callout callout--warning small">
+      {% translate "This summary has not been reviewed against the statute within the last twelve months. Treat it as a guide and check the reference." %}
+    </p>
+  {% endif %}
+</div>

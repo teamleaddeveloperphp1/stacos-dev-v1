@@ -65,6 +65,12 @@ GLOBAL_MODEL_ALLOWLIST: dict[str, str] = {
     "jurisdictions.Authority": "Platform-owned reference data.",
     "jurisdictions.FactDefinition": "Platform-owned reference data.",
     "jurisdictions.WeekendRule": "Platform-owned reference data.",
+    # The compliance catalog is the same law for every tenant. What differs
+    # between them is which definitions their profile makes applicable, and that
+    # is computed into the tenant-scoped register rather than stored here.
+    "catalog.ComplianceDefinition": "Platform-owned reference data; the law is the same for all tenants.",
+    "catalog.DefinitionVersion": "Platform-owned reference data; append-only versions of the above.",
+    "catalog.GovernmentExtension": "Platform-owned reference data; a published notification is public.",
     # An invitation frequently predates the receiving tenant existing at all, so
     # it cannot carry that tenant's id. Access is controlled by a single-use
     # hashed token and an expiry instead.

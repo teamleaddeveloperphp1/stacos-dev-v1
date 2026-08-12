@@ -75,6 +75,10 @@ LOCAL_APPS = [
     "stacos.jurisdictions",
     "stacos.tenancy",
     "stacos.engagements",
+    # The catalog is platform-owned reference data; the register is what each
+    # tenant owes. Catalog first, because obligations reference its models.
+    "stacos.catalog",
+    "stacos.obligations",
     "stacos.marketing",
     "stacos.api",
     "stacos.platformadmin",

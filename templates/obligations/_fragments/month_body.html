@@ -1,0 +1,91 @@
+{% load i18n %}
+{% comment %}
+  A month at a glance.
+
+  Deliberately a second *read* of the register, not a second source of truth: one
+  query for the window, grouped in Python. A query per cell would be thirty-one
+  round trips to render one screen.
+
+  Status is never encoded by colour alone here either — each entry carries the
+  status chip's icon and word, because a printed month view and a colour-blind
+  user both have to be able to read it.
+{% endcomment %}
+
+<c-page-header title="{{ month_start|date:'F Y' }}"
+               subtitle="{% blocktranslate count counter=total %}{{ counter }} obligation falls due this month.{% plural %}{{ counter }} obligations fall due this month.{% endblocktranslate %}">
+  <div class="btn-group btn-group-sm">
+    <a class="btn btn-outline-secondary"
+       href="{% url 'compliance:month' %}?month={{ previous_month|date:'Y-m' }}"
+       hx-get="{% url 'compliance:month' %}?month={{ previous_month|date:'Y-m' }}"
+       hx-target="#main" hx-push-url="true"
+       aria-label="{% translate 'Previous month' %}">‹</a>
+    <a class="btn btn-outline-secondary"
+       href="{% url 'compliance:month' %}"
+       hx-get="{% url 'compliance:month' %}" hx-target="#main" hx-push-url="true">
+      {% translate "Today" %}
+    </a>
+    <a class="btn btn-outline-secondary"
+       href="{% url 'compliance:month' %}?month={{ next_month|date:'Y-m' }}"
+       hx-get="{% url 'compliance:month' %}?month={{ next_month|date:'Y-m' }}"
+       hx-target="#main" hx-push-url="true"
+       aria-label="{% translate 'Next month' %}">›</a>
+  </div>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}"
+     hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
+    <c-icon name="document" size="14" /> {% translate "List view" %}
+  </a>
+</c-page-header>
+
+<div class="month-grid" aria-live="polite" aria-atomic="false">
+  <table class="month-grid__table">
+    <caption class="visually-hidden">
+      {% blocktranslate with month=month_start|date:"F Y" %}Obligations due in {{ month }}{% endblocktranslate %}
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col" abbr="{% translate 'Monday' %}">{% translate "Mon" %}</th>
+        <th scope="col" abbr="{% translate 'Tuesday' %}">{% translate "Tue" %}</th>
+        <th scope="col" abbr="{% translate 'Wednesday' %}">{% translate "Wed" %}</th>
+        <th scope="col" abbr="{% translate 'Thursday' %}">{% translate "Thu" %}</th>
+        <th scope="col" abbr="{% translate 'Friday' %}">{% translate "Fri" %}</th>
+        <th scope="col" abbr="{% translate 'Saturday' %}">{% translate "Sat" %}</th>
+        <th scope="col" abbr="{% translate 'Sunday' %}">{% translate "Sun" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for week in weeks %}
+        <tr>
+          {% for cell in week %}
+            <td class="month-cell {% if not cell.in_month %}month-cell--outside{% endif %} {% if cell.date == as_of %}month-cell--today{% endif %}">
+              <div class="month-cell__date">
+                <time datetime="{{ cell.date|date:'Y-m-d' }}">{{ cell.date|date:"j" }}</time>
+              </div>
+              {% for obligation in cell.obligations|slice:":4" %}
+                <a class="month-entry month-entry--{{ obligation.display_status }}"
+                   href="{% url 'compliance:detail' obligation.pk %}"
+                   hx-get="{% url 'compliance:detail' obligation.pk %}"
+                   hx-target="#main" hx-push-url="true"
+                   title="{{ obligation.title }} — {{ obligation.entity.name }}">
+                  <c-status-chip :status="obligation.display_status" label=" " />
+                  <span class="month-entry__title">{{ obligation.title }}</span>
+                </a>
+              {% endfor %}
+              {% if cell.obligations|length > 4 %}
+                <a class="month-cell__more"
+                   href="{% url 'compliance:calendar' %}?status=all"
+                   hx-get="{% url 'compliance:calendar' %}?status=all"
+                   hx-target="#main" hx-push-url="true">
+                  {% blocktranslate count counter=cell.obligations|length|add:"-4" %}
+                    +{{ counter }} more
+                  {% plural %}
+                    +{{ counter }} more
+                  {% endblocktranslate %}
+                </a>
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

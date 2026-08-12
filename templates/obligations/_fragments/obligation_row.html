@@ -1,0 +1,57 @@
+{% load i18n %}
+{% comment %}
+  One row of the register.
+
+  Rendered from the list and re-rendered on its own after a state change, so it
+  carries its own id and nothing outside it is assumed. `display_status` and
+  `days_to_due` are query annotations, computed server-side against the entity's
+  jurisdiction — never in the browser, because a client whose clock differs must
+  not see a different answer from the one the platform will act on.
+{% endcomment %}
+<tr id="obligation-{{ obligation.pk }}"
+    class="{% if obligation.is_overdue %}row--overdue{% endif %}">
+  <td>
+    <a class="link-strong" href="{% url 'compliance:detail' obligation.pk %}"
+       hx-get="{% url 'compliance:detail' obligation.pk %}"
+       hx-target="#main" hx-push-url="true">{{ obligation.title }}</a>
+    {% if obligation.scope_label %}
+      <div class="text-muted small">{{ obligation.scope_label }}</div>
+    {% endif %}
+    {% if not obligation.confirmed %}
+      {# UNKNOWN applicability. Materialised anyway and flagged, because silently #}
+      {# dropping an obligation is what gets a client penalised.                  #}
+      <span class="badge-soft badge-soft--attention"
+            title="{% translate 'We think this may apply. Confirm a few details and we will be sure.' %}">
+        {% translate "Confirm" %}
+      </span>
+    {% endif %}
+  </td>
+  <td class="text-muted small">{{ obligation.entity.name }}</td>
+  <td class="text-muted small">{{ obligation.period_label|default:obligation.period_key }}</td>
+  <td>
+    {% if obligation.due_date %}
+      <c-due-badge :date="obligation.due_date"
+                   :days="obligation.days_to_due"
+                   :original="obligation.original_due_date"
+                   :notification="obligation.applied_extension_reference" />
+    {% elif obligation.needs_input %}
+      <a class="link-attention small"
+         href="{% url 'compliance:detail' obligation.pk %}"
+         hx-get="{% url 'compliance:detail' obligation.pk %}"
+         hx-target="#main" hx-push-url="true">
+        {% blocktranslate with what=obligation.needs_input|lower|cut:"_" %}
+          Tell us the {{ what }} to schedule this
+        {% endblocktranslate %}
+      </a>
+    {% else %}
+      <span class="text-muted small">{% translate "Not scheduled" %}</span>
+    {% endif %}
+  </td>
+  <td>
+    <c-status-chip :status="obligation.display_status"
+                   :label="obligation.get_state_display" />
+  </td>
+  <td class="text-muted small">
+    {% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}—{% endif %}
+  </td>
+</tr>

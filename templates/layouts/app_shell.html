@@ -75,13 +75,20 @@
         </div>
 
         {% comment %}
-          The compliance, notices, requests and vault sections arrive with their
-          own milestones. They are listed here, visibly disabled, because an
-          empty navigation tells a new user nothing about what the product does.
+          The requests, notices and vault sections arrive with their own
+          milestones. They are listed here, visibly disabled, because an empty
+          navigation tells a new user nothing about what the product does.
         {% endcomment %}
         <div class="app-nav__group">
           <div class="app-nav__label">{% translate "Compliance" %}</div>
-          <c-nav-placeholder icon="calendar" label="{% translate 'Calendar' %}" />
+          <a class="app-nav__link" href="{% url 'compliance:calendar' %}" preload
+             {% if request.resolver_match.namespace == 'compliance' %}aria-current="page"{% endif %}>
+            <c-icon name="calendar" />
+            <span>{% translate "Calendar" %}</span>
+            <span class="app-nav__count app-nav__count--alert" id="overdue-count">
+              {{ overdue_count|default:"" }}
+            </span>
+          </a>
           <c-nav-placeholder icon="inbox" label="{% translate 'Information requests' %}" />
           <c-nav-placeholder icon="alert" label="{% translate 'Notices' %}" />
           <c-nav-placeholder icon="folder" label="{% translate 'Documents' %}" />

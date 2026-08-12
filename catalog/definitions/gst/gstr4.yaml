@@ -1,0 +1,42 @@
+code: IN-GST-GSTR4
+country: IN
+category: TAX_INDIRECT
+family: GST
+authority: CBIC
+version: 1
+title: GSTR-4 — composition scheme annual return
+plain_language_summary: >
+  The annual return for composition dealers, due three months after the financial
+  year ends. Together with four CMP-08 statements it is the whole of a composition
+  dealer's GST year.
+statutory_reference: Rule 62(1)(ii) CGST Rules
+filing_portal_url: "https://www.gst.gov.in"
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: GST
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: GST
+      explain: you hold a GST registration
+    - fact: gst_scheme
+      op: eq
+      value: COMPOSITION
+      explain: you are registered under the composition scheme
+due:
+  # A period that closed on 31 March falls due on 30 June — which is exactly why
+  # the horizon filters on the due date rather than on the period.
+  anchor: PERIOD_END
+  offset: { months: 3, day_of_month: 30 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
+default_owner_role: org-finance
+penalty_summary: "₹50 per day (₹20 nil), capped at ₹2,000."
+effective_from: 2019-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

@@ -1,0 +1,51 @@
+{% load i18n %}
+{% comment %}
+  What is due next, on the dashboard.
+
+  Its own endpoint, loaded lazily, so the shell paints immediately instead of the
+  whole page waiting on the register. The list deliberately includes anything
+  already overdue — a "what is coming up" that silently omits what you have
+  already missed is worse than no list at all.
+{% endcomment %}
+<section class="card" id="dashboard-obligations" aria-live="polite" aria-atomic="false">
+  <div class="card__header">
+    <h2 class="card__title">{% translate "What is due next" %}</h2>
+    <a class="small" href="{% url 'compliance:calendar' %}"
+       hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
+      {% translate "Open the calendar" %}
+    </a>
+  </div>
+
+  {% if counts.overdue %}
+    <p class="callout callout--danger small">
+      {% blocktranslate count counter=counts.overdue %}
+        {{ counter }} obligation is overdue.
+      {% plural %}
+        {{ counter }} obligations are overdue.
+      {% endblocktranslate %}
+    </p>
+  {% endif %}
+
+  <ul class="due-list">
+    {% for obligation in upcoming %}
+      <li class="due-list__item">
+        <a href="{% url 'compliance:detail' obligation.pk %}"
+           hx-get="{% url 'compliance:detail' obligation.pk %}"
+           hx-target="#main" hx-push-url="true">{{ obligation.title }}</a>
+        <span class="text-muted small">{{ obligation.entity.name }}</span>
+        <c-due-badge :date="obligation.due_date" :days="obligation.days_to_due"
+                     :original="obligation.original_due_date" />
+      </li>
+    {% empty %}
+      <li>
+        <c-empty-state title="{% translate 'Nothing due in the next month' %}"
+                       body="{% translate 'Either everything is filed, or the entity profiles still need completing.' %}">
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:entity_list' %}"
+             hx-get="{% url 'app:entity_list' %}" hx-target="#main" hx-push-url="true">
+            {% translate "Check entities" %}
+          </a>
+        </c-empty-state>
+      </li>
+    {% endfor %}
+  </ul>
+</section>

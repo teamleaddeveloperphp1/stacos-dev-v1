@@ -46,6 +46,39 @@ function Import-DotEnv {
 
 function Invoke-Section { param([string]$Name) Write-Host "`n--- $Name ---" -ForegroundColor Cyan }
 
+<#
+Turns trailing arguments into a hashtable for splatting.
+
+`& script @Rest` cannot be used to forward flags: splatting an *array* passes
+every element positionally, so `-Ports` arrives as a value rather than binding
+the switch. A hashtable splat binds by name, which is what pass-through needs.
+#>
+function ConvertTo-ParameterSplat {
+    param([string[]]$Tokens)
+
+    $splat = @{}
+    for ($i = 0; $i -lt $Tokens.Count; $i++) {
+        $token = $Tokens[$i]
+        if ($token -notmatch '^-{1,2}([A-Za-z][A-Za-z0-9]*)$') {
+            throw "Cannot forward '$token'. Call the script directly for arguments like this."
+        }
+        $name = $Matches[1]
+        # A following token that is not itself a flag is this parameter's value.
+        # `-\D` rather than `-`, so a negative number still reads as a value.
+        if ($i + 1 -lt $Tokens.Count -and $Tokens[$i + 1] -notmatch '^-\D') {
+            # ValueFromRemainingArguments flattens `-Only web,worker` into the
+            # single string "web worker", so a list is re-split on either
+            # separator. No parameter here takes a value containing a space.
+            $value = $Tokens[$i + 1]
+            if ($value -match '[,\s]') { $splat[$name] = $value -split '[,\s]+' } else { $splat[$name] = $value }
+            $i++
+        } else {
+            $splat[$name] = $true
+        }
+    }
+    return $splat
+}
+
 Import-DotEnv
 
 switch ($Task) {
@@ -55,8 +88,8 @@ switch ($Task) {
 
     # `run` is the server alone, in this terminal. `start` is the whole stack --
     # server, workers, beat, flower, asset watchers -- detached, logging to .run\logs.
-    'start'  { & (Join-Path $PSScriptRoot 'start.ps1') @Rest }
-    'stop'   { & (Join-Path $PSScriptRoot 'stop.ps1') @Rest }
+    'start'  { $fwd = ConvertTo-ParameterSplat $Rest; & (Join-Path $PSScriptRoot 'start.ps1') @fwd }
+    'stop'   { $fwd = ConvertTo-ParameterSplat $Rest; & (Join-Path $PSScriptRoot 'stop.ps1') @fwd }
     'status' { & (Join-Path $PSScriptRoot 'start.ps1') -Status }
 
     'migrate' {

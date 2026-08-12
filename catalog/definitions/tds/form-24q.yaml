@@ -1,0 +1,43 @@
+code: IN-TDS-24Q
+country: IN
+category: TAX_DIRECT
+family: TDS
+authority: CBDT
+version: 1
+title: Form 24Q — quarterly TDS return (salaries)
+plain_language_summary: >
+  The quarterly statement of tax deducted from salaries. Your employees' Form 26AS
+  and their ability to claim the deduction depend on it, so a late 24Q produces
+  angry staff before it produces a notice.
+statutory_reference: Section 200(3) Income-tax Act r/w Rule 31A
+filing_portal_url: "https://www.incometax.gov.in"
+periodicity: QUARTERLY
+# TDS quarters are fiscal-year anchored: Q1 is April–June, not January–March.
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+    - fact: registrations
+      op: includes
+      value: TAN
+      explain: you hold a TAN
+    - fact: employee_count
+      op: gte
+      value: 1
+      explain: you have employees on payroll
+due:
+  anchor: PERIOD_END
+  offset: { months: 1, day_of_month: 31 }
+  # Q4 (January–March) is due 31 May, not 30 April.
+  offset_by_month:
+    3: { months: 2, day_of_month: 31 }
+  shift_if_holiday: NONE
+evidence:
+  - { key: ack, label: Return acknowledgement (token number), kind: DOC, mandatory_for_close: true }
+  - { key: fvu, label: Validated FVU file, kind: DOC }
+default_owner_role: org-finance
+penalty_summary: "₹200 per day under Section 234E until filed, capped at the TDS amount; ₹10,000–₹1,00,000 under 271H."
+effective_from: 2010-04-01
+reviewed_by: Skorydov compliance desk
+reviewed_at: 2026-06-01
+confidence: HIGH

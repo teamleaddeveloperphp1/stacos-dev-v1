@@ -17,6 +17,21 @@ Three constraints, enforced by tests rather than convention:
   interpreter.
 """
 
+from stacos.engine.lifecycle import (
+    OPEN_STATES,
+    TERMINAL_STATES,
+    DisplayStatus,
+    State,
+    allowed_transitions,
+    derive_display_status,
+)
+from stacos.engine.planner import (
+    EntityProfileView,
+    ExistingInstance,
+    MaterialisationPlan,
+    PlannedInstance,
+    plan,
+)
 from stacos.engine.types import (
     CalendarSnapshot,
     DefinitionSnapshot,
@@ -25,16 +40,33 @@ from stacos.engine.types import (
     ExtensionRecord,
     ExtensionSet,
     FiscalYearConvention,
+    Identity,
+    InstanceScope,
     Period,
+    Periodicity,
 )
 
 __all__ = [
+    "OPEN_STATES",
+    "TERMINAL_STATES",
     "CalendarSnapshot",
     "DefinitionSnapshot",
+    "DisplayStatus",
     "DueDateResolution",
+    "EntityProfileView",
     "EvidenceRequirement",
+    "ExistingInstance",
     "ExtensionRecord",
     "ExtensionSet",
     "FiscalYearConvention",
+    "Identity",
+    "InstanceScope",
+    "MaterialisationPlan",
     "Period",
+    "Periodicity",
+    "PlannedInstance",
+    "State",
+    "allowed_transitions",
+    "derive_display_status",
+    "plan",
 ]

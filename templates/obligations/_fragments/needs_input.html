@@ -1,0 +1,30 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The prompt shown when a due date could not be resolved.
+
+  A calendar that says what it does not know beats one that guesses: an AOC-4 with
+  no recorded AGM date materialises with a null date and this prompt, rather than
+  a plausible-looking date that is wrong. Answering it takes one field, and the
+  calendar is rebuilt immediately — asking the user to come back tomorrow for the
+  nightly run would be absurd.
+{% endcomment %}
+<div class="callout callout--attention" id="needs-input">
+  <p class="mb-2">
+    {% blocktranslate with what=obligation.needs_input|lower|cut:"_" %}
+      We cannot schedule this until you tell us the {{ what }}.
+    {% endblocktranslate %}
+  </p>
+
+  {% if event_form %}
+    <form hx-post="{% url 'compliance:record_event' obligation.pk %}"
+          hx-target="#obligation-panel"
+          hx-swap="outerHTML"
+          class="d-flex gap-2 align-items-end flex-wrap">
+      {% csrf_token %}
+      <input type="hidden" name="key" value="{{ obligation.needs_input }}">
+      {{ event_form.occurred_on|as_crispy_field }}
+      {{ event_form.note|as_crispy_field }}
+      <button class="btn btn-sm btn-primary" type="submit">{% translate "Save date" %}</button>
+    </form>
+  {% endif %}
+</div>
