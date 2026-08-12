@@ -1,0 +1,335 @@
+// =============================================================================
+// The screens that are not lists: the month grid, the work board, the request
+// checklist, the attachment strip and the plan cards.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Month grid.
+//
+// A real table, not a grid of divs. Thirty-one dated cells with a caption and
+// column headers is exactly what a table is for, and it is the only way a screen
+// reader can say "Thursday 20 August, 3 obligations" rather than reading a wall.
+// -----------------------------------------------------------------------------
+.month-grid {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  overflow-x: auto;
+
+  &__table {
+    width: 100%;
+    min-width: 48rem;
+    border-collapse: collapse;
+    table-layout: fixed;
+
+    th {
+      padding: $stacos-space-2;
+      font-size: $stacos-text-xs;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--stacos-text-subtle);
+      text-align: left;
+      border-bottom: 1px solid var(--stacos-border);
+    }
+  }
+}
+
+.month-cell {
+  height: 7rem;
+  padding: $stacos-space-2;
+  border: 1px solid var(--stacos-border);
+  vertical-align: top;
+  overflow: hidden;
+
+  &__date {
+    font-size: $stacos-text-xs;
+    font-variant-numeric: tabular-nums;
+    color: var(--stacos-text-muted);
+    margin-bottom: $stacos-space-1;
+  }
+
+  // Adjacent months are greyed rather than omitted: a grid with ragged edges is
+  // harder to read than one with muted days.
+  &--outside {
+    background: var(--stacos-surface-sunken);
+    .month-cell__date { opacity: 0.5; }
+  }
+
+  &--today {
+    box-shadow: inset 0 0 0 2px var(--stacos-accent);
+  }
+
+  &__more {
+    display: block;
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+    text-decoration: none;
+    margin-top: $stacos-space-1;
+  }
+}
+
+.month-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.15rem;
+  padding: 0.1rem 0.25rem;
+  border-radius: var(--stacos-radius-sm);
+  border-left: 3px solid var(--stacos-border-strong);
+  background: var(--stacos-surface-sunken);
+  font-size: $stacos-text-xs;
+  text-decoration: none;
+  color: inherit;
+
+  &__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // Colour repeats what the status chip already says in words and icon.
+  &--overdue     { border-left-color: var(--stacos-status-overdue); }
+  &--due-soon    { border-left-color: var(--stacos-status-due-soon); }
+  &--on-track    { border-left-color: var(--stacos-status-on-track); }
+  &--in-progress { border-left-color: var(--stacos-status-in-progress); }
+  &--waiting     { border-left-color: var(--stacos-status-waiting); }
+  &--complete    { border-left-color: var(--stacos-status-complete); }
+  &--na          { border-left-color: var(--stacos-status-na); }
+  &--disputed    { border-left-color: var(--stacos-status-disputed); }
+}
+
+// -----------------------------------------------------------------------------
+// The practice work board.
+//
+// Columns scroll horizontally rather than compressing: five columns squeezed
+// into a phone width is five unreadable columns, and a board is a thing you pan
+// across.
+// -----------------------------------------------------------------------------
+.board {
+  display: flex;
+  gap: $stacos-space-3;
+  overflow-x: auto;
+  padding-bottom: $stacos-space-3;
+  align-items: flex-start;
+
+  &__column {
+    flex: 0 0 17rem;
+    background: var(--stacos-surface-sunken);
+    border: 1px solid var(--stacos-border);
+    border-radius: var(--stacos-radius-md);
+    padding: $stacos-space-3;
+  }
+
+  &__column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: $stacos-text-xs;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--stacos-text-subtle);
+    margin-bottom: $stacos-space-3;
+  }
+
+  &__count {
+    font-variant-numeric: tabular-nums;
+    background: var(--stacos-surface);
+    border: 1px solid var(--stacos-border);
+    border-radius: var(--stacos-radius-pill);
+    padding: 0 0.4rem;
+  }
+
+  &__cards { list-style: none; padding: 0; margin: 0; }
+
+  &__empty {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-subtle);
+    padding: $stacos-space-2 0;
+  }
+}
+
+.board-card {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-left: 3px solid var(--stacos-border-strong);
+  border-radius: var(--stacos-radius-sm);
+  padding: $stacos-space-3;
+  margin-bottom: $stacos-space-2;
+  box-shadow: var(--stacos-shadow-xs);
+
+  &--overdue { border-left-color: var(--stacos-status-overdue); }
+
+  &__title {
+    display: block;
+    font-size: $stacos-text-sm;
+    font-weight: 500;
+    text-decoration: none;
+    margin-bottom: $stacos-space-1;
+  }
+
+  &__client {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  &__meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: $stacos-space-2;
+    margin-top: $stacos-space-2;
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  &__blocked {
+    margin: $stacos-space-2 0 0;
+    padding: $stacos-space-1 $stacos-space-2;
+    background: var(--stacos-status-disputed-bg, var(--stacos-surface-sunken));
+    border-radius: var(--stacos-radius-sm);
+    font-size: $stacos-text-xs;
+  }
+}
+
+.avatar--xs {
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.625rem;
+  line-height: 1.25rem;
+}
+
+// -----------------------------------------------------------------------------
+// The information-request checklist.
+//
+// Each item carries its own state, because a request for six documents that
+// comes back with five is neither done nor not-done.
+// -----------------------------------------------------------------------------
+.checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 $stacos-space-4;
+  counter-reset: checklist;
+
+  &__item {
+    position: relative;
+    padding: $stacos-space-3 0 $stacos-space-3 $stacos-space-6;
+    border-bottom: 1px solid var(--stacos-border);
+    counter-increment: checklist;
+
+    &:last-child { border-bottom: 0; }
+
+    // The marker is generated, so an item's number never has to be maintained
+    // in the template and reordering cannot desynchronise it.
+    &::before {
+      content: counter(checklist);
+      position: absolute;
+      left: 0;
+      top: $stacos-space-3;
+      width: 1.5rem;
+      height: 1.5rem;
+      display: grid;
+      place-items: center;
+      border-radius: var(--stacos-radius-pill);
+      border: 1px solid var(--stacos-border-strong);
+      font-size: $stacos-text-xs;
+      color: var(--stacos-text-muted);
+    }
+
+    &--done::before {
+      content: "✓";
+      background: var(--stacos-status-complete-bg);
+      border-color: var(--stacos-status-complete);
+      color: var(--stacos-status-complete);
+    }
+  }
+
+  &__label {
+    font-size: $stacos-text-sm;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+  }
+
+  &__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $stacos-space-3;
+    margin-top: $stacos-space-2;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Attachments, used anywhere something owns documents.
+// -----------------------------------------------------------------------------
+.attachments {
+  margin-top: $stacos-space-2;
+
+  &__list { list-style: none; padding: 0; margin: 0 0 $stacos-space-2; }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    padding: $stacos-space-1 0;
+    font-size: $stacos-text-sm;
+  }
+
+  &__name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__action { font-size: $stacos-text-xs; }
+}
+
+// A reconciliation inside a return's working papers.
+.reconciliation {
+  margin-top: $stacos-space-4;
+  padding-top: $stacos-space-3;
+  border-top: 1px solid var(--stacos-border);
+}
+
+// -----------------------------------------------------------------------------
+// Plan cards on the billing screen.
+// -----------------------------------------------------------------------------
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: $stacos-space-3;
+}
+
+.plan-card {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  padding: $stacos-space-4;
+
+  &--current { border-color: var(--stacos-accent); box-shadow: var(--stacos-shadow-xs); }
+
+  &__name { font-size: $stacos-text-md; font-weight: 600; margin-bottom: $stacos-space-2; }
+
+  &__price {
+    font-size: $stacos-text-xl;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: $stacos-space-3;
+  }
+
+  &__features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 $stacos-space-3;
+    font-size: $stacos-text-sm;
+
+    li {
+      padding: $stacos-space-1 0;
+      border-bottom: 1px solid var(--stacos-border);
+      &:last-child { border-bottom: 0; }
+    }
+  }
+}

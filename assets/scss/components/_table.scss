@@ -98,6 +98,18 @@
 }
 
 // The audit trail timeline, used on every detail page.
+// A row whose subject is past its due date. The tint is a second channel only —
+// every one of these rows also carries an "Overdue" status chip, because a row
+// that is merely pink says nothing to a screen reader or to anyone who cannot
+// distinguish it from the row above.
+.row--overdue {
+  background: var(--stacos-status-overdue-bg);
+
+  > td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--stacos-status-overdue);
+  }
+}
+
 .timeline {
   position: relative;
   padding-left: $stacos-space-5;
@@ -127,10 +139,32 @@
       background: var(--stacos-border-strong);
       box-shadow: 0 0 0 3px var(--stacos-surface);
     }
+
+    // Marker colours for the kinds that change what is *true* about an
+    // obligation, as against the ones that record that somebody looked. The
+    // rest keep the neutral marker. Every entry names its kind in text too.
+    &--date_changed::before,
+    &--extension_applied::before { background: var(--stacos-status-due-soon); }
+    &--superseded::before { background: var(--stacos-status-na); }
+    &--note::before { background: var(--stacos-status-in-progress); }
   }
 
   &__meta {
     font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+    display: flex;
+    gap: $stacos-space-2;
+    flex-wrap: wrap;
+  }
+
+  &__body { font-size: $stacos-text-sm; }
+
+  // What a person typed, as opposed to what the system recorded. Set apart so a
+  // reviewer scanning a trail can find the human sentences.
+  &__note {
+    margin: $stacos-space-1 0 0;
+    padding-left: $stacos-space-3;
+    border-left: 2px solid var(--stacos-border);
     color: var(--stacos-text-muted);
   }
 }

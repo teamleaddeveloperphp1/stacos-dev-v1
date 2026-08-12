@@ -3,6 +3,13 @@
 @import "shell";
 @import "status";
 @import "table";
+// Counters, detail layouts and key/value lists — the frame every module
+// screen is built from, so compliance, notices, returns and billing all
+// look like the same product.
+@import "panels";
+// The screens that are not lists: month grid, work board, checklist,
+// attachments, plan cards.
+@import "work";
 @import "forms";
 @import "palette";
 @import "htmx";

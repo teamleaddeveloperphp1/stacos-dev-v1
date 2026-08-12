@@ -143,6 +143,16 @@ switch ($Task) {
         Invoke-Section 'catalog validation'
         uv run python manage.py validatecatalog --strict
 
+        # Built before the tests rather than assumed current. A stylesheet is a
+        # build artefact, and `tests/test_css_coverage.py` checks every class a
+        # template names against the bundle that page actually loads — which
+        # tests yesterday's CSS if nobody rebuilt. Git does not preserve
+        # modification times either, so on a fresh clone the ordering is
+        # arbitrary unless the build runs here.
+        Invoke-Section 'css build'
+        npm run build:css
+        if ($LASTEXITCODE -ne 0) { throw "Sass build failed with exit code $LASTEXITCODE." }
+
         Invoke-Section 'pytest'
         uv run pytest
         if ($LASTEXITCODE -ne 0) { throw "pytest failed with exit code $LASTEXITCODE." }

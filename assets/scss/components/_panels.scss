@@ -1,0 +1,302 @@
+// =============================================================================
+// Counters, detail layouts and key/value lists.
+//
+// The patterns every module screen is built from. They exist here rather than as
+// utility-class soup in each template so that "a page with a counter strip, a
+// working panel and a sidebar" looks the same in compliance, notices, returns
+// and billing — a user who learns one screen has learned all of them.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// The counter strip above a list.
+//
+// Tiles are links, not decoration: each one is the filter it describes. Making
+// them buttons that merely look like numbers is the commonest way this pattern
+// is built and the reason nobody clicks them.
+// -----------------------------------------------------------------------------
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $stacos-space-3;
+  margin-bottom: $stacos-space-4;
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: $stacos-space-1;
+  min-width: 8.5rem;
+  padding: $stacos-space-3 $stacos-space-4;
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-left: 3px solid var(--stacos-border-strong);
+  border-radius: var(--stacos-radius-md);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--stacos-border-strong);
+    box-shadow: var(--stacos-shadow-xs);
+    color: inherit;
+  }
+
+  &__value {
+    font-size: $stacos-text-2xl;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__label {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  // The status edge is the only colour on the tile, and it is always paired
+  // with a word — status is never encoded by colour alone.
+  &--overdue    { border-left-color: var(--stacos-status-overdue); }
+  &--due-soon   { border-left-color: var(--stacos-status-due-soon); }
+  &--attention  { border-left-color: var(--stacos-status-waiting); }
+  &--quiet      { border-left-color: var(--stacos-border); opacity: 0.85; }
+}
+
+// -----------------------------------------------------------------------------
+// Detail page: a working panel, and a sidebar of context.
+//
+// The main column is where a user *acts*; the aside is what they read to decide.
+// Collapsing to one column on narrow screens puts the actions first, which is
+// the right order on a phone.
+// -----------------------------------------------------------------------------
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: $stacos-space-4;
+
+  @media (min-width: 62em) {
+    grid-template-columns: minmax(0, 1.6fr) minmax(18rem, 1fr);
+    align-items: start;
+  }
+
+  // `min-width: 0` is load-bearing: without it a wide table or a long
+  // unbroken reference inside the panel forces the whole grid wider and the
+  // page scrolls horizontally.
+  &__main { min-width: 0; }
+
+  &__aside {
+    display: flex;
+    flex-direction: column;
+    gap: $stacos-space-4;
+  }
+}
+
+// The sidebar counter, when what it counts is overdue. Paired with a number, so
+// the colour is never the only signal.
+.app-nav__count--alert:not(:empty) {
+  background: var(--stacos-status-overdue-bg);
+  color: var(--stacos-status-overdue);
+}
+
+.detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $stacos-space-3;
+  padding-bottom: $stacos-space-3;
+  margin-bottom: $stacos-space-3;
+  border-bottom: 1px solid var(--stacos-border);
+}
+
+.card {
+  padding: $stacos-space-4;
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+
+  &__title {
+    font-size: $stacos-text-sm;
+    font-weight: 600;
+    margin-bottom: $stacos-space-3;
+  }
+
+  &__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: $stacos-space-3;
+    margin-bottom: $stacos-space-3;
+
+    .card__title { margin-bottom: 0; }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Key/value pairs.
+//
+// A definition list rather than a table: these are attributes of one thing, and
+// a screen reader should say "Period, July 2026" rather than reading a grid.
+// -----------------------------------------------------------------------------
+.key-values {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: $stacos-space-2 $stacos-space-4;
+  margin: 0 0 $stacos-space-3;
+
+  dt {
+    font-weight: 500;
+    color: var(--stacos-text-muted);
+    font-size: $stacos-text-sm;
+  }
+
+  dd {
+    margin: 0;
+    font-size: $stacos-text-sm;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// A short list of things falling due, used on the dashboard and in sidebars.
+.due-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+
+  &__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: $stacos-space-2 $stacos-space-3;
+    padding: $stacos-space-2 0;
+    border-bottom: 1px solid var(--stacos-border);
+    font-size: $stacos-text-sm;
+
+    &:last-child { border-bottom: 0; }
+    > a:first-child { flex: 1 1 12rem; }
+  }
+}
+
+// The row of actions at the foot of a working panel. Each action is its own
+// form — a state change is a POST, never a link.
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: $stacos-space-3;
+  margin-top: $stacos-space-4;
+  padding-top: $stacos-space-3;
+  border-top: 1px solid var(--stacos-border);
+
+  &__form {
+    display: flex;
+    align-items: flex-end;
+    gap: $stacos-space-2;
+  }
+}
+
+// A secondary action folded away until wanted — recording a response, closing a
+// notice. Present, but not competing with the primary action for attention.
+.disclosure {
+  margin-top: $stacos-space-3;
+
+  > summary {
+    cursor: pointer;
+    font-size: $stacos-text-sm;
+    font-weight: 500;
+    color: var(--stacos-accent);
+    padding: $stacos-space-1 0;
+  }
+}
+
+.link-strong { font-weight: 500; text-decoration: none; }
+.link-attention { color: var(--stacos-status-due-soon); font-weight: 500; }
+
+// A soft inline label. Deliberately quieter than a status chip, because these
+// mark a property ("optional", "non-billable") rather than a state.
+.badge-soft {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem $stacos-space-2;
+  border-radius: var(--stacos-radius-pill);
+  background: var(--stacos-surface-sunken);
+  border: 1px solid var(--stacos-border);
+  font-size: $stacos-text-xs;
+  color: var(--stacos-text-muted);
+  white-space: nowrap;
+
+  &--attention {
+    background: var(--stacos-status-waiting-bg);
+    border-color: var(--stacos-status-waiting);
+    color: var(--stacos-status-waiting);
+  }
+
+  &--danger {
+    background: var(--stacos-status-overdue-bg);
+    border-color: var(--stacos-status-overdue);
+    color: var(--stacos-status-overdue);
+  }
+}
+
+.progress-fraction {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+// -----------------------------------------------------------------------------
+// Callout — an inline explanation attached to the thing it is about.
+//
+// Distinct from a toast, which is transient and about an action just taken.
+// A callout is a standing fact: "this notice has no deadline recorded", "you
+// prepared this return so somebody else has to review it". It stays until the
+// fact changes.
+//
+// The marketing stylesheet has its own `.callout` with different proportions;
+// the two bundles never load together, so this deliberately does not try to
+// share with it.
+// -----------------------------------------------------------------------------
+.callout {
+  display: block;
+  padding: $stacos-space-3 $stacos-space-4;
+  margin-bottom: $stacos-space-3;
+  border: 1px solid var(--stacos-border);
+  border-left: 3px solid var(--stacos-border-strong);
+  border-radius: var(--stacos-radius-md);
+  background: var(--stacos-surface-sunken);
+  font-size: $stacos-text-sm;
+
+  > :last-child { margin-bottom: 0; }
+
+  // Every variant states its meaning in words as well; the border is a second
+  // channel, never the only one.
+  &--danger {
+    border-left-color: var(--stacos-status-overdue);
+    background: var(--stacos-status-overdue-bg);
+  }
+
+  &--warning,
+  &--attention {
+    border-left-color: var(--stacos-status-due-soon);
+    background: var(--stacos-status-due-soon-bg);
+  }
+
+  &--info {
+    border-left-color: var(--stacos-status-in-progress);
+    background: var(--stacos-status-in-progress-bg);
+  }
+}
+
+.answer-value {
+  margin: $stacos-space-1 0 0;
+  padding: $stacos-space-2 $stacos-space-3;
+  background: var(--stacos-surface-sunken);
+  border-radius: var(--stacos-radius-sm);
+  font-size: $stacos-text-sm;
+}
+
+.reason-list {
+  margin: 0;
+  padding-left: $stacos-space-5;
+  font-size: $stacos-text-sm;
+
+  li { margin-bottom: $stacos-space-1; }
+}
