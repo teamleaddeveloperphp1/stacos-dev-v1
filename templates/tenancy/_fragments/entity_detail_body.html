@@ -21,6 +21,14 @@
         <span class="text-muted ms-auto" style="font-size:.75rem">
           {% translate "Each one generates its own filings" %}
         </span>
+        {% if "tenancy.registration.manage" in access_scope.permissions %}
+          <button class="btn btn-sm btn-outline-secondary"
+                  hx-get="{% url 'app:registration_create' entity.pk %}"
+                  hx-target="#modal-container"
+                  hx-swap="innerHTML">
+            {% translate "Add" %}
+          </button>
+        {% endif %}
       </div>
       <div class="data-table__scroll">
         <table class="table mb-0">
@@ -32,29 +40,7 @@
               <th>{% translate "Valid" %}</th>
             </tr>
           </thead>
-          <tbody>
-            {% for registration in registrations %}
-              <tr>
-                <td class="fw-medium">{{ registration.type }}</td>
-                <td><code style="font-size:.8125rem">{{ registration.value }}</code></td>
-                <td class="text-muted">{{ registration.jurisdiction|default:"—" }}</td>
-                <td>
-                  {% if registration.is_active %}
-                    <c-status-chip status="on-track" label="{% translate 'Active' %}" />
-                  {% else %}
-                    <c-status-chip status="na" label="{% translate 'Lapsed' %}" />
-                  {% endif %}
-                </td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="4" class="p-0">
-                <c-empty-state title="{% translate 'No registrations recorded' %}"
-                               body="{% translate 'Add the PAN, GSTIN and other identifiers so we can work out which filings apply.' %}">
-                  <a class="btn btn-sm btn-primary" href="#">{% translate "Add a registration" %}</a>
-                </c-empty-state>
-              </td></tr>
-            {% endfor %}
-          </tbody>
+          {% include "tenancy/_fragments/registration_rows.html" %}
         </table>
       </div>
     </div>
@@ -95,6 +81,58 @@
         </table>
       </div>
     </div>
+
+    {% comment %}
+      The per-module panels for this entity, each fetched on load rather than
+      rendered inline.
+
+      Loading them lazily keeps the entity page itself one cheap query: the
+      compliance panel aggregates the whole register for the entity, and the
+      secretarial one computes board-meeting gaps from every meeting held. A
+      user who only wanted to check a GSTIN should not pay for either.
+
+      Each panel is permission-gated here as well as in its own view, so a user
+      without the permission sees nothing rather than an empty card that 403s in
+      the background. The compliance panel is also the only place the "Rebuild
+      calendar" control exists anywhere in the product.
+
+      `transition:false` because these load at the same moment: the View
+      Transitions API allows one at a time and rejects the rest, which surfaces
+      as an unhandled "Transition was skipped" rejection in the console. A panel
+      filling itself in is not a navigation and should not animate like one.
+    {% endcomment %}
+    {% if "compliance.obligation.view" in access_scope.permissions %}
+      <div hx-get="{% url 'compliance:entity_summary' entity.pk %}"
+           hx-trigger="load" hx-swap="outerHTML transition:false"
+           class="card mb-4" aria-busy="true">
+        <div class="card-body text-muted small">
+          <span class="spinner-inline"></span>
+          <span class="ms-2">{% translate "Loading…" %}</span>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if "notices.notice.view" in access_scope.permissions %}
+      <div hx-get="{% url 'notices:for_entity' entity.pk %}"
+           hx-trigger="load" hx-swap="outerHTML transition:false"
+           class="card mb-4" aria-busy="true">
+        <div class="card-body text-muted small">
+          <span class="spinner-inline"></span>
+          <span class="ms-2">{% translate "Loading…" %}</span>
+        </div>
+      </div>
+    {% endif %}
+
+    {% if "secretarial.view" in access_scope.permissions %}
+      <div hx-get="{% url 'secretarial:entity_summary' entity.pk %}"
+           hx-trigger="load" hx-swap="outerHTML transition:false"
+           class="card mb-4" aria-busy="true">
+        <div class="card-body text-muted small">
+          <span class="spinner-inline"></span>
+          <span class="ms-2">{% translate "Loading…" %}</span>
+        </div>
+      </div>
+    {% endif %}
   </div>
 
   {# --------------------------------------------------------------- #}

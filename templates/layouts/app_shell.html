@@ -11,6 +11,14 @@
   #main, pushes the URL, and morphs rather than replaces. A direct GET to any of
   those URLs still returns this full page, which is what keeps deep links,
   the back button and "open in new tab" working.
+
+  There is deliberately no `hx-push-url` here, and adding one back breaks the
+  app in a way that is easy to misread as cosmetic. It would be inherited by
+  every descendant, so opening a modal, submitting a panel action, clicking
+  "Load more" or typing in the palette would each push its own endpoint into
+  browser history — and refreshing or pressing Back would then land on a bare
+  fragment. It is not needed for navigation either: HTMX already pushes the URL
+  for boosted links and forms on its own. `tests/test_templates.py` guards this.
 {% endcomment %}
 <html lang="{{ LANGUAGE_CODE|default:'en-in' }}" data-bs-theme="light">
 <head>
@@ -45,7 +53,6 @@
        hx-boost="true"
        hx-target="#main"
        hx-swap="morph:innerHTML transition:true"
-       hx-push-url="true"
        x-data="{ navOpen: false }">
 
     {# ---------------------------------------------------------------- #}
@@ -110,10 +117,17 @@
             <span>{% translate "Returns" %}</span>
           </a>
           <a class="app-nav__link" href="{% url 'secretarial:meetings' %}" preload
-             {% if request.resolver_match.namespace == 'secretarial' %}aria-current="page"{% endif %}>
+             {% if request.resolver_match.url_name == 'meetings' %}aria-current="page"{% endif %}>
             <c-icon name="briefcase" />
             <span>{% translate "Secretarial" %}</span>
           </a>
+          {% if "secretarial.resolution.manage" in access_scope.permissions %}
+            <a class="app-nav__link" href="{% url 'secretarial:resolutions' %}" preload
+               {% if request.resolver_match.url_name == 'resolutions' %}aria-current="page"{% endif %}>
+              <c-icon name="document" />
+              <span>{% translate "Resolutions" %}</span>
+            </a>
+          {% endif %}
         </div>
 
         {% comment %}
@@ -244,5 +258,6 @@
 
   <div id="modal-container"></div>
   <c-command-palette />
+  <c-shortcuts-help />
 </body>
 </html>

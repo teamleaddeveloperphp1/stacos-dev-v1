@@ -86,6 +86,14 @@ def _select_membership(request: HttpRequest) -> Membership | None:
     has to choose. A stale or forged tenant id in the session resolves to nothing
     and falls back — it cannot be used to reach a tenant the user is not in,
     because the lookup is always filtered by ``user``.
+
+    The whole set is materialised rather than queried twice, and left on the
+    request as ``user_memberships``. The tenant switcher in the shell needs
+    exactly this list and cannot obtain it for itself: ``member_tenant_ids``
+    holds only the tenant currently switched *to*, so the scoped manager would
+    answer with the one organisation the user is already looking at. Reusing the
+    bootstrap read that has to happen anyway is cheaper than a second escape
+    hatch, and keeps the one RLS lift in the request path where it is.
     """
     user = request.user
 
@@ -93,29 +101,32 @@ def _select_membership(request: HttpRequest) -> Membership | None:
     # is bound yet. Anchored on the authenticated user, so it can only ever
     # return rows about them.
     with rls_bootstrap():
-        base = (
+        memberships = list(
             Membership.objects_unscoped.filter(user=user, status=Membership.Status.ACTIVE)
             .select_related("tenant", "role")
             .order_by("created_at")
         )
 
-        for selected, source in (
-            (_session_selection(request), "session"),
-            (request.headers.get(TENANT_HEADER), "header"),
-        ):
-            if not selected:
-                continue
-            membership = cast("Membership | None", base.filter(tenant_id=selected).first())
-            if membership is not None:
-                return membership
-            logger.info(
-                "tenancy.stale_tenant_selection",
-                user_id=str(user.pk),
-                tenant_id=selected,
-                source=source,
-            )
+    request.user_memberships = memberships  # type: ignore[attr-defined]
+    by_tenant = {str(m.tenant_id): m for m in memberships}
 
-        return cast("Membership | None", base.first())
+    for selected, source in (
+        (_session_selection(request), "session"),
+        (request.headers.get(TENANT_HEADER), "header"),
+    ):
+        if not selected:
+            continue
+        membership = cast("Membership | None", by_tenant.get(str(selected)))
+        if membership is not None:
+            return membership
+        logger.info(
+            "tenancy.stale_tenant_selection",
+            user_id=str(user.pk),
+            tenant_id=selected,
+            source=source,
+        )
+
+    return memberships[0] if memberships else None
 
 
 def _session_selection(request: HttpRequest) -> str | None:

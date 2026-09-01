@@ -21,7 +21,6 @@ hundred clients reaches that within a month of using the product.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -38,8 +37,9 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Coalesce
 
+from stacos.core.pagination import KeysetPage
+from stacos.core.pagination import keyset_page as core_keyset_page
 from stacos.engine.lifecycle import (
     CLOSED_STATES,
     DUE_SOON_DAYS,
@@ -206,72 +206,25 @@ def status_counts(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> d
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True, slots=True)
-class KeysetPage:
-    """One page, plus the cursor that fetches the next.
-
-    No total count and no page numbers, deliberately. ``COUNT(*)`` over a filtered
-    register is the expensive half of a paginated list, and "next" is what a user
-    scanning a work queue actually wants.
-    """
-
-    rows: tuple[ObligationInstance, ...]
-    next_cursor: str = ""
-    has_more: bool = False
-
-
-#: Sorting on (due_date, id) rather than due_date alone. Two obligations sharing
-#: a date is the normal case — the 20th of the month carries several — and
-#: without a tiebreaker a keyset cursor can skip or repeat rows across pages.
-CURSOR_SEPARATOR = "~"
-
-
 def keyset_page(
     queryset: QuerySet[ObligationInstance],
     *,
     cursor: str = "",
     page_size: int = 50,
-) -> KeysetPage:
+) -> KeysetPage[ObligationInstance]:
     """Fetch one page after ``cursor``, ordered by ``(due_date, id)``.
 
-    Nulls sort last: an obligation whose date could not be resolved belongs at the
-    end of the list, not at the top pretending to be the most urgent thing a user
-    owns.
+    A thin wrapper over :func:`stacos.core.pagination.keyset_page`, kept for the
+    two decisions specific to the register. It reads *forwards* through time,
+    unlike every other paginated list in the product, which shows newest first.
+    And nulls sort last: an obligation whose date could not be resolved belongs
+    at the end of the list, not at the top pretending to be the most urgent thing
+    a user owns.
     """
-    # Sorting on a coalesced key rather than on `due_date` directly, so undated
-    # rows land at the end under exactly the same expression the cursor
-    # comparison uses. Ordering and seeking must agree or pages overlap.
-    sort_key = Coalesce("due_date", Value(date.max, output_field=DateField()))
-    ordered = queryset.annotate(_sort_due=sort_key).order_by("_sort_due", "id")
-
-    if cursor:
-        after = _parse_cursor(cursor)
-        if after is not None:
-            after_due, after_id = after
-            ordered = ordered.filter(
-                Q(_sort_due__gt=after_due) | Q(_sort_due=after_due, id__gt=after_id)
-            )
-
-    rows = list(ordered[: page_size + 1])
-    has_more = len(rows) > page_size
-    rows = rows[:page_size]
-
-    next_cursor = ""
-    if has_more and rows:
-        last = rows[-1]
-        next_cursor = f"{(last.due_date or date.max).isoformat()}{CURSOR_SEPARATOR}{last.id}"
-
-    return KeysetPage(rows=tuple(rows), next_cursor=next_cursor, has_more=has_more)
-
-
-def _parse_cursor(cursor: str) -> tuple[date, UUID] | None:
-    """Decode a cursor, or ``None`` if it is unusable.
-
-    A malformed cursor is a mangled URL — a link pasted into chat and broken by a
-    trailing bracket — not an attack. Starting the list again beats a 500.
-    """
-    due_raw, _, id_raw = cursor.partition(CURSOR_SEPARATOR)
-    try:
-        return date.fromisoformat(due_raw), UUID(id_raw)
-    except ValueError:
-        return None
+    return core_keyset_page(
+        queryset,
+        order_by="due_date",
+        cursor=cursor,
+        page_size=page_size,
+        null_sentinel=date.max,
+    )

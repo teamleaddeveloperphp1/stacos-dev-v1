@@ -77,9 +77,14 @@ def plans(request: HttpRequest) -> HttpResponse:
     if tenant is not None:
         rows = rows.filter(tenant_type=tenant.type)
 
+    # Linked from the billing overview, so it needs both render paths: a refresh
+    # or a deep link must return the page rather than a bare fragment.
+    template = (
+        "billing/_fragments/plans.html" if is_fragment_request(request) else "billing/plans.html"
+    )
     return render(
         request,
-        "billing/_fragments/plans.html",
+        template,
         {"plans": list(rows), "current": _current_plan_id()},
     )
 

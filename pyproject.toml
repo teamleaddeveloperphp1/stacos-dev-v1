@@ -223,6 +223,7 @@ addopts = [
 markers = [
     "e2e: Playwright end-to-end tests (slow; require a running server)",
     "isolation: adversarial cross-tenant leakage tests",
+    "expect_console_errors: browser console output this test provokes on purpose",
 ]
 filterwarnings = ["error::DeprecationWarning"]
 

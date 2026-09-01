@@ -200,3 +200,170 @@ def test_tenant_switcher_survives_having_no_tenant(
     """Mid-onboarding a user belongs to nothing, and the shell still has to draw."""
     html = render_to_string(GALLERY, gallery_context)
     assert "No organisation" in html
+
+
+# ===========================================================================
+# 5. Reachability
+#
+# A view that renders, declares a permission and has a route can still be
+# unreachable, because nothing anywhere links to it. Thirteen of them were, at
+# once, including the only "Rebuild calendar" button in the product and a
+# complete cap-table screen. Nothing else in the suite notices: every one of
+# those routes had passing view tests, because a test calls `reverse()` and a
+# user cannot.
+# ===========================================================================
+
+#: Namespaces whose routes are deliberately not reachable from a template.
+UNLINKED_NAMESPACES: frozenset[str] = frozenset(
+    {
+        # The mobile API. Consumed by the app over HTTP; a template link would
+        # make no sense.
+        "api",
+    }
+)
+
+#: Unnamespaced infrastructure routes, called by machines rather than people.
+UNLINKED_BARE: frozenset[str] = frozenset({"healthz", "robots", "sitemap"})
+
+#: Individual routes with no link, each with the reason it is deliberate.
+#: Anything added here needs a reason that survives being read aloud.
+UNLINKED_ROUTES: dict[str, str] = {
+    "billing:invoice_issue": (
+        "Raising a subscription invoice out of cycle is a vendor operation, not "
+        "a customer one — the recurring path is automated. No system role holds "
+        "`billing.invoice.issue`, so a button would be pressable by nobody. "
+        "Same for `billing.invoice.void`, which is why the void control in the "
+        "invoice panel stays hidden."
+    ),
+    "vault:attachments": (
+        "An attachment strip meant to be embedded by whichever module owns the "
+        "record — see the view's docstring. It is reached by `hx-get` from the "
+        "owning module's panel when that module adopts it, not by a link of its "
+        "own."
+    ),
+}
+
+
+def _route_names() -> set[str]:
+    """Every named, routable STACOS view, fully qualified."""
+    from django.urls import get_resolver
+    from django.urls.resolvers import URLPattern, URLResolver
+
+    found: set[str] = set()
+
+    def walk(resolver: URLResolver, namespaces: list[str]) -> None:
+        for pattern in resolver.url_patterns:
+            if isinstance(pattern, URLResolver):
+                walk(pattern, [*namespaces, pattern.namespace] if pattern.namespace else namespaces)
+            elif isinstance(pattern, URLPattern) and pattern.name:
+                module = getattr(pattern.callback, "__module__", "") or ""
+                if module.startswith("stacos."):
+                    found.add(":".join([*namespaces, pattern.name]) if namespaces else pattern.name)
+
+    walk(get_resolver(), [])
+    return found
+
+
+def _referenced_names() -> set[str]:
+    """Route names named by a template, or by Python that builds navigation.
+
+    Both halves matter. Most links are ``{% url %}`` in a template, but the
+    marketing navigation and the command palette are built from tuples of route
+    names in Python, and a route reached only that way is still reachable.
+    """
+    root = TEMPLATES_DIR.parent
+    referenced: set[str] = set()
+
+    for path in TEMPLATES_DIR.rglob("*.html"):
+        source = path.read_text(encoding="utf-8")
+        referenced |= set(re.findall(r"\{%\s*url\s+['\"]([^'\"]+)['\"]", source))
+
+    # A fully-qualified `namespace:name` never appears in a `urls.py` definition
+    # (which names the route bare), so a literal match here cannot be the
+    # declaration mistaking itself for a reference.
+    quoted = re.compile(r"['\"]([a-z_]+:[a-z_]+)['\"]")
+    for path in (root / "stacos").rglob("*.py"):
+        if "migrations" in path.parts:
+            continue
+        referenced |= set(quoted.findall(path.read_text(encoding="utf-8")))
+
+    return referenced
+
+
+def test_every_route_is_reachable() -> None:
+    """Every route is linked from somewhere, or explicitly declared unlinked."""
+    referenced = _referenced_names()
+
+    unreachable = sorted(
+        name
+        for name in _route_names()
+        if name not in referenced
+        and name not in UNLINKED_ROUTES
+        and name not in UNLINKED_BARE
+        and name.split(":")[0] not in UNLINKED_NAMESPACES
+    )
+
+    assert not unreachable, (
+        f"These routes have no link anywhere, so no user can reach them: "
+        f"{unreachable}. Either link them, or add each to UNLINKED_ROUTES with "
+        f"the reason it is deliberate."
+    )
+
+
+def test_the_unlinked_allowlist_has_no_stale_entries() -> None:
+    """An allowlist nobody prunes stops describing the application."""
+    known = _route_names()
+    stale = sorted(name for name in UNLINKED_ROUTES if name not in known)
+    assert not stale, f"UNLINKED_ROUTES names routes that no longer exist: {stale}"
+
+    referenced = _referenced_names()
+    now_linked = sorted(name for name in UNLINKED_ROUTES if name in referenced)
+    assert not now_linked, (
+        f"These are listed as deliberately unlinked but something links them now: "
+        f"{now_linked}. Remove them from UNLINKED_ROUTES."
+    )
+
+
+# ===========================================================================
+# 6. Two mistakes that are cheap to make and expensive to find
+# ===========================================================================
+
+
+def test_the_app_shell_does_not_push_urls() -> None:
+    """`hx-push-url` on the shell is inherited by everything inside it.
+
+    Every modal open, panel action, "Load more" and palette keystroke would push
+    its own endpoint into browser history, and refreshing or pressing Back would
+    land the user on a bare fragment. It is also unnecessary: HTMX pushes the URL
+    for boosted links and forms on its own.
+    """
+    source = (TEMPLATES_DIR / "layouts" / "app_shell.html").read_text(encoding="utf-8")
+    shell = source[source.index('<div class="app-shell"') :]
+    shell = shell[: shell.index(">")]
+    assert "hx-push-url" not in shell, (
+        "The app shell must not set hx-push-url — see the comment above the "
+        "element. Links that genuinely want an address change declare it "
+        "individually."
+    )
+
+
+def test_no_links_point_at_a_bare_fragment() -> None:
+    """`href="#"` means "go nowhere", and reads to a user as a broken button.
+
+    Marketing templates are excluded: an anchor there is legitimately a
+    scroll-to-section target.
+    """
+    offenders: list[str] = []
+    for path in _template_paths():
+        if path.startswith("marketing/"):
+            continue
+        source = (TEMPLATES_DIR / path).read_text(encoding="utf-8")
+        offenders += [
+            f"{path}:{i + 1}"
+            for i, line in enumerate(source.splitlines())
+            if re.search(r"""href=["']#["']""", line)
+        ]
+    assert not offenders, (
+        f"Links pointing at a bare fragment: {offenders}. Either wire them up or "
+        f"remove them — a button that does nothing is worse than no button."
+    )

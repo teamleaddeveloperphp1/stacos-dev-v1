@@ -20,7 +20,7 @@ param(
     [Parameter(Position = 0)]
     [ValidateSet('run', 'start', 'stop', 'status', 'migrate', 'makemigrations', 'shell',
                  'test', 'lint', 'fmt', 'types', 'check', 'worker', 'beat', 'flower',
-                 'css', 'watch', 'seed', 'superuser', 'help')]
+                 'css', 'watch', 'seed', 'superuser', 'deploycheck', 'help')]
     [string]$Task = 'help',
 
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -45,6 +45,25 @@ function Import-DotEnv {
 }
 
 function Invoke-Section { param([string]$Name) Write-Host "`n--- $Name ---" -ForegroundColor Cyan }
+
+<#
+Run one CI gate and stop the run if it fails.
+
+`$ErrorActionPreference = 'Stop'` does nothing for a native executable's exit
+code — ruff, mypy, npm and pytest all report failure that way and PowerShell
+carries on regardless. Every gate therefore goes through here, so that a
+non-zero exit is a thrown error rather than a line of red text somebody scrolls
+past on the way to a green "All gates passed".
+#>
+function Invoke-Gate {
+    param([string]$Name, [scriptblock]$Command)
+
+    Invoke-Section $Name
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gate '$Name' failed with exit code $LASTEXITCODE."
+    }
+}
 
 <#
 Turns trailing arguments into a hashtable for splatting.
@@ -117,13 +136,39 @@ switch ($Task) {
     'fmt'       { uv run ruff format .; uv run ruff check --fix . }
     'types'     { uv run mypy stacos config @Rest }
 
+    <#
+    The pre-deploy gate, deliberately separate from `check`.
+
+    It runs against *production* settings, which is the only configuration where
+    the deploy-only checks say anything: `stacos.vault.E001` fires when the
+    development virus scanner would run with DEBUG off, and that is invisible
+    under dev settings by construction. Not folded into `check` because a
+    developer's machine legitimately has no clamd, and a gate that is always red
+    locally is a gate people learn to ignore.
+    #>
+    'deploycheck' {
+        $env:DJANGO_SETTINGS_MODULE = 'config.settings.prod'
+        Invoke-Gate 'deployment check' { uv run python manage.py check --deploy }
+        Write-Host "`nDeployment checks passed." -ForegroundColor Green
+    }
+
     'check' {
-        # Every CI gate, in the order CI runs them.
-        Invoke-Section 'ruff check';            uv run ruff check .
-        Invoke-Section 'ruff format --check';   uv run ruff format --check .
-        Invoke-Section 'mypy';                  uv run mypy stacos config
-        Invoke-Section 'django check';          uv run python manage.py check
-        Invoke-Section 'migration drift'
+        <#
+        Every CI gate, in the order CI runs them.
+
+        Each one goes through `Invoke-Gate`, and that is not decoration. A native
+        executable that exits non-zero does NOT stop this script:
+        `$ErrorActionPreference = 'Stop'` governs PowerShell errors, not process
+        exit codes. Written the obvious way, `ruff` could find twenty violations
+        and the script would carry on and print "All gates passed" in green — a
+        gate that reports success over a failure is worse than no gate, because
+        people stop reading the output above it.
+        #>
+        Invoke-Gate 'ruff check'          { uv run ruff check . }
+        Invoke-Gate 'ruff format --check' { uv run ruff format --check . }
+        Invoke-Gate 'mypy'                { uv run mypy stacos config }
+        Invoke-Gate 'django check'        { uv run python manage.py check }
+
         # The schema-owner URL is needed to compare against the real schema, so
         # it is set for these three commands only and put back afterwards. Left
         # in place, the test run would connect as the owner rather than as the
@@ -131,17 +176,19 @@ switch ($Task) {
         # role that is not the one production uses.
         $runtimeDatabaseUrl = $env:DATABASE_URL
         if ($env:DATABASE_MIGRATE_URL) { $env:DATABASE_URL = $env:DATABASE_MIGRATE_URL }
-        uv run python manage.py makemigrations --check --dry-run
-        Invoke-Section 'view permission declarations'; uv run python manage.py check_view_permissions
-        Invoke-Section 'row-level security';           uv run python manage.py ensure_rls
-        $env:DATABASE_URL = $runtimeDatabaseUrl
+        try {
+            Invoke-Gate 'migration drift'                { uv run python manage.py makemigrations --check --dry-run }
+            Invoke-Gate 'view permission declarations'   { uv run python manage.py check_view_permissions }
+            Invoke-Gate 'row-level security'             { uv run python manage.py ensure_rls }
+        } finally {
+            $env:DATABASE_URL = $runtimeDatabaseUrl
+        }
 
         # Reads YAML, touches no database. Catches the two ways catalog content
         # goes wrong that nothing else can see: a rule that fires for nobody (a
         # typo in a fact name) and one that fires for everybody (a missing
         # clause). Cheap, and the alternative is a client finding out.
-        Invoke-Section 'catalog validation'
-        uv run python manage.py validatecatalog --strict
+        Invoke-Gate 'catalog validation' { uv run python manage.py validatecatalog --strict }
 
         # Built before the tests rather than assumed current. A stylesheet is a
         # build artefact, and `tests/test_css_coverage.py` checks every class a
@@ -149,13 +196,14 @@ switch ($Task) {
         # tests yesterday's CSS if nobody rebuilt. Git does not preserve
         # modification times either, so on a fresh clone the ordering is
         # arbitrary unless the build runs here.
-        Invoke-Section 'css build'
-        npm run build:css
-        if ($LASTEXITCODE -ne 0) { throw "Sass build failed with exit code $LASTEXITCODE." }
+        Invoke-Gate 'css build' { npm run build:css }
 
-        Invoke-Section 'pytest'
-        uv run pytest
-        if ($LASTEXITCODE -ne 0) { throw "pytest failed with exit code $LASTEXITCODE." }
+        # Same reasoning for the script bundle. `static/js/app.js` is committed,
+        # so a change to `assets/js/` that nobody rebuilt ships the old
+        # behaviour to production while the source in review looks correct.
+        Invoke-Gate 'js build' { npm run build:js }
+
+        Invoke-Gate 'pytest' { uv run pytest }
 
         Write-Host "`nAll gates passed." -ForegroundColor Green
     }

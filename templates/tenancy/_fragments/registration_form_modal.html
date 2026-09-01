@@ -1,0 +1,62 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The registration form, in a modal loaded on demand. Same shape as the entity
+  form modal — see that file for why modals are fetched rather than pre-rendered.
+
+  The response targets the whole table body, not the row list, so the empty state
+  it replaces disappears with it.
+{% endcomment %}
+<div class="modal fade" tabindex="-1" aria-labelledby="registration-form-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+
+      <form hx-post="{% url 'app:registration_create' entity.pk %}"
+            hx-target="#registration-rows"
+            hx-swap="outerHTML"
+            hx-disabled-elt="find button[type=submit]"
+            hx-indicator="#registration-form-spinner">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="registration-form-title">
+            {% translate "Add a registration" %}
+          </h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="{% translate 'Close' %}"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small mb-4">
+            {% blocktranslate with name=entity.name %}
+            Each registration {{ name }} holds generates its own filings — six
+            state GSTINs mean six monthly returns, not one. Recording the number
+            is what lets us work out which ones apply.
+            {% endblocktranslate %}
+          </p>
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 small" role="alert">
+              {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+
+          {% crispy form %}
+        </div>
+
+        <div class="modal-footer">
+          <span class="htmx-indicator me-auto" id="registration-form-spinner">
+            <span class="spinner-inline"></span>
+            <span class="small text-muted ms-1">{% translate "Saving…" %}</span>
+          </span>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">
+            {% translate "Add registration" %}
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>

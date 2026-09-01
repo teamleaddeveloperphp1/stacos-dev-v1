@@ -107,4 +107,20 @@
       {% translate "You do not have permission to change this obligation." %}
     </p>
   {% endif %}
+
+  {% comment %}
+    Starting working papers. The view is idempotent — it opens the preparation or
+    returns the existing one — and answers with a `stacos:navigate` trigger, so
+    the browser lands on the papers rather than sitting on this page wondering
+    whether anything happened. `hx-swap="none"` because the response body is
+    empty: the navigation is the whole point of it.
+  {% endcomment %}
+  {% if "returns.preparation.prepare" in access_scope.permissions %}
+    <form hx-post="{% url 'returns:open' obligation.pk %}" hx-swap="none" class="mt-3">
+      {% csrf_token %}
+      <button class="btn btn-sm btn-outline-secondary" type="submit">
+        {% translate "Start working papers" %}
+      </button>
+    </form>
+  {% endif %}
 </section>

@@ -80,20 +80,7 @@
     <section class="card">
       <h2 class="card__title">{% translate "Payouts" %}</h2>
       <ul class="due-list">
-        {% for payout in payouts %}
-          <li class="due-list__item">
-            <button class="btn btn-link p-0"
-                    hx-get="{% url 'dealers:payout_detail' payout.pk %}"
-                    hx-target="#modal-container" hx-swap="innerHTML">
-              {{ payout.period_start|date:"j M" }} – {{ payout.period_end|date:"j M Y" }}
-            </button>
-            <span class="num">{{ payout.total_minor|minor|inr }}</span>
-            <c-status-chip status="{% if payout.status == 'PAID' %}complete{% elif payout.status == 'APPROVED' %}waiting{% elif payout.status == 'CANCELLED' %}na{% else %}in-progress{% endif %}"
-                           :label="payout.get_status_display" />
-          </li>
-        {% empty %}
-          <li class="text-muted small">{% translate "No payouts yet." %}</li>
-        {% endfor %}
+        {% include "dealers/_fragments/payout_rows.html" %}
       </ul>
     </section>
   </div>

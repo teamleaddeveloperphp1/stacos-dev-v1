@@ -25,7 +25,7 @@ from stacos.core.htmx import Fragment, HtmxFragmentMixin, Toast, oob
 from stacos.core.models import AuditAction
 from stacos.core.permissions import RequirePermissionMixin, require_permission
 from stacos.core.typing import current_user
-from stacos.tenancy.forms import EntityForm
+from stacos.tenancy.forms import EntityForm, RegistrationForm
 from stacos.tenancy.models import Entity, EntityProfile, Membership
 from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
 
@@ -145,9 +145,17 @@ def switch_tenant(request: HttpRequest) -> HttpResponse:
 
 
 #: Fixed destinations the palette always offers, filtered by what was typed.
+#:
+#: The fourth element is the chord hint the palette renders as ``<kbd>`` keys, so
+#: it has to agree with the ``SHORTCUTS`` map in ``assets/js/app.js``. Advertising
+#: a chord that goes somewhere else is worse than advertising none.
 PALETTE_DESTINATIONS: tuple[tuple[str, str, str, str], ...] = (
     ("Dashboard", "app:dashboard", "home", "g o"),
     ("Entities", "app:entity_list", "building", "g e"),
+    ("Compliance calendar", "compliance:calendar", "calendar", "g c"),
+    ("Information requests", "rfi:list", "inbox", "g r"),
+    ("Notices", "notices:list", "alert", "g n"),
+    ("Documents", "vault:list", "folder", "g d"),
     ("Security and devices", "accounts:security", "shield", ""),
 )
 
@@ -274,6 +282,62 @@ def entity_detail(request: HttpRequest, pk: str) -> HttpResponse:
         else "tenancy/entity_detail.html"
     )
     return render(request, template, context)
+
+
+@require_permission("tenancy.registration.manage")
+@require_http_methods(["GET", "POST"])
+def registration_create(request: HttpRequest, pk: str) -> HttpResponse:
+    """Add a registration to an entity, in a modal loaded on demand.
+
+    Follows ``entity_create`` exactly, with one difference worth stating: the
+    response re-renders the whole ``<tbody>`` rather than prepending a row. The
+    registrations table shows an empty state while it has no rows, and prepending
+    would leave "No registrations recorded" sitting underneath the registration
+    that was just recorded. Re-rendering the body also keeps the model's own
+    ordering, so an added row lands where a refresh would put it.
+
+    The entity comes from the URL and is re-fetched through the scoped manager,
+    so a registration cannot be attached to another tenant's entity by editing
+    the address.
+    """
+    entity = Entity.objects.filter(pk=pk, archived_at__isnull=True).first()
+    if entity is None:
+        # 404 rather than 403, for the same reason as `entity_detail`.
+        raise Http404
+
+    form = RegistrationForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        registration = form.save(commit=False)
+        registration.tenant = entity.tenant
+        registration.entity = entity
+        registration.full_clean(exclude=["tenant", "entity"])
+        registration.save()
+
+        record_event(action=AuditAction.CREATE, actor=current_user(request), obj=registration)
+
+        return oob(
+            request,
+            Fragment(
+                "tenancy/_fragments/registration_rows.html",
+                {
+                    "entity": entity,
+                    "registrations": entity.registrations.filter(archived_at__isnull=True),
+                },
+            ),
+            toast=Toast(
+                _("%(type)s recorded.") % {"type": registration.type},
+            ),
+            triggers={"stacos:modal-close": True},
+        )
+
+    status = 422 if request.method == "POST" else 200
+    return render(
+        request,
+        "tenancy/_fragments/registration_form_modal.html",
+        {"form": form, "entity": entity},
+        status=status,
+    )
 
 
 @require_permission("tenancy.entity.archive")

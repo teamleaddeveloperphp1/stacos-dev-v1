@@ -28,7 +28,14 @@ window.Alpine = Alpine;
 // most of the difference between "a web page reloaded" and "the app responded".
 // ---------------------------------------------------------------------------
 htmx.defineExtension("morph", {
-  isInlineSwap: (swapStyle) => String(swapStyle).startsWith("morph"),
+  // Only an outerHTML morph is an "inline" swap. `morph:innerHTML` is not, and
+  // saying otherwise breaks out-of-band swaps: HTMX hands an inline swap the OOB
+  // *element* rather than its content, so the element would be morphed inside
+  // itself. Matches the official idiomorph extension.
+  isInlineSwap: (swapStyle) => {
+    const style = String(swapStyle);
+    return style === "morph" || style === "morph:outerHTML";
+  },
 
   handleSwap: (swapStyle, target, fragment) => {
     const style = String(swapStyle);
@@ -47,7 +54,15 @@ htmx.defineExtension("morph", {
         : [fragment]),
     );
 
-    Idiomorph.morph(target, holder.innerHTML, {
+    // The return value is load-bearing, and returning `true` here was the single
+    // most damaging bug in this file. HTMX only schedules `htmx.process()` for
+    // swapped-in nodes when an extension returns an *array* of them; anything
+    // else truthy makes it skip settling entirely. The symptom is that every
+    // `hx-*` attribute inside anything swapped into the page is inert until a
+    // full browser reload — "Load more" does nothing, modal buttons do nothing,
+    // panel actions do nothing, but all of them work after F5. Idiomorph already
+    // returns exactly the node array HTMX wants, so pass it straight through.
+    return Idiomorph.morph(target, holder.innerHTML, {
       morphStyle,
       callbacks: {
         // Alpine components own their subtree; morphing into them fights
@@ -56,7 +71,6 @@ htmx.defineExtension("morph", {
           !(oldNode instanceof Element && oldNode.hasAttribute("data-no-morph")),
       },
     });
-    return true;
   },
 });
 
@@ -82,12 +96,25 @@ document.body.addEventListener("stacos:toast", (event) => {
   showToast({ message, level, title });
 });
 
+// The status vocabulary is universal in this product — the same colour and word
+// for the same meaning everywhere — so a toast level has to be translated into
+// it rather than used as a class name directly. `components/toast.html` does the
+// same mapping for toasts rendered on a full page load; the two must agree or a
+// message looks different depending on how it arrived.
+const TOAST_STATUS = {
+  error: "overdue",
+  danger: "overdue",
+  warning: "due-soon",
+  success: "on-track",
+};
+
 function showToast({ message, level, title }) {
   const stack = document.getElementById("toast-stack");
   if (!stack) return;
 
+  const status = TOAST_STATUS[level] ?? "in-progress";
   const el = document.createElement("div");
-  el.className = `toast align-items-center border-0 status-chip--${level}`;
+  el.className = `toast align-items-center border-0 status-chip--${status}`;
   el.setAttribute("role", "status");
   el.setAttribute("aria-live", "polite");
   el.setAttribute("aria-atomic", "true");
@@ -112,6 +139,66 @@ function escapeHtml(value) {
   div.textContent = String(value);
   return div.innerHTML;
 }
+
+// ---------------------------------------------------------------------------
+// Failed requests
+//
+// `responseHandling` above deliberately discards the body of every 4xx and 5xx:
+// an error page must never be injected into #main. But discarding it silently is
+// how the app came to look frozen — the click registered, the server refused,
+// and nothing on screen moved, so people clicked again. HTMX raises an event for
+// each of these; something has to listen.
+//
+// A session that has expired is not handled here. The server answers those with
+// HX-Redirect so the browser navigates to the sign-in screen properly, which is
+// the only correct outcome — see AuthorizationExceptionMiddleware.
+// ---------------------------------------------------------------------------
+function errorToast(status) {
+  if (status === 401 || status === 403) {
+    return {
+      level: "danger",
+      title: "Not allowed",
+      message: "You do not have permission to do that.",
+    };
+  }
+  if (status === 404) {
+    return {
+      level: "warning",
+      title: "Not found",
+      message: "That is no longer there. Refresh the page to see the current state.",
+    };
+  }
+  if (status === 409 || status === 429) {
+    return {
+      level: "warning",
+      title: "Try again",
+      message: "That could not be completed just now. Please try again in a moment.",
+    };
+  }
+  return {
+    level: "danger",
+    title: "Something went wrong",
+    message: "That did not save. Please try again.",
+  };
+}
+
+document.body.addEventListener("htmx:responseError", (event) => {
+  showToast(errorToast(event.detail.xhr?.status));
+});
+
+// The request never reached the server, or never came back: offline, DNS,
+// a dropped connection, a proxy timeout. Worth wording differently, because
+// "try again" is genuinely the right advice here and usually is not for a 500.
+function connectionToast() {
+  showToast({
+    level: "danger",
+    title: "No connection",
+    message: "We could not reach STACOS. Check your connection and try again.",
+  });
+}
+
+document.body.addEventListener("htmx:sendError", connectionToast);
+document.body.addEventListener("htmx:timeout", connectionToast);
 
 // ---------------------------------------------------------------------------
 // Route progress
@@ -200,11 +287,44 @@ document.body.addEventListener("htmx:beforeSwap", (event) => {
 // ---------------------------------------------------------------------------
 // Command palette and keyboard shortcuts
 // ---------------------------------------------------------------------------
+// `g` then a letter. Keep this in step with PALETTE_DESTINATIONS in
+// stacos/tenancy/views.py — that tuple carries the key hints the palette
+// actually shows the user, and a hint that names a chord which goes somewhere
+// else is worse than no hint at all.
 const SHORTCUTS = {
-  c: "/app/entities/",
   o: "/app/",
   e: "/app/entities/",
+  c: "/app/compliance/",
+  r: "/app/requests/",
+  n: "/app/notices/",
+  d: "/app/documents/",
 };
+
+//: Rendered by the shortcuts help dialog. Kept beside the map it documents so
+//: the two cannot drift.
+const SHORTCUT_HELP = [
+  {
+    group: "Go to",
+    items: [
+      { keys: ["g", "o"], label: "Dashboard" },
+      { keys: ["g", "e"], label: "Entities" },
+      { keys: ["g", "c"], label: "Compliance calendar" },
+      { keys: ["g", "r"], label: "Information requests" },
+      { keys: ["g", "n"], label: "Notices" },
+      { keys: ["g", "d"], label: "Documents" },
+    ],
+  },
+  {
+    group: "Anywhere",
+    items: [
+      { keys: ["Ctrl", "K"], label: "Search and commands" },
+      { keys: ["/"], label: "Search and commands" },
+      { keys: ["?"], label: "This list" },
+      { keys: ["Esc"], label: "Close" },
+    ],
+  },
+];
+
 let chordPending = false;
 
 document.addEventListener("keydown", (event) => {
@@ -244,14 +364,69 @@ document.addEventListener("keydown", (event) => {
     const destination = SHORTCUTS[event.key.toLowerCase()];
     if (destination) {
       event.preventDefault();
-      htmx.ajax("GET", destination, { target: "#main", swap: "morph", pushUrl: true });
+      navigate(destination);
     }
   }
+});
+
+/**
+ * An in-app navigation, as if the user had clicked a boosted link.
+ *
+ * `push` rather than `pushUrl` — that is the option name `htmx.ajax` actually
+ * reads, and the misspelling meant the go-to chords moved the page without ever
+ * updating the address bar, so Back went somewhere else entirely. It takes the
+ * path, not `true`: HTMX only expands the literal *string* "true" into the
+ * response path, so a boolean falls through and is pushed as-is.
+ */
+function navigate(url) {
+  htmx.ajax("GET", url, { target: "#main", swap: "morph:innerHTML", push: url });
+}
+
+// ---------------------------------------------------------------------------
+// Server-directed navigation
+//
+// Creating a notice, a request, a meeting or a work item, and opening working
+// papers, all end with the server saying "now go and look at it" through an
+// HX-Trigger. Five views sent this event and nothing listened for it, so the
+// toast appeared, the record really was created, and the screen stayed on the
+// list — the exact "it worked but nothing happened" complaint.
+//
+// A non-object HX-Trigger value arrives wrapped by HTMX as `{value: …}`.
+// ---------------------------------------------------------------------------
+document.body.addEventListener("stacos:navigate", (event) => {
+  const url = event.detail?.value;
+  if (typeof url !== "string" || !url.startsWith("/")) return;
+  navigate(url);
 });
 
 function openPalette() {
   document.dispatchEvent(new CustomEvent("stacos:palette-open"));
 }
+
+/**
+ * The keyboard shortcuts dialog, opened with `?`.
+ *
+ * The chords are otherwise undiscoverable — there is no menu that lists them —
+ * so the key that advertises them has to actually do something. It dispatched a
+ * `stacos:shortcuts` event that nothing listened for, which is the same failure
+ * as a dead link: it looks implemented and is not.
+ */
+Alpine.data("shortcutsHelp", () => ({
+  open: false,
+  groups: SHORTCUT_HELP,
+
+  init() {
+    document.addEventListener("stacos:shortcuts", () => this.toggle());
+  },
+
+  toggle() {
+    this.open = !this.open;
+  },
+
+  hide() {
+    this.open = false;
+  },
+}));
 
 /**
  * The command palette.

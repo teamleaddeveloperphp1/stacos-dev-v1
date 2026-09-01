@@ -15,9 +15,18 @@
     <a class="palette__item" href="{% url 'accounts:security' %}" role="menuitem" preload>
       <c-icon name="shield" size="14" /><span>{% translate "Security and devices" %}</span>
     </a>
-    <form method="post" action="{% url 'accounts:logout' %}" role="none">
+    {% comment %}
+      `hx-boost="false"` belongs on the form, not on the button. HTMX resolves
+      boosting per element and only ever boosts an `<a>` or a `<form>`, so the
+      attribute on a child button is silently a no-op — the form went on
+      inheriting boost from the shell, and signing out became an AJAX POST whose
+      redirect HTMX followed and swapped into #main. The view answers with
+      HX-Redirect as well, so either half alone would be enough; both are here
+      because sign-out failing open is the one that leaves data on screen.
+    {% endcomment %}
+    <form method="post" action="{% url 'accounts:logout' %}" role="none" hx-boost="false">
       {% csrf_token %}
-      <button type="submit" class="palette__item w-100" role="menuitem" hx-boost="false">
+      <button type="submit" class="palette__item w-100" role="menuitem">
         <c-icon name="logout" size="14" /><span>{% translate "Sign out" %}</span>
       </button>
     </form>

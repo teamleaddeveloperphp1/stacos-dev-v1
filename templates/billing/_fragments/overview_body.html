@@ -1,7 +1,12 @@
 {% load i18n %}
 
 <c-page-header title="{% translate 'Billing' %}"
-               subtitle="{% translate 'Your plan, your invoices, and what is outstanding.' %}" />
+               subtitle="{% translate 'Your plan, your invoices, and what is outstanding.' %}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'billing:plans' %}"
+     hx-get="{% url 'billing:plans' %}" hx-target="#main" hx-push-url="true">
+    {% if subscription %}{% translate "Change plan" %}{% else %}{% translate "Choose a plan" %}{% endif %}
+  </a>
+</c-page-header>
 
 {% if subscription %}
   <div class="row g-3 mb-4">
@@ -51,7 +56,12 @@
   {% endif %}
 {% else %}
   <c-empty-state title="{% translate 'No subscription yet' %}"
-                 body="{% translate 'This account is not on a plan. Choose one to continue after the trial.' %}" />
+                 body="{% translate 'This account is not on a plan. Choose one to continue after the trial.' %}">
+    <a class="btn btn-sm btn-primary" href="{% url 'billing:plans' %}"
+       hx-get="{% url 'billing:plans' %}" hx-target="#main" hx-push-url="true">
+      {% translate "See the plans" %}
+    </a>
+  </c-empty-state>
 {% endif %}
 
 <div class="data-table">

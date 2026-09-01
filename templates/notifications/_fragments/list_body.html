@@ -22,7 +22,7 @@
     <span class="stat-tile__label">{% translate "Unread" %}</span>
   </a>
   <a class="stat-tile stat-tile--quiet" href="?" hx-get="?" hx-target="#main" hx-push-url="true">
-    <span class="stat-tile__value">{{ notifications|length }}</span>
+    <span class="stat-tile__value">{{ notifications|length }}{% if page.has_more %}+{% endif %}</span>
     <span class="stat-tile__label">{% translate "Showing" %}</span>
   </a>
 </div>
@@ -32,12 +32,5 @@
   screen reader is otherwise told nothing at all about a partial update.
 {% endcomment %}
 <ol class="timeline" id="notification-list" aria-live="polite" aria-atomic="false">
-  {% for notification in notifications %}
-    {% include "notifications/_fragments/row.html" %}
-  {% empty %}
-    <li>
-      <c-empty-state title="{% translate 'Nothing to report' %}"
-                     body="{% translate 'Reminders about filings, requests and deadlines appear here.' %}" />
-    </li>
-  {% endfor %}
+  {% include "notifications/_fragments/notification_rows.html" %}
 </ol>

@@ -50,6 +50,7 @@
           <th>{% translate "State" %}</th>
           <th class="num">{% translate "Registrations" %}</th>
           <th>{% translate "Status" %}</th>
+          <th><span class="visually-hidden">{% translate "Actions" %}</span></th>
         </tr>
       </thead>
       <tbody>
@@ -57,7 +58,7 @@
           {% include "tenancy/_fragments/entity_row.html" %}
         {% empty %}
           <tr id="entity-empty-state">
-            <td colspan="5" class="p-0">
+            <td colspan="6" class="p-0">
               {% if search or status %}
                 <c-empty-state title="{% translate 'No entities match that filter' %}"
                                body="{% translate 'Try a different search term, or clear the status filter.' %}">

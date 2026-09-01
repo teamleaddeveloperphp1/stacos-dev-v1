@@ -147,3 +147,172 @@ def test_invalid_form_keeps_the_modal_open(signed_in_page: Page, live_server) ->
 
     expect(page.locator(".modal.show")).to_be_visible()
     expect(page.locator("#id_legal_name")).to_have_value("Something Memorable Private Limited")
+
+
+# ---------------------------------------------------------------------------
+# Arriving by in-app navigation
+#
+# Every test above reaches its page with `page.goto()` — a full browser load,
+# which processes the whole document. That is precisely the path that hid the
+# worst bug in the application: the morph extension discarded the node list HTMX
+# needs in order to wire up swapped-in content, so anything reached by clicking
+# rather than reloading arrived inert. Buttons did nothing, "Load more" did
+# nothing, modals did not open — and all of them worked after F5, which is why
+# the reports read as unreproducible.
+#
+# These tests navigate the way a user does.
+# ---------------------------------------------------------------------------
+
+
+def test_a_page_reached_by_clicking_is_interactive(signed_in_page: Page, live_server) -> None:
+    """The regression that made a third of the application unusable."""
+    page = signed_in_page
+
+    # In-app navigation, not a reload.
+    page.click("a[href='/app/entities/']")
+    expect(page.locator("h1")).to_contain_text("Entities")
+
+    # A button in the swapped-in content must respond on the first click.
+    page.click("button:has-text('Add entity')")
+    expect(page.locator(".modal.show")).to_be_visible()
+
+
+def test_the_calendar_load_more_works_without_a_refresh(
+    reference_data: None, materialised: Entity, signed_in_page: Page, live_server
+) -> None:
+    """Reported as "works after refresh", which is the signature of this bug."""
+    page = signed_in_page
+
+    page.click("a[href='/app/compliance/']")
+    expect(page.locator("h1")).to_contain_text("Compliance")
+
+    sentinel = page.locator("#calendar-load-more")
+    expect(sentinel).to_be_visible()
+
+    before = page.locator("#obligation-rows tbody tr").count()
+    page.click("#calendar-load-more button")
+    expect(page.locator("#obligation-rows tbody tr")).not_to_have_count(before)
+
+
+def test_the_security_page_does_not_nest_a_second_shell(signed_in_page: Page, live_server) -> None:
+    """It answered a boosted request with the whole document.
+
+    The result was a second application shell morphed inside #main — duplicate
+    ids for every region the app targets — after which the sidebar stopped
+    responding until a manual refresh.
+    """
+    page = signed_in_page
+
+    page.click("a[href='/auth/security/']")
+    expect(page.locator("h1")).to_contain_text("Security")
+
+    assert page.locator("#main").count() == 1, "a second shell was swapped into #main"
+    assert page.locator(".app-sidebar").count() == 1
+
+    # And the sidebar still navigates afterwards.
+    page.click("a[href='/app/entities/']")
+    expect(page.locator("h1")).to_contain_text("Entities")
+
+
+def test_opening_a_modal_leaves_the_address_bar_alone(signed_in_page: Page, live_server) -> None:
+    """`hx-push-url` on the shell was inherited by every button inside it.
+
+    Opening a modal pushed the modal's own endpoint into history, so refreshing
+    or pressing Back landed the user on a bare fragment.
+    """
+    page = signed_in_page
+
+    page.click("a[href='/app/entities/']")
+    expect(page).to_have_url(f"{live_server.url}/app/entities/")
+
+    page.click("button:has-text('Add entity')")
+    expect(page.locator(".modal.show")).to_be_visible()
+    (
+        expect(page).to_have_url(
+            f"{live_server.url}/app/entities/",
+        ),
+        "opening a modal changed the address",
+    )
+
+
+def test_sidebar_navigation_still_updates_the_address_and_back_works(
+    signed_in_page: Page, live_server
+) -> None:
+    """The other half of removing hx-push-url: boosted navigation must still push."""
+    page = signed_in_page
+
+    page.click("a[href='/app/entities/']")
+    expect(page).to_have_url(f"{live_server.url}/app/entities/")
+
+    page.click("a[href='/app/compliance/']")
+    expect(page).to_have_url(f"{live_server.url}/app/compliance/")
+
+    page.go_back()
+    expect(page).to_have_url(f"{live_server.url}/app/entities/")
+    expect(page.locator("h1")).to_contain_text("Entities")
+
+
+@pytest.mark.expect_console_errors("403")
+def test_a_failed_request_says_something(signed_in_page: Page, live_server) -> None:
+    """Errors were discarded in silence, so the app looked frozen.
+
+    Discarding the *body* is right — an error page must never land in #main — but
+    nothing listened for the event, so a refused click produced no message, no
+    movement, and a user who clicked again.
+    """
+    page = signed_in_page
+
+    # An organisation user has no practice work board: a 403 with a full error
+    # page attached, which the response handling throws away.
+    page.evaluate(
+        "htmx.ajax('GET', '/app/practice/', { target: '#main', swap: 'morph:innerHTML' })"
+    )
+    expect(page.locator("#toast-stack .toast")).to_be_visible()
+    expect(page.locator("#toast-stack")).to_contain_text("permission")
+
+
+def test_the_shortcuts_dialog_opens(signed_in_page: Page) -> None:
+    """`?` dispatched an event nothing listened for."""
+    page = signed_in_page
+
+    page.keyboard.press("?")
+    dialog = page.locator(".shortcuts-backdrop")
+    expect(dialog).to_be_visible()
+    expect(dialog).to_contain_text("Compliance calendar")
+
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+
+
+def test_the_go_to_calendar_chord_goes_to_the_calendar(signed_in_page: Page, live_server) -> None:
+    """`g c` and `g e` both went to Entities, so the calendar had no shortcut."""
+    page = signed_in_page
+
+    page.keyboard.press("g")
+    page.keyboard.press("c")
+
+    expect(page).to_have_url(f"{live_server.url}/app/compliance/")
+    expect(page.locator("h1")).to_contain_text("Compliance")
+
+
+def test_a_server_directed_navigation_actually_navigates(signed_in_page: Page, live_server) -> None:
+    """Creating a record ends with the server saying "now go and look at it".
+
+    Five views send `stacos:navigate` in an HX-Trigger — new notice, new request,
+    new meeting, new work item, and opening working papers — and nothing anywhere
+    listened for it. The toast appeared, the record really was created, and the
+    screen stayed on the list: the "it worked but nothing happened" report.
+
+    Dispatched here exactly as HTMX delivers it, including the `{value: …}`
+    wrapper it puts around a non-object trigger payload.
+    """
+    page = signed_in_page
+
+    page.evaluate(
+        """document.body.dispatchEvent(
+             new CustomEvent('stacos:navigate',
+                             { detail: { value: '/app/entities/' }, bubbles: true }))"""
+    )
+
+    expect(page).to_have_url(f"{live_server.url}/app/entities/")
+    expect(page.locator("h1")).to_contain_text("Entities")

@@ -15,8 +15,8 @@ from crispy_forms.layout import Column, Layout, Row
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from stacos.jurisdictions.facts import ENTITY_TYPES, IN_STATE_CODES
-from stacos.tenancy.models import Entity
+from stacos.jurisdictions.facts import ENTITY_TYPES, IN_STATE_CODES, REGISTRATION_TYPES
+from stacos.tenancy.models import Entity, EntityRegistration
 
 #: Human labels for the entity types the fact registry knows about. Kept here
 #: rather than on the model so the vocabulary stays data, not a hardcoded enum
@@ -170,3 +170,110 @@ class EntityForm(forms.ModelForm[Entity]):
         if existing.exists():
             raise forms.ValidationError(_("You already have an entity with this name."))
         return name
+
+
+#: Human labels for the registration types the fact registry knows about. Same
+#: reasoning as ``ENTITY_TYPE_LABELS``: the vocabulary is data, and a
+#: jurisdiction that issues a different identifier should not need a migration.
+REGISTRATION_TYPE_LABELS: dict[str, str] = {
+    "PAN": "PAN — Permanent Account Number",
+    "TAN": "TAN — Tax Deduction Account Number",
+    "GST": "GSTIN — Goods and Services Tax",
+    "CIN": "CIN — Corporate Identity Number",
+    "LLPIN": "LLPIN — LLP Identification Number",
+    "PF": "EPF — Provident Fund establishment code",
+    "ESIC": "ESIC — Employees' State Insurance",
+    "PT_EC": "Professional Tax — Enrolment Certificate",
+    "PT_RC": "Professional Tax — Registration Certificate",
+    "IEC": "IEC — Importer Exporter Code",
+    "UDYAM": "Udyam — MSME registration",
+    "FACTORY_LICENCE": "Factory licence",
+    "SHOPS_ESTAB": "Shops and Establishments registration",
+    "PCB_CONSENT": "Pollution Control Board consent",
+    "DRUG_LICENCE": "Drug licence",
+    "FSSAI": "FSSAI licence",
+    "LEGAL_METROLOGY": "Legal Metrology registration",
+    "BIS": "BIS certification",
+    "TRADE_LICENCE": "Trade licence",
+    "FIRE_NOC": "Fire NOC",
+    "CONTRACT_LABOUR": "Contract Labour registration",
+}
+
+
+class RegistrationForm(forms.ModelForm[EntityRegistration]):
+    """Record a tax or statutory identifier against an entity.
+
+    Deliberately thin on validation of its own: the value is checked by
+    ``EntityRegistration.clean()``, which routes to the per-type validator in
+    ``stacos.jurisdictions.validators``. Duplicating a PAN regex here would give
+    two places to correct when the format changes, and they would disagree.
+
+    The entity is not a field. It comes from the URL and is re-fetched under the
+    caller's scope in the view, so there is nothing to forge.
+    """
+
+    class Meta:
+        model = EntityRegistration
+        fields = [
+            "type",
+            "value",
+            "jurisdiction",
+            "valid_from",
+            "valid_to",
+            "label",
+            "is_primary",
+        ]
+        labels = {
+            "value": _("Number"),
+            "jurisdiction": _("State"),
+            "valid_from": _("Valid from"),
+            "valid_to": _("Valid to"),
+            "label": _("Label"),
+            "is_primary": _("This is the primary one of its type"),
+        }
+        help_texts = {
+            "valid_to": _("Leave blank while it is current. Set it when a registration lapses."),
+            "label": _("Optional. Useful when an entity holds several of the same type."),
+        }
+        widgets = {
+            "valid_from": forms.DateInput(attrs={"type": "date"}),
+            "valid_to": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+        type_choices: list[tuple[str, Any]] = [("", _("Select…"))]
+        type_choices += [
+            (code, REGISTRATION_TYPE_LABELS.get(code, code)) for code in REGISTRATION_TYPES
+        ]
+
+        state_choices: list[tuple[str, Any]] = [("", _("Not state-specific"))]
+        state_choices += sorted(
+            ((code, STATE_LABELS.get(code, code)) for code in IN_STATE_CODES),
+            key=lambda pair: pair[1],
+        )
+
+        self.fields["type"] = forms.ChoiceField(
+            label=_("Type"),
+            choices=type_choices,
+            help_text=_("Each registration generates its own filings."),
+        )
+        self.fields["jurisdiction"] = forms.ChoiceField(
+            label=_("State"),
+            required=False,
+            choices=state_choices,
+            help_text=_("Only for state-issued registrations, such as a GSTIN or a PT number."),
+        )
+        self.fields["valid_from"].required = False
+        self.fields["label"].required = False
+
+        self.helper = FormHelper()
+        # The submit button lives in the modal footer, not in the form body.
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(Column("type"), Column("value")),
+            Row(Column("jurisdiction"), Column("label")),
+            Row(Column("valid_from"), Column("valid_to")),
+            "is_primary",
+        )

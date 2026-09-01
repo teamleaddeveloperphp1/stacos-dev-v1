@@ -9,9 +9,21 @@
 <section class="card" id="entity-secretarial" aria-live="polite" aria-atomic="false">
   <div class="card__header">
     <h2 class="card__title">{% translate "Secretarial" %}</h2>
-    <a class="small" href="{% url 'secretarial:meetings' %}?entity={{ entity.pk }}"
-       hx-get="{% url 'secretarial:meetings' %}?entity={{ entity.pk }}"
-       hx-target="#main" hx-push-url="true">{% translate "Meetings" %}</a>
+    <span class="d-flex gap-3">
+      <a class="small" href="{% url 'secretarial:meetings' %}?entity={{ entity.pk }}"
+         hx-get="{% url 'secretarial:meetings' %}?entity={{ entity.pk }}"
+         hx-target="#main" hx-push-url="true">{% translate "Meetings" %}</a>
+      {% comment %}
+        The cap table is per entity and separately permissioned: who owns what is
+        the most commercially sensitive thing a private company holds, so the
+        link is absent rather than dead for anyone without the permission.
+      {% endcomment %}
+      {% if "secretarial.captable.view" in access_scope.permissions %}
+        <a class="small" href="{% url 'secretarial:cap_table' entity.pk %}"
+           hx-get="{% url 'secretarial:cap_table' entity.pk %}"
+           hx-target="#main" hx-push-url="true">{% translate "Cap table" %}</a>
+      {% endif %}
+    </span>
   </div>
 
   {% if gaps %}

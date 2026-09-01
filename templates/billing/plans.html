@@ -1,0 +1,6 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Plans" %} · STACOS{% endblock %}
+
+{% block main %}{% include "billing/_fragments/plans.html" %}{% endblock %}

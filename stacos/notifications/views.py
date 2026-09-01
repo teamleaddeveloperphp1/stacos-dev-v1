@@ -20,6 +20,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
 from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob
+from stacos.core.pagination import filters_querystring, keyset_page
 from stacos.core.permissions import require_permission
 from stacos.core.typing import current_user
 from stacos.notifications.forms import PreferenceForm
@@ -39,6 +40,11 @@ def _mine(request: HttpRequest) -> QuerySet[Notification]:
     )
 
 
+#: One screen's worth. The list used to stop dead at a hundred rows with no way
+#: to reach the rest — see stacos.core.pagination.
+PAGE_SIZE = 50
+
+
 @require_permission("notifications.view")
 def notification_list(request: HttpRequest) -> HttpResponse:
     """Everything this user has been told, newest first."""
@@ -52,14 +58,27 @@ def notification_list(request: HttpRequest) -> HttpResponse:
     if kind in NotificationKind.values:
         queryset = queryset.filter(kind=kind)
 
-    rows = list(queryset[:100])
+    page = keyset_page(
+        queryset,
+        order_by="created_at",
+        cursor=request.GET.get("cursor", ""),
+        page_size=PAGE_SIZE,
+        descending=True,
+    )
     context = {
-        "notifications": rows,
+        "notifications": page.rows,
+        "page": page,
+        "querystring": filters_querystring(request),
         "unread": unread_count(user=current_user(request)),
         "unread_only": unread_only,
         "kind": kind,
         "kinds": NotificationKind.choices,
     }
+
+    # A cursor request is asking for more rows, not for the whole screen again.
+    if request.GET.get("cursor") and is_fragment_request(request):
+        return render(request, "notifications/_fragments/notification_rows.html", context)
+
     template = (
         "notifications/_fragments/list_body.html"
         if is_fragment_request(request)

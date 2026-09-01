@@ -90,6 +90,24 @@
                 <a class="btn btn-sm btn-outline-secondary"
                    href="{% url 'vault:download' document.pk %}">{% translate "Download" %}</a>
               {% endif %}
+              {% comment %}
+                Archiving never destroys the bytes — the file is retained and
+                stays in the audit trail — so this removes the row and nothing
+                more. `hx-swap="delete"` rather than an empty outerHTML swap,
+                because the response carries only a toast.
+              {% endcomment %}
+              {% if "vault.document.delete" in access_scope.permissions %}
+                <form class="d-inline"
+                      hx-post="{% url 'vault:archive' document.pk %}"
+                      hx-target="closest tr"
+                      hx-swap="delete"
+                      hx-confirm="{% translate 'Archive this document? The file is retained and remains in the audit trail.' %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-link text-muted p-0 ms-2" type="submit">
+                    {% translate "Archive" %}
+                  </button>
+                </form>
+              {% endif %}
             </td>
           </tr>
         {% empty %}

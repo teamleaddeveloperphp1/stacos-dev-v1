@@ -30,6 +30,7 @@ from stacos.accounts.middleware import SESSION_PENDING_KEY, SESSION_VERIFIED_KEY
 from stacos.accounts.models import PendingVerification, TrustedDevice, User, UserSession
 from stacos.accounts.otp import resend_codes, start_verification, verify_codes
 from stacos.accounts.stepup import mark_step_up_complete
+from stacos.core.htmx import is_fragment_request
 from stacos.core.permissions import public_view, require_permission
 from stacos.core.typing import current_user
 
@@ -41,6 +42,26 @@ SAFE_REDIRECT_DEFAULT = "/app/"
 #: user that did not come from `authenticate()`, since more than one backend is
 #: configured and Django refuses to guess.
 DJANGO_AUTH_BACKEND = "django.contrib.auth.backends.ModelBackend"
+
+
+def _navigate(request: HttpRequest, target: str) -> HttpResponse:
+    """Send the browser to ``target``, whether or not HTMX is driving.
+
+    An ordinary 302 is invisible to HTMX: it follows the redirect itself, gets
+    the destination page back as a perfectly successful response, and swaps it
+    into whatever region the caller targeted. That is how signing out came to
+    leave the sign-in form rendered inside a still-signed-in shell, with the
+    session already gone behind it. ``HX-Redirect`` is the instruction the
+    browser actually acts on, so the navigation really happens.
+
+    The same idiom as ``tenancy.views.switch_tenant`` and
+    ``AuthorizationExceptionMiddleware._redirect``.
+    """
+    if getattr(request, "htmx", False):
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = target
+        return response
+    return redirect(target)
 
 
 def _safe_next(request: HttpRequest) -> str:
@@ -138,9 +159,15 @@ def login_view(request: HttpRequest) -> HttpResponse:
 
 
 @public_view
+@require_http_methods(["POST"])
 def logout_view(request: HttpRequest) -> HttpResponse:
+    """End the session and go to the sign-in screen, immediately.
+
+    POST only: a sign-out reachable by GET is triggerable by any image tag on any
+    page on the internet.
+    """
     logout(request)
-    return redirect("/")
+    return _navigate(request, reverse("accounts:login"))
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +310,14 @@ def security_settings(request: HttpRequest) -> HttpResponse:
     sessions = UserSession.objects.filter(user=user, ended_at__isnull=True).order_by(
         "-last_seen_at"
     )
+    template = (
+        "accounts/_fragments/security_body.html"
+        if is_fragment_request(request)
+        else "accounts/security.html"
+    )
     return render(
         request,
-        "accounts/security.html",
+        template,
         {
             "devices": devices,
             "sessions": sessions,
@@ -309,7 +341,7 @@ def revoke_devices(request: HttpRequest) -> HttpResponse:
         _("Signed out of %(count)d device(s). You will need to verify again here.")
         % {"count": count},
     )
-    return redirect(reverse("accounts:login"))
+    return _navigate(request, reverse("accounts:login"))
 
 
 # ---------------------------------------------------------------------------

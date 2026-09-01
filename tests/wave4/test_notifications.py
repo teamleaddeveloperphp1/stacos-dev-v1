@@ -413,6 +413,38 @@ def test_the_sweep_is_silent_on_a_quiet_day(org: Tenant, entity_a: Entity, org_o
     assert sweep_obligation_reminders(tenant_id=str(org.pk), as_of=day.isoformat()) == {"raised": 0}
 
 
+def test_a_filed_obligation_is_not_reminded_about(
+    org: Tenant, entity_a: Entity, org_owner: User
+) -> None:
+    """The trap in `live()`.
+
+    It excludes superseded and archived rows — not finished ones. A reminder
+    that GSTR-3B is due on the 20th, arriving after it was filed on the 18th, is
+    the fastest way to teach a firm that these messages are noise and to stop
+    reading the one that mattered.
+    """
+    from stacos.engine.lifecycle import State
+    from stacos.obligations.models import ObligationInstance
+
+    day = timezone.localdate()
+
+    with tenant_context(tenant_ids={org.pk}, reason="test"):
+        ObligationInstance.objects.create(
+            tenant=org,
+            entity=entity_a,
+            definition_code="gst-gstr-3b-monthly",
+            title="GSTR-3B",
+            category="GST",
+            period_key="2026-08",
+            due_date=day + timedelta(days=3),
+            state=State.FILED,
+            filed_on=day - timedelta(days=1),
+            filing_reference="AA240800001234",
+        )
+
+    assert sweep_obligation_reminders(tenant_id=str(org.pk), as_of=day.isoformat()) == {"raised": 0}
+
+
 def test_running_the_sweep_twice_sends_once(org: Tenant, entity_a: Entity, org_owner: User) -> None:
     """The sweep runs hourly. This is the assertion that makes that acceptable."""
     from stacos.engine.lifecycle import State

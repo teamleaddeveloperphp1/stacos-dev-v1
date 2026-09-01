@@ -22,6 +22,7 @@ from django.utils.translation import gettext as _
 from stacos.billing.models import Invoice, InvoiceLine, Payment, Subscription
 from stacos.core.audit import record_event
 from stacos.core.models import AuditAction
+from stacos.core.scope import platform_scope
 
 logger = structlog.get_logger(__name__)
 
@@ -60,7 +61,17 @@ def next_invoice_number(*, prefix: str, issued_on: date) -> str:
     fy_start_year = issued_on.year if issued_on.month >= 4 else issued_on.year - 1
     series = f"{prefix}/{fy_start_year % 100:02d}{(fy_start_year + 1) % 100:02d}/"
 
-    highest = Invoice.objects.filter(number__startswith=series).aggregate(top=Max("number"))["top"]
+    # **Platform-wide, not tenant-scoped.** These are STACOS's own sales
+    # invoices: one issuer, one series, and `invoice_number_uniq` is a global
+    # constraint to match. Taking the maximum through the tenant-scoped manager
+    # would restart the sequence for every customer and collide on the second
+    # tenant to be billed in a financial year — an integrity error at the worst
+    # possible moment, on the billing run.
+    with platform_scope(reason="billing:invoice-number"):
+        highest = Invoice.objects.filter(number__startswith=series).aggregate(top=Max("number"))[
+            "top"
+        ]
+
     sequence = int(highest.rsplit("/", 1)[-1]) + 1 if highest else 1
     return f"{series}{sequence:05d}"
 

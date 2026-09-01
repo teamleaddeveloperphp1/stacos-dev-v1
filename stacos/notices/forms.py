@@ -10,7 +10,7 @@ from django import forms
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from stacos.core.forms import ScopedModelChoiceField
+from stacos.core.forms import ScopedModelChoiceField, ScopedUserChoiceField
 from stacos.jurisdictions.models import Authority
 from stacos.notices.models import Notice, NoticeState
 from stacos.notices.services import record_notice
@@ -34,6 +34,12 @@ class NoticeForm(forms.ModelForm[Notice]):
     # Not tenant-scoped — the regulator registry is the same for everyone — so
     # an ordinary queryset built at import time is correct here.
     authority = forms.ModelChoiceField(queryset=Authority.objects.all(), label=_("Authority"))
+
+    # Narrowed to people in the caller's own organisation. Left to ModelForm this
+    # is a plain FK to a model that is not tenant-scoped, so it renders every
+    # user on the platform and accepts any of them on POST — other customers'
+    # staff names, and work assignable to them. See stacos.core.forms.
+    assigned_to = ScopedUserChoiceField(required=False, label=_("Assign to"))
 
     class Meta:
         model = Notice

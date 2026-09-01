@@ -69,23 +69,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for transaction in transactions %}
-            <tr>
-              <td>{{ transaction.executed_on|date:"j M Y" }}</td>
-              <td class="text-muted small">{{ transaction.shareholder.name }}</td>
-              <td class="text-muted small">
-                {{ transaction.get_kind_display }}
-                {% if transaction.requires_fcgpr and not transaction.fcgpr_filed_on %}
-                  <span class="badge-soft badge-soft--attention">{% translate "FC-GPR due" %}</span>
-                {% endif %}
-              </td>
-              <td class="num">{{ transaction.quantity|num }}</td>
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="4" class="text-muted small">{% translate "No transactions recorded." %}</td>
-            </tr>
-          {% endfor %}
+          {% include "secretarial/_fragments/share_transaction_rows.html" %}
         </tbody>
       </table>
     </section>

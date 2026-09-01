@@ -2,7 +2,12 @@
 
 <c-page-header title="{% translate 'Security' %}"
                subtitle="{% translate 'Devices you have trusted, and sessions that are currently signed in.' %}">
-  <form method="post" action="{% url 'accounts:revoke_devices' %}"
+  {% comment %}
+    Opted out of boosting so the browser performs a real navigation: this ends
+    the current session too, and a boosted submit would swap the sign-in page
+    into the shell instead of leaving it.
+  {% endcomment %}
+  <form method="post" action="{% url 'accounts:revoke_devices' %}" hx-boost="false"
         onsubmit="return confirm('{% translate "Sign out of every device, including this one?" %}')">
     {% csrf_token %}
     <button type="submit" class="btn btn-sm btn-outline-danger">

@@ -10,6 +10,11 @@ urlpatterns = [
     path("entities/new/", views.entity_create, name="entity_create"),
     path("entities/<uuid:pk>/", views.entity_detail, name="entity_detail"),
     path("entities/<uuid:pk>/archive/", views.archive_entity, name="entity_archive"),
+    path(
+        "entities/<uuid:pk>/registrations/new/",
+        views.registration_create,
+        name="registration_create",
+    ),
     path("search/", views.palette_search, name="search"),
     path("switch-tenant/", views.switch_tenant, name="switch_tenant"),
 ]

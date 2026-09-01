@@ -38,8 +38,14 @@
       <span class="stat-tile__label">{% translate "Waiting on a date" %}</span>
     </a>
   {% endif %}
-  <span class="stat-tile stat-tile--quiet">
+  {% comment %}
+    A link like every sibling, not a bare span. `stat-tile--quiet` is styling
+    only — it says "this is the calm one", not "this one is inert" — and the
+    completed filter has always been supported by the view.
+  {% endcomment %}
+  <a class="stat-tile stat-tile--quiet" href="?status=completed"
+     hx-get="?status=completed" hx-target="#main" hx-push-url="true">
     <span class="stat-tile__value">{{ counts.completed }}</span>
     <span class="stat-tile__label">{% translate "Completed" %}</span>
-  </span>
+  </a>
 </div>

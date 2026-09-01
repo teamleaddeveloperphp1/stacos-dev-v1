@@ -24,6 +24,7 @@ from django.views.decorators.http import require_http_methods
 
 from stacos.catalog.models import ComplianceDefinition, DefinitionVersion, PublicationStatus
 from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob
+from stacos.core.pagination import filters_querystring
 from stacos.core.permissions import require_permission
 from stacos.core.typing import current_user
 from stacos.engine.lifecycle import DUE_SOON_DAYS, OPEN_STATES, State
@@ -92,7 +93,7 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
         "search": request.GET.get("q", ""),
         "category": request.GET.get("category", ""),
         "categories": ComplianceCategory.choices,
-        "querystring": _querystring(request),
+        "querystring": filters_querystring(request),
     }
 
     # A cursor request is asking for more rows, not for the whole screen again.
@@ -152,14 +153,6 @@ def _filtered(request: HttpRequest, *, as_of: date) -> QuerySet[ObligationInstan
         queryset = queryset.filter(entity_id=entity_id)
 
     return annotate_status(queryset, as_of=as_of)
-
-
-def _querystring(request: HttpRequest) -> str:
-    """Current filters, minus the cursor, for building the "load more" link."""
-    params = request.GET.copy()
-    params.pop("cursor", None)
-    encoded = params.urlencode()
-    return f"&{encoded}" if encoded else ""
 
 
 # ---------------------------------------------------------------------------

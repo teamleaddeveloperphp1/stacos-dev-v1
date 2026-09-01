@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from stacos.core.audit import record_event
+from stacos.core.forms import ScopedUserChoiceField
 from stacos.core.models import AuditAction
 from stacos.practice.models import RateCard, TimeEntry, WorkItem
 
@@ -35,6 +36,13 @@ def rate_for(user: Any, *, on: date) -> Decimal:
 
 
 class WorkItemForm(forms.ModelForm[WorkItem]):
+    # Narrowed to people in the caller's own organisation. Left to ModelForm this
+    # is a plain FK to a model that is not tenant-scoped, so it renders every
+    # user on the platform and accepts any of them on POST — other customers'
+    # staff names, and work assignable to them. See stacos.core.forms.
+    assigned_to = ScopedUserChoiceField(required=False, label=_("Assign to"))
+    reviewer = ScopedUserChoiceField(required=False, label=_("Reviewer"))
+
     class Meta:
         model = WorkItem
         fields = [

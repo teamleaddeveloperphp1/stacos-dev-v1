@@ -136,6 +136,7 @@ def sweep_tenants(as_of: str | None = None) -> dict[str, int]:
 )
 def sweep_obligation_reminders(*, tenant_id: str, as_of: str | None = None) -> dict[str, int]:
     """Remind the responsible people about filings coming up and gone by."""
+    from stacos.engine.lifecycle import OPEN_STATES
     from stacos.obligations.models import ObligationInstance
     from stacos.obligations.queries import live
 
@@ -146,8 +147,18 @@ def sweep_obligation_reminders(*, tenant_id: str, as_of: str | None = None) -> d
     horizon = day + timedelta(days=max(LADDER))
     floor = day - timedelta(days=90)
 
+    # `live()` excludes superseded and archived rows — it does *not* exclude
+    # finished ones, which is exactly the trap here. Reminding somebody that
+    # GSTR-3B is due on the 20th when they filed it on the 18th is the fastest
+    # way to teach a firm that these messages are noise.
     rows = (
-        live(ObligationInstance.objects.filter(due_date__gte=floor, due_date__lte=horizon))
+        live(
+            ObligationInstance.objects.filter(
+                due_date__gte=floor,
+                due_date__lte=horizon,
+                state__in=[str(state) for state in OPEN_STATES],
+            )
+        )
         .select_related("entity", "assigned_to")
         .order_by("due_date")
     )

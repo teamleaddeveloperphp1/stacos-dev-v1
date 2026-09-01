@@ -453,7 +453,7 @@ class Command(BaseCommand):
         The overdue one exists so the dunning state is visible. A billing screen
         where everything is paid tells you nothing about what the module does.
         """
-        from stacos.billing.models import Invoice, Plan, Subscription, to_minor
+        from stacos.billing.models import Invoice, Payment, Plan, Subscription, to_minor
         from stacos.billing.services import issue_invoice, record_payment
 
         with platform_scope(reason="seed_work:plan"):
@@ -492,17 +492,20 @@ class Command(BaseCommand):
                 self.stdout.write("  Billing: already present")
                 return
 
-            paid = issue_invoice(subscription)
+            # Last month's, still unpaid — the state the dunning screen is for.
+            overdue = issue_invoice(subscription, issued_on=as_of - timedelta(days=39))
+            Invoice.objects.filter(pk=overdue.pk).update(
+                due_on=as_of - timedelta(days=9), status=Invoice.Status.OVERDUE
+            )
+
+            # This month's, settled by transfer — still the majority of Indian
+            # B2B collection, and the path that needs step-up to record.
+            paid = issue_invoice(subscription, issued_on=as_of - timedelta(days=9))
             record_payment(
                 paid,
                 amount_minor=paid.total_minor,
-                method="TRANSFER",
+                method=Payment.Method.OFFLINE,
                 external_reference="NEFT/2026/08/8841",
-            )
-
-            overdue = issue_invoice(subscription)
-            Invoice.objects.filter(pk=overdue.pk).update(
-                due_on=as_of - timedelta(days=9), status=Invoice.Status.OVERDUE
             )
 
             self.stdout.write("  Billing: Growth plan, 1 invoice paid, 1 nine days overdue")

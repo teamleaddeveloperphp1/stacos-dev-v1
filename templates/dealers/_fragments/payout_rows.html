@@ -1,0 +1,33 @@
+{% load i18n %}
+{% comment %}
+  Payout rows, plus the sentinel that fetches the next page.
+{% endcomment %}
+{% for payout in payouts %}
+  <li class="due-list__item">
+    <button class="btn btn-link p-0"
+            hx-get="{% url 'dealers:payout_detail' payout.pk %}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+      {{ payout.period_start|date:"j M" }} – {{ payout.period_end|date:"j M Y" }}
+    </button>
+    <span class="num">{{ payout.total_minor|minor|inr }}</span>
+    <c-status-chip status="{% if payout.status == 'PAID' %}complete{% elif payout.status == 'APPROVED' %}waiting{% elif payout.status == 'CANCELLED' %}na{% else %}in-progress{% endif %}"
+                   :label="payout.get_status_display" />
+  </li>
+{% empty %}
+  <li class="text-muted small">{% translate "No payouts yet." %}</li>
+{% endfor %}
+
+{% if page.has_more %}
+  <li id="payout-load-more" class="text-center p-2">
+    <button class="btn btn-sm btn-outline-secondary"
+            hx-get="?cursor={{ page.next_cursor|urlencode }}{{ querystring }}"
+            hx-target="#payout-load-more"
+            hx-swap="outerHTML"
+            hx-indicator="#payout-more-spinner">
+      {% translate "Load more" %}
+      <span class="htmx-indicator" id="payout-more-spinner">
+        <span class="spinner-inline"></span>
+      </span>
+    </button>
+  </li>
+{% endif %}

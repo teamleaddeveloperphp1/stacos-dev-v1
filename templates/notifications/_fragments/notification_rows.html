@@ -1,0 +1,31 @@
+{% load i18n %}
+{% comment %}
+  Just the rows, plus the sentinel that fetches the next page. Returned on its
+  own for a cursor request, and included by the list body on a first load — the
+  same shape as the compliance calendar's rows fragment.
+{% endcomment %}
+{% for notification in notifications %}
+  {% include "notifications/_fragments/row.html" %}
+{% empty %}
+  {% if not page.has_more and not querystring %}
+    <li>
+      <c-empty-state title="{% translate 'Nothing to report' %}"
+                     body="{% translate 'Reminders about filings, requests and deadlines appear here.' %}" />
+    </li>
+  {% endif %}
+{% endfor %}
+
+{% if page.has_more %}
+  <li id="notification-load-more" class="text-center p-2">
+    <button class="btn btn-sm btn-outline-secondary"
+            hx-get="?cursor={{ page.next_cursor|urlencode }}{{ querystring }}"
+            hx-target="#notification-load-more"
+            hx-swap="outerHTML"
+            hx-indicator="#notification-more-spinner">
+      {% translate "Load more" %}
+      <span class="htmx-indicator" id="notification-more-spinner">
+        <span class="spinner-inline"></span>
+      </span>
+    </button>
+  </li>
+{% endif %}

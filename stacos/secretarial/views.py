@@ -18,6 +18,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
 from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob
+from stacos.core.pagination import filters_querystring, keyset_page
 from stacos.core.permissions import require_permission
 from stacos.core.typing import current_user
 from stacos.secretarial.forms import AttendeeForm, MeetingForm, MinutesForm
@@ -39,6 +40,11 @@ from stacos.secretarial.services import (
 from stacos.tenancy.models import Entity
 from stacos.vault.models import LinkTarget
 from stacos.vault.services import documents_for
+
+#: One screen's worth for the paginated lists here. Resolutions used to stop at a
+#: hundred rows and the share ledger at fifty, both with no way to reach the rest
+#: — see stacos.core.pagination.
+PAGE_SIZE = 50
 
 
 def _permissions(request: HttpRequest) -> frozenset[str]:
@@ -248,16 +254,33 @@ def entity_secretarial(request: HttpRequest, entity_pk: str) -> HttpResponse:
 @require_permission("secretarial.resolution.manage")
 def resolution_list(request: HttpRequest) -> HttpResponse:
     """Resolutions, with the ones needing an MGT-14 filing surfaced first."""
-    rows = (
-        Resolution.objects.select_related("entity", "meeting")
-        .filter(Q(requires_mgt14=True) | Q(passed_on__isnull=False))
-        .order_by("-passed_on")[:100]
+    page = keyset_page(
+        Resolution.objects.select_related("entity", "meeting").filter(
+            Q(requires_mgt14=True) | Q(passed_on__isnull=False)
+        ),
+        order_by="passed_on",
+        cursor=request.GET.get("cursor", ""),
+        page_size=PAGE_SIZE,
+        descending=True,
     )
-    return render(
-        request,
-        "secretarial/_fragments/resolution_list.html",
-        {"resolutions": list(rows), "as_of": timezone.localdate()},
+    # Reachable from the sidebar, so it needs both render paths: a direct GET,
+    # a refresh or a deep link must return the page, not a bare fragment.
+    context = {
+        "resolutions": page.rows,
+        "page": page,
+        "querystring": filters_querystring(request),
+        "as_of": timezone.localdate(),
+    }
+
+    if request.GET.get("cursor") and is_fragment_request(request):
+        return render(request, "secretarial/_fragments/resolution_rows.html", context)
+
+    template = (
+        "secretarial/_fragments/resolution_list.html"
+        if is_fragment_request(request)
+        else "secretarial/resolution_list.html"
     )
+    return render(request, template, context)
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +308,17 @@ def cap_table(request: HttpRequest, entity_pk: str) -> HttpResponse:
     rows = [row for row in holdings if (row.shares or 0) > 0]
     total = sum(row.shares or 0 for row in rows)
 
+    # The ledger, paginated. The holdings above are replayed from every
+    # transaction regardless — that is what makes them trustworthy — but the
+    # visible history used to stop at fifty rows with nothing saying so.
+    transactions = keyset_page(
+        ShareTransaction.objects.filter(entity=entity).select_related("shareholder"),
+        order_by="executed_on",
+        cursor=request.GET.get("cursor", ""),
+        page_size=PAGE_SIZE,
+        descending=True,
+    )
+
     context = {
         "entity": entity,
         "holdings": [
@@ -298,13 +332,14 @@ def cap_table(request: HttpRequest, entity_pk: str) -> HttpResponse:
             for row in rows
         ],
         "total_shares": total,
-        "transactions": list(
-            ShareTransaction.objects.filter(entity=entity)
-            .select_related("shareholder")
-            .order_by("-executed_on")[:50]
-        ),
+        "transactions": transactions.rows,
+        "page": transactions,
+        "querystring": filters_querystring(request),
         "can_manage": "secretarial.captable.manage" in _permissions(request),
     }
+    if request.GET.get("cursor") and is_fragment_request(request):
+        return render(request, "secretarial/_fragments/share_transaction_rows.html", context)
+
     template = (
         "secretarial/_fragments/cap_table_body.html"
         if is_fragment_request(request)

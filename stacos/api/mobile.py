@@ -464,7 +464,7 @@ class NotificationListView(ScopedAPIView):
 class NotificationReadView(ScopedAPIView):
     permission_classes = [requires("notifications.view")]
 
-    @extend_schema(responses={204: OpenApiResponse(description="Marked as read.")})
+    @extend_schema(request=None, responses={204: OpenApiResponse(description="Marked as read.")})
     def post(self, request: Request, pk: UUID) -> Response:
         notification = Notification.objects.filter(pk=pk, recipient=current_user(request)).first()
         if notification is None:

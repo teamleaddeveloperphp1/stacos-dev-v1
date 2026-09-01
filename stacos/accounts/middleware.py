@@ -27,6 +27,25 @@ logger = structlog.get_logger(__name__)
 
 __all__ = ["SecurityStampMiddleware", "VerificationGateMiddleware"]
 
+
+def _navigate(request: HttpRequest, target: str) -> HttpResponse:
+    """Send the browser to ``target``, whether or not HTMX is driving.
+
+    HTMX follows a 302 itself and swaps the result into the target region, so a
+    plain redirect from here would render the sign-in page inside the shell the
+    user is being ejected from. ``HX-Redirect`` makes the browser navigate.
+
+    This only works because ``HtmxMiddleware`` is listed *above* both gates in
+    ``MIDDLEWARE``; below them, ``request.htmx`` does not exist yet and this
+    quietly degrades to the broken behaviour.
+    """
+    if getattr(request, "htmx", False):
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = target
+        return response
+    return redirect(target)
+
+
 SESSION_STAMP_KEY = "stacos_security_stamp"
 SESSION_VERIFIED_KEY = "stacos_fully_verified"
 SESSION_PENDING_KEY = "stacos_pending_verification_id"
@@ -68,7 +87,7 @@ class SecurityStampMiddleware:
             elif stored != current:
                 logger.info("auth.forced_signout", user_id=str(user.pk), reason="security_stamp")
                 logout(request)
-                response = redirect(reverse("accounts:login"))
+                response = _navigate(request, reverse("accounts:login"))
                 response["X-Stacos-Signout-Reason"] = "credentials-changed"
                 return response
 
@@ -111,13 +130,4 @@ class VerificationGateMiddleware:
     def _redirect_to_verification(request: HttpRequest) -> HttpResponse:
         target = reverse("accounts:verify")
         next_url = request.get_full_path()
-
-        # An HTMX request cannot follow a 302 into a full page — the fragment
-        # would be swapped into #main and the user would see a login form inside
-        # their dashboard. HX-Redirect makes the browser navigate properly.
-        if getattr(request, "htmx", False):
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = f"{target}?next={next_url}"
-            return response
-
-        return redirect(f"{target}?next={next_url}")
+        return _navigate(request, f"{target}?next={next_url}")

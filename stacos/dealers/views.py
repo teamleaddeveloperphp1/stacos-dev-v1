@@ -18,10 +18,14 @@ from django.views.decorators.http import require_http_methods
 
 from stacos.billing.models import to_major
 from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob
+from stacos.core.pagination import filters_querystring, keyset_page
 from stacos.core.permissions import require_permission
 from stacos.core.typing import current_user
 from stacos.dealers.models import CommissionEntry, CommissionPlan, Payout
 from stacos.dealers.services import DealerError, approve_payout, mark_paid, statement
+
+#: One screen's worth of payouts.
+PAGE_SIZE = 20
 
 
 def _permissions(request: HttpRequest) -> frozenset[str]:
@@ -38,6 +42,15 @@ def commission_statement(request: HttpRequest) -> HttpResponse:
         raise Http404
 
     totals = statement(dealer_tenant_id=dealer_id)
+    # Twenty payouts is under two years of monthly ones, and the list had no way
+    # to reach anything older — see stacos.core.pagination.
+    payouts = keyset_page(
+        Payout.objects.all(),
+        order_by="period_end",
+        cursor=request.GET.get("cursor", ""),
+        page_size=PAGE_SIZE,
+        descending=True,
+    )
     entries = CommissionEntry.objects.select_related("client_tenant", "plan").order_by(
         "-created_at"
     )[:100]
@@ -49,11 +62,16 @@ def commission_statement(request: HttpRequest) -> HttpResponse:
         "paid": to_major(totals["paid_minor"]),
         "clawed_back": to_major(totals["clawed_back_minor"]),
         "plan": CommissionPlan.objects.filter(is_active=True).order_by("-valid_from").first(),
-        "payouts": list(Payout.objects.order_by("-period_end")[:20]),
+        "payouts": payouts.rows,
+        "page": payouts,
+        "querystring": filters_querystring(request),
         "as_of": timezone.localdate(),
         "can_approve": "dealers.payout.approve" in _permissions(request),
         "can_pay": "dealers.payout.pay" in _permissions(request),
     }
+    if request.GET.get("cursor") and is_fragment_request(request):
+        return render(request, "dealers/_fragments/payout_rows.html", context)
+
     template = (
         "dealers/_fragments/statement_body.html"
         if is_fragment_request(request)

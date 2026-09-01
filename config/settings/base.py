@@ -120,10 +120,15 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    # Above the two gates below, not beneath them. It only reads request headers,
+    # and both gates ask `request.htmx` before deciding between a 302 and an
+    # HX-Redirect. Listed after them, that attribute does not exist yet, the
+    # question silently answers "no", and an expired session gets a redirect HTMX
+    # follows and swaps — leaving the user staring at an unchanged screen.
+    "django_htmx.middleware.HtmxMiddleware",
     "stacos.accounts.middleware.SecurityStampMiddleware",
     "stacos.accounts.middleware.VerificationGateMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django_htmx.middleware.HtmxMiddleware",
     "stacos.core.middleware.ScopeMiddleware",
     # Innermost, so it is the first to see an exception raised by a view and can
     # turn an authorisation failure into a redirect or a 403 rather than a 500.

@@ -91,6 +91,49 @@
   }
 }
 
+// =============================================================================
+// Keyboard shortcuts dialog (?).
+//
+// The same kind of overlay surface as the palette, and it looks the same on
+// purpose. It is a distinct block rather than a reuse of `.palette` because two
+// different widgets answering to one class name means nothing — a stylesheet, a
+// test, or a person reading the DOM — can tell them apart.
+// =============================================================================
+
+.shortcuts-backdrop {
+  @extend .palette-backdrop;
+}
+
+.shortcuts {
+  @extend .palette;
+
+  &__group-label {
+    @extend .palette__group-label;
+  }
+
+  &__hint {
+    @extend .palette__hint;
+  }
+
+  &__footer {
+    @extend .palette__footer;
+  }
+
+  // Deliberately not an extension of `.palette__item`: these rows are a
+  // reference list, not a menu, so they must not offer a hover highlight that
+  // suggests they can be chosen.
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    width: 100%;
+    padding: $stacos-space-2;
+    border-radius: var(--stacos-radius-md);
+    color: var(--stacos-text);
+    font-size: $stacos-text-base;
+  }
+}
+
 // Alpine removes this attribute once it initialises. Without the rule, a
 // component's markup flashes on screen before Alpine has hidden it.
 [x-cloak] {
