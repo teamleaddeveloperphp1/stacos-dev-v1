@@ -1,0 +1,49 @@
+code: IN-MCA-AUDITOR-CASUAL-VACANCY
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: Auditor casual vacancy — appointment
+plain_language_summary: A casual vacancy is filled by the board within thirty days. Where it arose from
+  a resignation the members must also approve, within three months — two clocks from one event, and the
+  second is the one that gets missed.
+statutory_reference: Section 139(8) Companies Act, 2013
+trigger_kind: EVENT_DRIVEN
+tags:
+- roc
+- auditor
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - OPC
+    - SECTION_8
+    explain: you are a company
+trigger:
+  event_key: AUDITOR_RESIGNED
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 30
+  shift_if_holiday: NONE
+evidence:
+- key: resolution
+  label: Board resolution
+  kind: DOC
+  mandatory_for_close: true
+- key: srn
+  label: ADT-1 SRN
+  kind: DOC
+default_owner_role: org-secretarial
+penalty_summary: Failure to fill the vacancy or complete required filings can attract statutory penalties
+  and additional filing fees.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

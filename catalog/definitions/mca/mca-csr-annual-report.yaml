@@ -1,0 +1,48 @@
+code: IN-MCA-CSR-ANNUAL-REPORT
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: CSR — annual report on CSR activities
+plain_language_summary: 'The prescribed format for the CSR annexure: projects, amounts, implementing agencies
+  and the impact assessment where one is required.'
+statutory_reference: Rule 8 Companies (Corporate Social Responsibility Policy) Rules, 2014
+tags:
+- roc
+- csr
+- disclosure
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - SECTION_8
+    explain: you are a company
+  - fact: has_csr_obligation
+    op: eq
+    value: true
+    explain: you meet the CSR thresholds
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 6
+    day_of_month: 30
+  shift_if_holiday: NONE
+evidence:
+- key: annexure
+  label: CSR annexure
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-secretarial
+penalty_summary: No separate filing penalty; non-compliance is dealt with under the applicable substantive
+  provision.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

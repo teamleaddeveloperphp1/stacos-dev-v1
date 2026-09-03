@@ -16,7 +16,8 @@ and expensive to get wrong, so each is called out where it happens:
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import dataclasses
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, timedelta
 from typing import Any
 
@@ -24,6 +25,7 @@ from stacos.engine.types import (
     CalendarSnapshot,
     DefinitionSnapshot,
     DueDateResolution,
+    EventOccurrence,
     ExtensionKind,
     ExtensionSet,
     FiscalYearConvention,
@@ -36,6 +38,7 @@ from stacos.engine.types import (
 )
 
 __all__ = [
+    "collapse_occurrences",
     "generate_periods",
     "resolve_due_date",
     "shift_to_working_day",
@@ -46,7 +49,13 @@ _ONE_DAY = timedelta(days=1)
 
 #: Anchors that can fail to resolve, and therefore need a recorded event or
 #: predecessor before a date exists at all.
-_EVENT_ANCHORS = frozenset({"EVENT_DATE", "LICENCE_EXPIRY", "PREVIOUS_INSTANCE_DATE"})
+#: ``TRIGGER_DATE`` is here for completeness, but in practice never blocks: an
+#: instance only exists because an occurrence produced it, so its date is
+#: always available. It blocks only if a definition declares the anchor with no
+#: trigger, which the loader refuses.
+_EVENT_ANCHORS = frozenset(
+    {"EVENT_DATE", "LICENCE_EXPIRY", "PREVIOUS_INSTANCE_DATE", "TRIGGER_DATE"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -286,6 +295,7 @@ def resolve_due_date(
     fy: FiscalYearConvention,
     extensions: ExtensionSet | None = None,
     events: Mapping[str, date] | None = None,
+    trigger_date: date | None = None,
     scope_jurisdictions: frozenset[str] = frozenset(),
     previous_completion: date | None = None,
     licence_expiry: date | None = None,
@@ -323,6 +333,14 @@ def resolve_due_date(
                     days_in_month(reference.year, int(fixed.get("month", reference.month))),
                 ),
             )
+        case "TRIGGER_DATE":
+            # *This* instance's own occurrence, not the collapsed latest-per-key
+            # map that EVENT_DATE reads. The DIR-12 for the director appointed in
+            # April is due thirty days after April; EVENT_DATE would date every
+            # one of the year's appointments from the most recent of them.
+            base = trigger_date
+            if base is None:
+                blocking = "TRIGGER_DATE"
         case "EVENT_DATE":
             key = str(rule.get("event_key", ""))
             base = events.get(key)
@@ -339,8 +357,12 @@ def resolve_due_date(
                 # board meeting of a newly incorporated company has no predecessor.
                 fallback = rule.get("fallback")
                 if fallback:
+                    # `dataclasses.replace`, not a `__dict__` splat: DefinitionSnapshot
+                    # is slots=True and has no __dict__, so the splat raised
+                    # AttributeError. Dormant only because no definition uses this
+                    # anchor yet.
                     return resolve_due_date(
-                        DefinitionSnapshot(**{**definition.__dict__, "due_rule": fallback}),
+                        dataclasses.replace(definition, due_rule=fallback),
                         period,
                         calendars=calendars,
                         fy=fy,
@@ -422,3 +444,19 @@ def static_max_lag_days(due_rule: Mapping[str, Any]) -> int:
         lag += 366
 
     return max(lag, 31)
+
+
+def collapse_occurrences(occurrences: Iterable[EventOccurrence]) -> dict[str, date]:
+    """The latest date per key, which is what an ``EVENT_DATE`` anchor reads.
+
+    "The last board meeting" is what a 120-day gap rule needs, not the first one
+    ever held. Stated once, here, pure and testable, rather than in the Django
+    layer where the six AGM-anchored definitions could not be exercised without a
+    database.
+    """
+    latest: dict[str, date] = {}
+    for occurrence in occurrences:
+        current = latest.get(occurrence.key)
+        if current is None or occurrence.occurred_on > current:
+            latest[occurrence.key] = occurrence.occurred_on
+    return latest

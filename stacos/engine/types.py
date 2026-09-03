@@ -8,6 +8,7 @@ calendar generation in a unit test with no database at all.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -20,6 +21,7 @@ __all__ = [
     "DefinitionSnapshot",
     "Diagnostic",
     "DueDateResolution",
+    "EventOccurrence",
     "EvidenceRequirement",
     "ExtensionKind",
     "ExtensionRecord",
@@ -32,6 +34,7 @@ __all__ = [
     "ScopeRef",
     "Severity",
     "ShiftRule",
+    "occurrence_number",
 ]
 
 
@@ -201,6 +204,10 @@ class DefinitionSnapshot:
     effective_to: date | None = None
     default_owner_role: str = ""
     evidence_requirements: tuple[EvidenceRequirement, ...] = ()
+    #: For ``periodicity: EVENT_BASED`` only: ``{event_key, when?}``. What makes
+    #: an instance exist at all, as opposed to ``due_rule`` which only says when
+    #: an instance that already exists falls due. Empty for every periodic rule.
+    trigger: Mapping[str, Any] = field(default_factory=dict)
 
     def is_effective_for(self, period: Period) -> bool:
         """Whether this version governs the given period.
@@ -328,6 +335,41 @@ class Identity:
     scope_ref: str
     period_key: str
     occurrence: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class EventOccurrence:
+    """One recorded thing that happened, that an obligation may hang off.
+
+    ``ref`` is opaque to the engine, stable for the life of the record, and the
+    only input to the occurrence number. That is the whole design: an occurrence
+    derived from *position* renumbers when a sibling is removed, and a renumbered
+    occurrence is — under the natural key — a different obligation. Two directors
+    appointed on one day, then the first record deleted: the second one's
+    identity must not move, or the DIR-12 somebody had started preparing is
+    superseded and an empty duplicate appears beside it.
+    """
+
+    key: str
+    occurred_on: date
+    ref: str
+    scope_ref: str = ""
+    label: str = ""
+    attributes: Mapping[str, Any] = field(default_factory=dict)
+
+
+def occurrence_number(ref: str) -> int:
+    """A stable small integer identifying one occurrence within a period key.
+
+    ``blake2s`` rather than the builtin ``hash``: ``hash`` is salted per process
+    by ``PYTHONHASHSEED``, so one event would number differently in the web
+    process and in the Celery worker. The nightly job would then fail to
+    recognise the rows the interactive path created and would duplicate every
+    event-driven obligation, every night, indefinitely. This line is the one most
+    likely to be "simplified" into a catastrophe, which is why the tests pin its
+    output to a literal.
+    """
+    return int.from_bytes(hashlib.blake2s(ref.encode("utf-8"), digest_size=2).digest(), "big")
 
 
 @dataclass(frozen=True, slots=True)

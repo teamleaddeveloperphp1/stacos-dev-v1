@@ -43,6 +43,7 @@ from django.utils.translation import gettext_lazy as _
 from stacos.core.ids import uuid7
 from stacos.core.models import TimeStampedModel
 from stacos.engine.types import InstanceScope, Periodicity, ShiftRule
+from stacos.jurisdictions.events import EVENT_TYPES
 
 __all__ = [
     "ComplianceDefinition",
@@ -108,6 +109,41 @@ class ComplianceDefinition(TimeStampedModel):
     #: Finer grouping inside a category — "GST", "TDS", "ROC". Display only.
     family = models.CharField(max_length=40, blank=True, db_index=True)
 
+    class TriggerKind(models.TextChoices):
+        """Why this obligation appears at all.
+
+        Not derivable from ``periodicity`` alone, which is why it is stored.
+        ``IN-MCA-STATUTORY-REGISTERS`` is ANNUAL and PERIOD_END-anchored and is
+        nonetheless a register you keep, not a return you file; a user filtering
+        for "things I have to submit" does not want it.
+        """
+
+        STATUTORY_PERIODIC = "STATUTORY_PERIODIC", _("Recurring statutory filing")
+        EVENT_DRIVEN = "EVENT_DRIVEN", _("Triggered by something happening")
+        RENEWAL = "RENEWAL", _("Licence or registration renewal")
+        GOVERNANCE = "GOVERNANCE", _("Meeting, register or resolution")
+        INTERNAL = "INTERNAL", _("Internal control, no external filing")
+
+    trigger_kind = models.CharField(
+        max_length=20,
+        choices=TriggerKind.choices,
+        default=TriggerKind.STATUTORY_PERIODIC,
+        db_index=True,
+    )
+
+    #: Free-form navigation labels — "roc", "annual-filing", "director". Validated
+    #: against a controlled vocabulary at load time, because free text rots into
+    #: three spellings of one word inside a year; that is the whole reason the
+    #: fact registry exists. Unversioned, like ``category`` and ``family``: a tag
+    #: is how *we* file the thing, and re-tagging must not read as the law
+    #: changing or force a republish of every version.
+    tags = ArrayField(models.SlugField(max_length=40), default=list, blank=True)
+
+    #: Which kinds of business this is *about* — "nbfc", "listed", "food". What
+    #: finally makes the SECTORAL category usable and gives onboarding a "what
+    #: line of business are you in" question worth asking.
+    sector_tags = ArrayField(models.SlugField(max_length=40), default=list, blank=True)
+
     #: False retires the whole definition regardless of its versions. Used when a
     #: statute is repealed outright.
     is_active = models.BooleanField(default=True)
@@ -119,6 +155,8 @@ class ComplianceDefinition(TimeStampedModel):
         indexes = [
             models.Index(fields=["country", "category"], name="definition_country_cat_idx"),
             models.Index(fields=["country", "is_active"], name="definition_country_active_idx"),
+            GinIndex(fields=["tags"], name="definition_tags_gin"),
+            GinIndex(fields=["sector_tags"], name="definition_sector_gin"),
         ]
 
     def __str__(self) -> str:
@@ -190,6 +228,25 @@ class DefinitionVersion(TimeStampedModel):
     #: affected, rather than the whole catalog.
     facts_used = ArrayField(models.CharField(max_length=64), default=list, blank=True)
 
+    #: Entity types this rule cannot be *refuted* for, knowing only country and
+    #: legal form. Derived at load time by ``stacos.engine.probe``, exactly as
+    #: ``facts_used`` is derived by ``facts_used()``.
+    #:
+    #: **Advisory. Navigation and ranking only.** It answers "what might apply to
+    #: a private limited company in Maharashtra" before any profile exists, in one
+    #: indexed scan. Nothing in the planner reads it, and nothing in the planner
+    #: may ever read it: the authority on applicability is ``evaluate()`` against
+    #: the real profile, and a wrong value here must never be able to make a
+    #: calendar wrong. A test asserts this name appears nowhere in the engine's
+    #: materialisation path.
+    possible_entity_types = ArrayField(models.CharField(max_length=24), default=list, blank=True)
+
+    #: Fingerprint of the entity-type vocabulary the index above was computed
+    #: against. Adding a type without reloading the catalog would otherwise leave
+    #: every row missing it, and the new type would appear to have no obligations
+    #: at all — the worst silent wrongness available here. A system check warns.
+    probe_signature = models.CharField(max_length=16, blank=True)
+
     # -- What it is filed per -----------------------------------------------
     instance_scope = models.CharField(
         max_length=16,
@@ -198,6 +255,18 @@ class DefinitionVersion(TimeStampedModel):
         help_text=_("ENTITY, REGISTRATION or PREMISES. GSTR-3B is per GSTIN, not per company."),
     )
     scope_selector = models.JSONField(default=dict, blank=True)
+
+    # -- What makes an instance exist at all ---------------------------------
+    #: ``{event_key, when?}`` for an EVENT_BASED definition; empty otherwise.
+    #:
+    #: Deliberately separate from ``due_rule.event_key``, because the two answer
+    #: opposite questions about the same date. AOC-4 exists for FY 2025-26
+    #: whether or not an AGM has been recorded — null due date, and a prompt.
+    #: DIR-12 does not exist until a director is actually appointed. Spell both
+    #: as ``due.event_key`` and the only thing separating them is ``periodicity``,
+    #: so a mis-set periodicity silently flips a definition between "one a year,
+    #: prompting forever" and "nothing, ever", and neither raises.
+    trigger_rule = models.JSONField(default=dict, blank=True)
 
     # -- When it is due -----------------------------------------------------
     due_rule = models.JSONField(default=dict)
@@ -267,6 +336,7 @@ class DefinitionVersion(TimeStampedModel):
         indexes = [
             models.Index(fields=["status", "effective_from"], name="defversion_status_eff_idx"),
             GinIndex(fields=["facts_used"], name="defversion_facts_gin"),
+            GinIndex(fields=["possible_entity_types"], name="defversion_possible_gin"),
         ]
 
     def __str__(self) -> str:
@@ -325,6 +395,41 @@ class DefinitionVersion(TimeStampedModel):
                 errors.setdefault("due_rule", []).append(
                     f"{self.due_rule['shift_if_holiday']!r} is not a known shift rule."
                 )
+
+        # An event-triggered definition and a periodic one are different shapes,
+        # and the failure modes of getting it wrong are silent in both
+        # directions: a trigger with a periodic periodicity generates a row per
+        # quarter that nothing ever happened for, and EVENT_BASED with no trigger
+        # generates nothing at all, forever, with every test still green. The
+        # loader checks this too; this is the guard for an admin write.
+        trigger = self.trigger_rule or {}
+        is_event_based = self.periodicity == Periodicity.EVENT_BASED
+        anchor = str((self.due_rule or {}).get("anchor", ""))
+
+        if is_event_based and not trigger:
+            errors.setdefault("trigger_rule", []).append(
+                "periodicity EVENT_BASED needs a trigger. Without one the definition "
+                "loads cleanly and materialises nothing, ever."
+            )
+        if trigger and not is_event_based:
+            errors.setdefault("trigger_rule", []).append(
+                "a trigger requires periodicity EVENT_BASED."
+            )
+        if trigger and str(trigger.get("event_key", "")) not in EVENT_TYPES:
+            errors.setdefault("trigger_rule", []).append(
+                f"unknown trigger event_key {trigger.get('event_key')!r}."
+            )
+        if is_event_based and anchor != "TRIGGER_DATE":
+            errors.setdefault("due_rule", []).append(
+                "an event-triggered definition must use anchor TRIGGER_DATE, which "
+                "dates each instance from its own occurrence. EVENT_DATE reads the "
+                "latest date for the key, so every filing of the year would be "
+                "dated from the most recent event."
+            )
+        if anchor == "TRIGGER_DATE" and not trigger:
+            errors.setdefault("due_rule", []).append(
+                "anchor TRIGGER_DATE has no trigger to anchor on."
+            )
 
         if errors:
             raise ValidationError(errors)

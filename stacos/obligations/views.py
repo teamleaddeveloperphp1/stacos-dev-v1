@@ -461,11 +461,16 @@ def rebuild_calendar(request: HttpRequest, entity_pk: str) -> HttpResponse:
 
     run = materialise(entity, as_of=as_of, trigger="MANUAL", actor=current_user(request))
 
+    # The re-rendered panel, not the calendar's counter strip. This button only
+    # exists inside the entity summary card, and that page has no
+    # `#calendar-counts` to swap — so the counters were being rendered into a
+    # response the caller then discarded, and the user saw the toast fire while
+    # the table in front of them stayed stale until a manual reload.
     return oob(
         request,
         Fragment(
-            "obligations/_fragments/status_counts.html",
-            {"counts": status_counts(as_of=as_of)},
+            ENTITY_SUMMARY_TEMPLATE,
+            _entity_summary_context(entity, as_of=as_of),
         ),
         toast=Toast(
             _("Calendar rebuilt: %(summary)s.") % {"summary": run.summary()},
@@ -507,14 +512,18 @@ def definition_detail(request: HttpRequest, code: str) -> HttpResponse:
     )
 
 
-@require_permission("compliance.obligation.view")
-def entity_summary(request: HttpRequest, entity_pk: str) -> HttpResponse:
-    """Per-category counts for one entity, for the entity detail page."""
-    as_of = _today()
-    entity = Entity.objects.filter(pk=entity_pk).first()
-    if entity is None:
-        raise Http404
+#: The panel the entity detail page loads, and the panel "Rebuild calendar"
+#: sends back. Named once so the two can never drift.
+ENTITY_SUMMARY_TEMPLATE = "obligations/_fragments/entity_summary.html"
 
+
+def _entity_summary_context(entity: Entity, *, as_of: date) -> dict[str, Any]:
+    """Per-category counts for one entity.
+
+    Shared by the panel's own endpoint and by ``rebuild_calendar``, which has to
+    render the same card so the table the user is looking at reflects the plan
+    that just ran.
+    """
     rows = (
         live()
         .filter(entity=entity, state__in=_OPEN)
@@ -527,15 +536,24 @@ def entity_summary(request: HttpRequest, entity_pk: str) -> HttpResponse:
     )
 
     labels = dict(ComplianceCategory.choices)
+    return {
+        "entity": entity,
+        "as_of": as_of,
+        "rows": [{**row, "label": labels.get(row["category"], row["category"])} for row in rows],
+        "timeline": ObligationEvent.objects.filter(entity=entity).select_related("actor")[:10],
+    }
+
+
+@require_permission("compliance.obligation.view")
+def entity_summary(request: HttpRequest, entity_pk: str) -> HttpResponse:
+    """Per-category counts for one entity, for the entity detail page."""
+    as_of = _today()
+    entity = Entity.objects.filter(pk=entity_pk).first()
+    if entity is None:
+        raise Http404
+
     return render(
         request,
-        "obligations/_fragments/entity_summary.html",
-        {
-            "entity": entity,
-            "as_of": as_of,
-            "rows": [
-                {**row, "label": labels.get(row["category"], row["category"])} for row in rows
-            ],
-            "timeline": ObligationEvent.objects.filter(entity=entity).select_related("actor")[:10],
-        },
+        ENTITY_SUMMARY_TEMPLATE,
+        _entity_summary_context(entity, as_of=as_of),
     )

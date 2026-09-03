@@ -52,6 +52,7 @@ from stacos.jurisdictions.models import JurisdictionPack
 from stacos.obligations.models import (
     MaterialisationRun,
     ObligationEvent,
+    ObligationInclusion,
     ObligationInstance,
     ObligationSuppression,
 )
@@ -159,6 +160,7 @@ def preview(
         extensions=extensions,
         existing=_existing_instances(entity),
         suppressed=_suppressed_identities(entity),
+        opted_in=_opted_in_codes(entity),
         as_of=as_of,
     )
 
@@ -248,9 +250,28 @@ def _suppressed_identities(entity: Entity) -> frozenset[Identity]:
                 definition_code=row.definition_code,
                 scope_ref=row.scope_ref,
                 period_key=row.period_key,
+                # Without this the identity carried occurrence 0 and matched
+                # whichever of two same-day event instances happened to hash to
+                # zero — probably neither. The user dismisses a row, the nightly
+                # job brings it back.
+                occurrence=row.occurrence,
             )
         )
     return frozenset(identities)
+
+
+def _opted_in_codes(entity: Entity) -> frozenset[str]:
+    """Definition codes the user has deliberately added.
+
+    Both halves at once: the ones chosen one at a time, and the ones that came
+    with a compliance pack. Revoking a pack revokes its rows, so nothing here has
+    to know that packs exist.
+    """
+    return frozenset(
+        ObligationInclusion.objects.filter(entity=entity, revoked_at__isnull=True).values_list(
+            "definition_code", flat=True
+        )
+    )
 
 
 # ---------------------------------------------------------------------------

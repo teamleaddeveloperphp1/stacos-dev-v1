@@ -288,7 +288,11 @@ def step_up(request: HttpRequest) -> HttpResponse:
     form = StepUpForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         mark_step_up_complete(request)
-        return redirect(_safe_next(request))
+        # `_navigate`, not `redirect`: an HTMX caller follows a 302 itself and
+        # swaps the destination into whatever region it targeted, so the user
+        # ends up with the page they asked for rendered inside a fragment slot —
+        # or, when the destination is itself a fragment, with nothing at all.
+        return _navigate(request, _safe_next(request))
 
     return render(
         request,

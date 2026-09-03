@@ -1,0 +1,47 @@
+code: IN-MCA-ANNUAL-COMPLIANCE-CERTIFICATE
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: Annual compliance certificate — internal / engagement deliverable
+plain_language_summary: The engagement deliverable that says what was done and what was found. No statutory
+  deadline of its own; it exists because a client, a lender or a buyer asks for one and the answer has
+  to be written down somewhere.
+statutory_reference: Internal governance / professional engagement requirement; statutory basis depends
+  on the certificate used
+trigger_kind: INTERNAL
+tags:
+- roc
+- certificate
+- internal-control
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - OPC
+    - SECTION_8
+    explain: you are a company
+due:
+  anchor: EVENT_DATE
+  event_key: AGM_DATE
+  offset:
+    days: 75
+  shift_if_holiday: NONE
+evidence:
+- key: certificate
+  label: Annual compliance certificate
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-secretarial
+penalty_summary: No standalone statutory penalty unless the certificate is required under a specific provision.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

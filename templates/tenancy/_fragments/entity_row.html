@@ -23,21 +23,37 @@
                    label="{{ entity.get_status_display }}" />
   </td>
   {% comment %}
-    Archiving is a soft delete: the entity and its whole history are retained and
-    the obligations stop being generated. The response body is empty and the row
-    is its own target, so it simply disappears — no refetch of the list.
+    Editing opens the same modal that creates an entity, pre-filled, and its
+    response replaces this row — so a corrected name appears where a refresh
+    would put it, with the registration count intact. Archiving is a soft
+    delete: the entity and its whole history are retained and the obligations
+    stop being generated; the response body is empty and the row is its own
+    target, so it simply disappears — no refetch of the list.
+
+    Both are gated on the permission as well as in the view. A control that
+    403s on click is worse than one that is absent.
   {% endcomment %}
   <td class="text-end">
-    {% if "tenancy.entity.archive" in access_scope.permissions %}
-      <form hx-post="{% url 'app:entity_archive' entity.pk %}"
-            hx-target="#entity-row-{{ entity.pk }}"
-            hx-swap="outerHTML"
-            hx-confirm="{% translate 'Archive this entity? Its history is kept, and it stops generating obligations.' %}">
-        {% csrf_token %}
-        <button class="btn btn-sm btn-link text-muted p-0" type="submit">
-          {% translate "Archive" %}
+    <div class="d-flex justify-content-end align-items-center gap-3">
+      {% if "tenancy.entity.edit" in access_scope.permissions %}
+        <button class="btn btn-sm btn-link text-muted p-0"
+                hx-get="{% url 'app:entity_edit' entity.pk %}"
+                hx-target="#modal-container"
+                hx-swap="innerHTML">
+          {% translate "Edit" %}
         </button>
-      </form>
-    {% endif %}
+      {% endif %}
+      {% if "tenancy.entity.archive" in access_scope.permissions %}
+        <form hx-post="{% url 'app:entity_archive' entity.pk %}"
+              hx-target="#entity-row-{{ entity.pk }}"
+              hx-swap="outerHTML"
+              hx-confirm="{% translate 'Archive this entity? Its history is kept, and it stops generating obligations.' %}">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-link text-muted p-0" type="submit">
+            {% translate "Archive" %}
+          </button>
+        </form>
+      {% endif %}
+    </div>
   </td>
 </tr>

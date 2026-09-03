@@ -1,0 +1,47 @@
+code: IN-IT-FORM10F
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Form 10F — treaty information by non-resident
+plain_language_summary: Form 10F supplies the treaty particulars a residency certificate leaves out. Now
+  filed electronically, which caught out a lot of non-residents who had been handing over a signed paper
+  form.
+statutory_reference: Section 90(5) Income-tax Act r/w Rule 21AB Income-tax Rules
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- treaty
+- non-resident
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - any:
+    - fact: has_foreign_shareholding
+      op: eq
+      value: true
+      explain: you have foreign shareholding
+    - fact: has_export_import
+      op: eq
+      value: true
+      explain: you deal across borders
+due:
+  anchor: FY_START
+  offset:
+    months: 3
+    day_of_month: 30
+  shift_if_holiday: NONE
+evidence:
+- key: 10f
+  label: Filed Form 10F
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Treaty benefit may be denied if required information is not furnished.
+effective_from: '2013-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

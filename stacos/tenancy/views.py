@@ -13,6 +13,7 @@ from typing import Any, cast
 from django.contrib import messages
 from django.contrib.postgres.search import TrigramSimilarity
 from django.db.models import Count, Q, QuerySet
+from django.forms.models import model_to_dict
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -20,7 +21,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView
 
-from stacos.core.audit import record_event
+from stacos.core.audit import diff_fields, record_event
 from stacos.core.htmx import Fragment, HtmxFragmentMixin, Toast, oob
 from stacos.core.models import AuditAction
 from stacos.core.permissions import RequirePermissionMixin, require_permission
@@ -28,6 +29,13 @@ from stacos.core.typing import current_user
 from stacos.tenancy.forms import EntityForm, RegistrationForm
 from stacos.tenancy.models import Entity, EntityProfile, Membership
 from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
+
+#: The one modal that both creates and edits an entity.
+ENTITY_FORM_TEMPLATE = "tenancy/_fragments/entity_form_modal.html"
+
+#: What an edit is allowed to change, and therefore what the audit entry has to
+#: describe. Taken from the form so the two cannot drift apart.
+AUDITED_ENTITY_FIELDS = list(EntityForm.Meta.fields)
 
 
 @require_permission("tenancy.entity.view")
@@ -62,6 +70,31 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     return render(request, template, context)
 
 
+def entity_rows() -> QuerySet[Entity]:
+    """The queryset every entity *row* is rendered from.
+
+    ``registration_count`` is an annotation, not a model field, and
+    ``entity_row.html`` falls back to zero when it is absent. That fallback is
+    right for a newly created entity and wrong for an edited one, which is why
+    the list and the edit response share this rather than each building their
+    own.
+    """
+    # `annotate()` widens the row type to Any, and the cast used to sit at the
+    # end of the list view's `get_queryset`. It belongs here now, where the
+    # annotation is introduced.
+    return cast(
+        "QuerySet[Entity]",
+        Entity.objects.select_related("tenant")
+        .filter(archived_at__isnull=True)
+        .annotate(
+            registration_count=Count(
+                "registrations", filter=Q(registrations__archived_at__isnull=True)
+            )
+        )
+        .order_by("name"),
+    )
+
+
 class EntityListView(RequirePermissionMixin, HtmxFragmentMixin, ListView[Entity]):
     """Entity list — the pattern every later list view follows.
 
@@ -77,16 +110,7 @@ class EntityListView(RequirePermissionMixin, HtmxFragmentMixin, ListView[Entity]
     template_name = "tenancy/entity_list.html"
 
     def get_queryset(self) -> QuerySet[Entity]:
-        queryset = (
-            Entity.objects.select_related("tenant")
-            .filter(archived_at__isnull=True)
-            .annotate(
-                registration_count=Count(
-                    "registrations", filter=Q(registrations__archived_at__isnull=True)
-                )
-            )
-            .order_by("name")
-        )
+        queryset = entity_rows()
 
         search = self.request.GET.get("q", "").strip()
         if search:
@@ -100,7 +124,7 @@ class EntityListView(RequirePermissionMixin, HtmxFragmentMixin, ListView[Entity]
         if status:
             queryset = queryset.filter(status=status)
 
-        return cast("QuerySet[Entity]", queryset)
+        return queryset
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -255,8 +279,99 @@ def entity_create(request: HttpRequest) -> HttpResponse:
     status = 422 if request.method == "POST" else 200
     return render(
         request,
-        "tenancy/_fragments/entity_form_modal.html",
-        {"form": form, "tenant": tenant},
+        ENTITY_FORM_TEMPLATE,
+        {
+            "form": form,
+            "tenant": tenant,
+            # One template serves both create and edit. What differs is where it
+            # posts and what it swaps, so the view says — a conditional in the
+            # markup would have to know about both, and would be read wrong the
+            # first time someone changed one of them.
+            "form_action": reverse("app:entity_create"),
+            "form_target": "#entity-rows tbody",
+            "form_swap": "afterbegin",
+            "modal_title": _("Add an entity"),
+            "submit_label": _("Add entity"),
+        },
+        status=status,
+    )
+
+
+@require_permission("tenancy.entity.edit")
+@require_http_methods(["GET", "POST"])
+def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
+    """Correct an entity's details, in the same modal that creates one.
+
+    A typo in a name, the wrong entity type, a registered office in the wrong
+    state: before this existed the only remedy was to archive the entity and
+    start again, which throws away every obligation, document and audit entry
+    attached to it.
+
+    Fetched through the scoped manager, so another tenant's id in the address is
+    a 404 rather than an edit — 404 and not 403 for the reason ``entity_detail``
+    gives. Archived entities are excluded: an archived entity is history, and
+    history is not retyped.
+
+    Deliberately does *not* rebuild the calendar. ``entity_type`` and
+    ``registered_office_state`` both drive applicability, so an edit can change
+    what the entity owes — and this product's rule is that such a change
+    produces a reviewable plan rather than taking effect silently. The toast
+    points at "Rebuild calendar", which is that review.
+    """
+    entity = Entity.objects.filter(pk=pk, archived_at__isnull=True).first()
+    if entity is None:
+        raise Http404
+
+    # Snapshot before the form binds. `EntityForm(..., instance=entity)` writes
+    # the submitted values onto the instance during `is_valid()`, so by the time
+    # there is something to compare against, the "before" side is already gone.
+    original = model_to_dict(entity, fields=AUDITED_ENTITY_FIELDS)
+
+    form = EntityForm(request.POST or None, instance=entity)
+
+    if request.method == "POST" and form.is_valid():
+        entity = form.save(commit=False)
+        entity.full_clean(exclude=["tenant"])
+        entity.save()
+
+        before, after = diff_fields(entity, fields=AUDITED_ENTITY_FIELDS, original=original)
+        record_event(
+            action=AuditAction.UPDATE,
+            actor=current_user(request),
+            obj=entity,
+            before=before,
+            after=after,
+        )
+
+        # Re-read so the row carries `registration_count`. Falling back to the
+        # saved instance rather than letting `None` through: the count would be
+        # wrong, but an empty `<tr>` swapped into the row's own id is worse —
+        # the list would appear to lose the entity that was just corrected.
+        row = entity_rows().filter(pk=entity.pk).first() or entity
+
+        return oob(
+            request,
+            Fragment("tenancy/_fragments/entity_row.html", {"entity": row}),
+            toast=Toast(
+                _("%(name)s updated. Rebuild its calendar to apply the change.")
+                % {"name": entity.name}
+            ),
+            triggers={"stacos:modal-close": True},
+        )
+
+    status = 422 if request.method == "POST" else 200
+    return render(
+        request,
+        ENTITY_FORM_TEMPLATE,
+        {
+            "form": form,
+            "entity": entity,
+            "form_action": reverse("app:entity_edit", args=[entity.pk]),
+            "form_target": f"#entity-row-{entity.pk}",
+            "form_swap": "outerHTML",
+            "modal_title": _("Edit entity"),
+            "submit_label": _("Save changes"),
+        },
         status=status,
     )
 

@@ -1,0 +1,49 @@
+code: IN-IT-EXEMPTION-APPLICATIONS
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Income-tax exemption / deduction applications — prescribed forms
+plain_language_summary: The long tail of prescribed forms behind particular exemptions and deductions.
+  No common deadline; tracked so that the ones an entity actually relies on are not discovered missing
+  during an assessment.
+statutory_reference: Income-tax Act and Rules applicable to the specific exemption / deduction
+filing_portal_url: https://www.incometax.gov.in
+trigger_kind: INTERNAL
+tags:
+- income-tax
+- exemption
+- internal-control
+sector_tags:
+- ngo
+- trust
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - TRUST
+    - SOCIETY
+    - SECTION_8
+    explain: you are a trust, society or Section 8 company
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 5
+    day_of_month: 31
+  shift_if_holiday: NONE
+evidence:
+- key: forms
+  label: Filed forms
+  kind: DOC
+default_owner_role: org-finance
+penalty_summary: Consequences depend on the underlying claim and can include denial of exemption / deduction
+  and prescribed penalty.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

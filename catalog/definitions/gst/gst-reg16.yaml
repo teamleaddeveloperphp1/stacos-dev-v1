@@ -1,0 +1,44 @@
+code: IN-GST-REG16
+country: IN
+category: TAX_INDIRECT
+family: GST
+authority: CBIC
+version: 1
+title: GST registration — application for cancellation
+plain_language_summary: Applying to cancel a registration that is no longer needed. Leaving it open instead
+  means the returns keep falling due, and the late fees accrue on nil returns just the same.
+statutory_reference: Section 29 CGST Act, 2017 r/w Rule 20 CGST Rules, 2017
+filing_portal_url: https://www.gst.gov.in
+trigger_kind: EVENT_DRIVEN
+tags:
+- gst
+- cancellation
+periodicity: EVENT_BASED
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: GST
+applicability:
+  all:
+  - fact: registrations
+    op: includes
+    value: GST
+    explain: you hold a GST registration
+trigger:
+  event_key: GST_CANCELLATION_EFFECTIVE
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 30
+  shift_if_holiday: NONE
+evidence:
+- key: application
+  label: REG-16 application
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Continued non-compliance can lead to suo-motu cancellation, tax / return liabilities
+  and penalties.
+effective_from: '2017-07-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

@@ -9,6 +9,7 @@ urlpatterns = [
     path("entities/", views.EntityListView.as_view(), name="entity_list"),
     path("entities/new/", views.entity_create, name="entity_create"),
     path("entities/<uuid:pk>/", views.entity_detail, name="entity_detail"),
+    path("entities/<uuid:pk>/edit/", views.entity_edit, name="entity_edit"),
     path("entities/<uuid:pk>/archive/", views.archive_entity, name="entity_archive"),
     path(
         "entities/<uuid:pk>/registrations/new/",

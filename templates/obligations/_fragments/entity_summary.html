@@ -3,12 +3,21 @@
   Per-category obligation counts for one entity, shown on the entity detail page.
   One grouped query rather than a count per category.
 {% endcomment %}
+{% comment %}
+  The rebuild posts back into this same card. `hx-swap="none"` discarded the
+  response, so the plan ran, the toast fired, and the table the user was looking
+  at stayed exactly as it was until they reloaded the page by hand — which reads
+  as a button that does nothing. The view re-renders this fragment; swapping it
+  outerHTML is the half that was missing.
+
+  `aria-live` on the section is what tells a screen reader the numbers moved.
+{% endcomment %}
 <section class="card" id="entity-obligations" aria-live="polite" aria-atomic="false">
   <div class="card__header">
     <h2 class="card__title">{% translate "Compliance" %}</h2>
     <form hx-post="{% url 'compliance:rebuild' entity.pk %}"
           hx-target="#entity-obligations"
-          hx-swap="none">
+          hx-swap="outerHTML">
       {% csrf_token %}
       <button class="btn btn-sm btn-outline-secondary" type="submit">
         {% translate "Rebuild calendar" %}
@@ -46,7 +55,8 @@
   {% else %}
     <c-empty-state title="{% translate 'No obligations yet' %}"
                    body="{% translate 'Add registrations and complete the profile, then rebuild — the calendar is generated, never typed in.' %}">
-      <form hx-post="{% url 'compliance:rebuild' entity.pk %}" hx-target="#entity-obligations" hx-swap="none">
+      <form hx-post="{% url 'compliance:rebuild' entity.pk %}"
+            hx-target="#entity-obligations" hx-swap="outerHTML">
         {% csrf_token %}
         <button class="btn btn-sm btn-primary" type="submit">{% translate "Build the calendar" %}</button>
       </form>

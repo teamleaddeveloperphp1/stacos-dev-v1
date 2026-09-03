@@ -67,6 +67,54 @@ def test_the_rebuild_calendar_control_is_reachable(signed_in: Client, entity_a: 
     assert reverse("compliance:rebuild", args=[entity_a.pk]) in panel
 
 
+def test_rebuilding_sends_back_the_table_it_lives_in(
+    signed_in: Client, manufacturer: Entity
+) -> None:
+    """The button was doing its job invisibly.
+
+    The plan ran, the toast fired and the data was right, but the response body
+    was the calendar's counter strip — a fragment belonging to a page this
+    button does not appear on — and the form threw it away with
+    ``hx-swap="none"``. So the table in front of the user stayed exactly as it
+    was until a manual reload, which reads as a button that does nothing.
+    """
+    response = signed_in.post(reverse("compliance:rebuild", args=[manufacturer.pk]), headers=HTMX)
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'id="entity-obligations"' in body, (
+        "the rebuild must return the card it was pressed in, or nothing on screen moves"
+    )
+    assert "Compliance" in body
+    assert reverse("compliance:rebuild", args=[manufacturer.pk]) in body, (
+        "the swapped-in card has to carry the button again"
+    )
+
+
+def test_rebuilding_still_toasts(signed_in: Client, manufacturer: Entity) -> None:
+    """The summary of what changed is the other half of the feedback."""
+    response = signed_in.post(reverse("compliance:rebuild", args=[manufacturer.pk]), headers=HTMX)
+
+    triggers = response["HX-Trigger"]
+    assert "stacos:toast" in triggers
+    assert "Calendar rebuilt" in triggers
+    assert "stacos:calendar-rebuilt" in triggers
+
+
+def test_the_rebuild_control_swaps_rather_than_discarding(
+    signed_in: Client, entity_a: Entity
+) -> None:
+    """Both controls — the one in the header and the one in the empty state."""
+    panel = signed_in.get(
+        reverse("compliance:entity_summary", args=[entity_a.pk]), headers=HTMX
+    ).content.decode()
+
+    assert 'hx-swap="none"' not in panel, (
+        "a rebuild whose response is discarded cannot update the table"
+    )
+    assert 'hx-target="#entity-obligations"' in panel
+
+
 def test_the_plans_page_renders_both_ways(signed_in: Client) -> None:
     page = signed_in.get(reverse("billing:plans"))
     fragment = signed_in.get(reverse("billing:plans"), headers=HTMX)

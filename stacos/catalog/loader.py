@@ -40,9 +40,12 @@ from stacos.catalog.models import (
     GovernmentExtension,
     PublicationStatus,
 )
-from stacos.engine.rules import RuleError, facts_used, validate_rule
+from stacos.catalog.taxonomy import unknown_sector_tags, unknown_tags
+from stacos.engine.probe import possible_for
+from stacos.engine.rules import RuleError, V, facts_used, validate_rule
 from stacos.engine.types import InstanceScope, Periodicity, ShiftRule
-from stacos.jurisdictions.facts import REGISTRY
+from stacos.jurisdictions.events import EVENT_TYPES
+from stacos.jurisdictions.facts import ENTITY_TYPES, REGISTRY
 from stacos.jurisdictions.models import Authority
 
 __all__ = [
@@ -68,10 +71,37 @@ _PAYLOAD_FIELDS = (
     "applicability_rule",
     "instance_scope",
     "scope_selector",
+    "trigger_rule",
     "due_rule",
     "evidence_requirements",
     "effective_from",
     "effective_to",
+)
+
+#: Bumped whenever a column *derived* from the YAML changes shape or meaning —
+#: ``possible_entity_types`` today.
+#:
+#: It is folded into the checksum, and that is not decoration. ``_persist``
+#: short-circuits on an unchanged checksum, and the checksum hashes the raw YAML,
+#: which a derived-column migration does not touch. Without this, the first
+#: ``loadcatalog`` after such a migration reports "unchanged" for every
+#: definition and leaves the new column empty on all of them. Bumping it changes
+#: every checksum, so every row re-persists.
+#:
+#: It cannot trip the published-immutability guard: that guard compares only
+#: ``_PAYLOAD_FIELDS``, none of which move, so the changed list is empty and
+#: ``_persist`` falls through to a plain save.
+_DERIVED_SCHEMA_VERSION = 1
+
+#: Fingerprint of the entity-type vocabulary the probe index was computed
+#: against, stored on each version so a system check can spot a stale index.
+PROBE_SIGNATURE = hashlib.sha256(",".join(ENTITY_TYPES).encode("utf-8")).hexdigest()[:16]
+
+#: Mirrors ``ComplianceDefinition.TriggerKind``. A literal here, like
+#: ``VALID_CATEGORIES`` in validation.py, so parsing stays importable without
+#: the Django app registry.
+_TRIGGER_KINDS = frozenset(
+    {"STATUTORY_PERIODIC", "EVENT_DRIVEN", "RENEWAL", "GOVERNANCE", "INTERNAL"}
 )
 
 
@@ -100,10 +130,14 @@ class DefinitionDocument:
     applicability_rule: dict[str, Any]
     instance_scope: str
     scope_selector: dict[str, Any]
+    trigger_rule: dict[str, Any]
     due_rule: dict[str, Any]
     evidence_requirements: list[dict[str, Any]]
     effective_from: date
     effective_to: date | None
+    trigger_kind: str = "STATUTORY_PERIODIC"
+    tags: list[str] = field(default_factory=list)
+    sector_tags: list[str] = field(default_factory=list)
     plain_language_summary: str = ""
     statutory_reference: str = ""
     filing_portal_url: str = ""
@@ -119,6 +153,26 @@ class DefinitionDocument:
     @property
     def facts(self) -> list[str]:
         return sorted(facts_used(self.applicability_rule))
+
+    @property
+    def possible_entity_types(self) -> list[str]:
+        """Legal forms this rule cannot be refuted for, knowing only country and
+        entity type.
+
+        Note that ``known`` carries exactly two keys. Everything else is unknown
+        *by construction* rather than by remembering to leave it out — which is
+        what keeps the probe honest. Hand it a profile-shaped dict and
+        ``registrations: []`` would read as definite absence and turn most of the
+        catalog FALSE at once.
+        """
+        return [
+            entity_type
+            for entity_type in ENTITY_TYPES
+            if possible_for(
+                self.applicability_rule, {"country": self.country, "entity_type": entity_type}
+            )
+            is not V.FALSE
+        ]
 
 
 @dataclass(slots=True)
@@ -176,6 +230,9 @@ def _checksum(raw: Mapping[str, Any]) -> str:
     edit trips the immutability guard.
     """
     canonical = yaml.safe_dump(dict(raw), sort_keys=True, default_flow_style=False)
+    # The derived-schema version is part of the hash so that a change to a
+    # *computed* column invalidates every row. See _DERIVED_SCHEMA_VERSION.
+    canonical = f"v{_DERIVED_SCHEMA_VERSION}\n{canonical}"
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -213,6 +270,33 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
         raise CatalogError(source, f"unknown instance_scope {instance_scope!r}") from None
 
     due_rule = dict(required("due") or {})
+
+    # `offset_by_month` is keyed on a month number. YAML parses `3:` as the int 3;
+    # JSONB round-trips it back as the string "3". Left alone, the stored rule and
+    # the parsed rule never compare equal, so every reload of the five definitions
+    # using it looks like the law changed and trips the immutability guard.
+    # `_select_offset` already accepts both forms, so canonicalising to strings at
+    # this boundary costs nothing and makes the comparison honest.
+    if isinstance(due_rule.get("offset_by_month"), dict):
+        due_rule["offset_by_month"] = {
+            str(month): offset for month, offset in due_rule["offset_by_month"].items()
+        }
+
+    # A day_of_month of 0 — or 40 — is an authoring slip that reaches
+    # `set_day_of_month` as `date(y, m, 0)` and raises ValueError from inside date
+    # resolution, where the traceback says nothing about which file caused it.
+    # -1 is the deliberate "last day of the month" sentinel.
+    for offset in [due_rule.get("offset"), *(due_rule.get("offset_by_month") or {}).values()]:
+        if not isinstance(offset, dict) or "day_of_month" not in offset:
+            continue
+        day_of_month = int(offset["day_of_month"])
+        if day_of_month != -1 and not 1 <= day_of_month <= 31:
+            raise CatalogError(
+                source,
+                f"day_of_month {day_of_month} is not a day. Use 1-31, or -1 for the "
+                f"last day of the month.",
+            )
+
     if "shift_if_holiday" not in due_rule:
         # Mandatory rather than defaulted. Indian statutory tax dates do not
         # shift for weekends or holidays — the portals accept filings on a
@@ -248,6 +332,89 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
     if instance_scope == InstanceScope.PREMISES and not scope_selector.get("premises_type"):
         raise CatalogError(source, "instance_scope PREMISES needs scope_selector.premises_type")
 
+    # -- Triggers -----------------------------------------------------------
+    # Five checks on a new shape, so none of the existing 129 files can newly
+    # fail: not one of them has a `trigger:` block or EVENT_BASED periodicity.
+    trigger_rule = dict(raw.get("trigger") or {})
+    is_event_based = periodicity == Periodicity.EVENT_BASED
+    anchor = str(due_rule.get("anchor", "PERIOD_END"))
+
+    if is_event_based and not trigger_rule:
+        raise CatalogError(
+            source,
+            "periodicity EVENT_BASED needs a `trigger:` block naming the event that "
+            "brings the obligation into existence. Without one it loads cleanly and "
+            "materialises nothing, ever, with every test still green.",
+        )
+    if trigger_rule and not is_event_based:
+        raise CatalogError(
+            source,
+            "a `trigger:` block requires periodicity EVENT_BASED. On a periodic "
+            "definition it would be ignored, and the rows would keep appearing every "
+            "period whether or not the event ever happened.",
+        )
+    if trigger_rule:
+        event_key = str(trigger_rule.get("event_key", ""))
+        if event_key not in EVENT_TYPES:
+            raise CatalogError(
+                source,
+                f"unknown trigger.event_key {event_key!r}. Add it to "
+                f"stacos/jurisdictions/events.py first — a key nothing can record is a "
+                f"definition that never fires.",
+            )
+        event_type = EVENT_TYPES.get(event_key)
+        assert event_type is not None
+        if str(event_type.scope) != instance_scope:
+            raise CatalogError(
+                source,
+                f"{event_key} attaches to {event_type.scope} but this definition is "
+                f"scoped {instance_scope}. The event could never match a scope.",
+            )
+        if anchor != "TRIGGER_DATE":
+            raise CatalogError(
+                source,
+                "an event-triggered definition must use due.anchor: TRIGGER_DATE, which "
+                "dates each instance from its own occurrence. EVENT_DATE reads the "
+                "latest date recorded for the key, so every filing of the year would be "
+                "dated from the most recent event.",
+            )
+        when_errors = validate_rule(
+            dict(trigger_rule.get("when") or {}), known_facts=event_type.attribute_keys()
+        )
+        if when_errors:
+            raise CatalogError(source, "; ".join(str(e) for e in when_errors))
+
+    if anchor == "TRIGGER_DATE" and not trigger_rule:
+        raise CatalogError(source, "due.anchor TRIGGER_DATE has no trigger to anchor on.")
+
+    if anchor == "EVENT_DATE" and str(due_rule.get("event_key", "")) not in EVENT_TYPES:
+        raise CatalogError(
+            source,
+            f"unknown due.event_key {due_rule.get('event_key')!r}. This anchor waits for "
+            f"a date nobody can record, so the obligation would prompt forever.",
+        )
+
+    # -- Navigation facets ---------------------------------------------------
+    tags = [str(tag) for tag in (raw.get("tags") or [])]
+    bad_tags = unknown_tags(tags)
+    if bad_tags:
+        raise CatalogError(
+            source,
+            f"unknown tag(s) {bad_tags}. Add them to stacos/catalog/taxonomy.py — an "
+            f"uncontrolled tag list acquires three spellings of one word and then "
+            f"nothing filters reliably.",
+        )
+    sector_tags = [str(tag) for tag in (raw.get("sector_tags") or [])]
+    bad_sectors = unknown_sector_tags(sector_tags)
+    if bad_sectors:
+        raise CatalogError(source, f"unknown sector_tag(s) {bad_sectors}.")
+
+    trigger_kind = str(raw.get("trigger_kind", "STATUTORY_PERIODIC"))
+    if trigger_kind not in _TRIGGER_KINDS:
+        raise CatalogError(
+            source, f"unknown trigger_kind {trigger_kind!r}; expected one of {sorted(_TRIGGER_KINDS)}"
+        )
+
     effective_from = _as_date(source, "effective_from", required("effective_from"))
     effective_to = (
         _as_date(source, "effective_to", raw["effective_to"]) if raw.get("effective_to") else None
@@ -274,10 +441,14 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
         applicability_rule=applicability,
         instance_scope=instance_scope,
         scope_selector=scope_selector,
+        trigger_rule=trigger_rule,
         due_rule=due_rule,
         evidence_requirements=evidence,
         effective_from=effective_from,
         effective_to=effective_to,
+        trigger_kind=trigger_kind,
+        tags=tags,
+        sector_tags=sector_tags,
         plain_language_summary=str(raw.get("plain_language_summary", "")).strip(),
         statutory_reference=str(raw.get("statutory_reference", "")),
         filing_portal_url=str(raw.get("filing_portal_url", "")),
@@ -387,6 +558,9 @@ def _persist(
             "country": document.country,
             "category": document.category,
             "family": document.family,
+            "trigger_kind": document.trigger_kind,
+            "tags": document.tags,
+            "sector_tags": document.sector_tags,
             "authority": authority,
             "is_active": True,
         },
@@ -440,8 +614,11 @@ def _version_fields(document: DefinitionDocument) -> dict[str, Any]:
         "jurisdictions": document.jurisdictions,
         "applicability_rule": document.applicability_rule,
         "facts_used": document.facts,
+        "possible_entity_types": document.possible_entity_types,
+        "probe_signature": PROBE_SIGNATURE,
         "instance_scope": document.instance_scope,
         "scope_selector": document.scope_selector,
+        "trigger_rule": document.trigger_rule,
         "due_rule": document.due_rule,
         "evidence_requirements": document.evidence_requirements,
         "default_owner_role": document.default_owner_role,

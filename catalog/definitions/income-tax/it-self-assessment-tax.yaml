@@ -1,0 +1,40 @@
+code: IN-IT-SELF-ASSESSMENT-TAX
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Self-assessment tax payment
+plain_language_summary: Tax, interest and fee are paid before the return is furnished, not with it. A
+  return uploaded without the self-assessment tax paid is treated as defective.
+statutory_reference: Section 140A Income-tax Act
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- payment
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: registrations
+    op: includes
+    value: PAN
+    explain: you hold a PAN
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 6
+    day_of_month: 25
+  shift_if_holiday: NONE
+evidence:
+- key: challan
+  label: Challan
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Interest and other return-filing consequences may continue until outstanding tax is paid.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

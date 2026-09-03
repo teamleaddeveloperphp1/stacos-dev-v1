@@ -43,6 +43,7 @@ __all__ = [
     "EntityEvent",
     "MaterialisationRun",
     "ObligationEvent",
+    "ObligationInclusion",
     "ObligationInstance",
     "ObligationSuppression",
 ]
@@ -76,6 +77,28 @@ class EntityEvent(TenantScopedModel):
     scope_ref = models.CharField(max_length=100, blank=True)
     note = models.CharField(max_length=250, blank=True)
 
+    #: What the event is *about*: a DIN, a PAN, a charge id. Empty for events
+    #: about the company itself. This is what makes two directors appointed on
+    #: one day two events rather than a unique-constraint violation — which is
+    #: exactly what the original constraint made it.
+    subject_ref = models.CharField(max_length=100, blank=True)
+    #: "Ramesh Mehta". Denormalised so a calendar row reads "DIR-12 — Ramesh
+    #: Mehta" without a join, and still reads correctly after the person leaves.
+    subject_label = models.CharField(max_length=200, blank=True)
+    #: Structured payload that ``trigger.when`` evaluates against — the role an
+    #: officer was appointed to, whether an allottee was non-resident. Validated
+    #: against the event type's declared attributes for the same reason
+    #: ``EntityProfile.facts`` is: an unvalidated JSONB blob becomes ``din``,
+    #: ``DIN`` and ``director_din`` inside a year.
+    attributes = models.JSONField(default=dict, blank=True)
+
+    #: Recorded in error, or corrected. **Soft**, because the primary key is the
+    #: engine's stable occurrence reference: destroying the row destroys the
+    #: identity of every obligation derived from it, and undoing the mistake
+    #: would then create a duplicate beside the one somebody had started work on.
+    superseded_at = models.DateTimeField(null=True, blank=True)
+    supersede_reason = models.CharField(max_length=250, blank=True)
+
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -83,8 +106,12 @@ class EntityEvent(TenantScopedModel):
     class Meta:
         ordering = ["entity", "key", "-occurred_on"]
         constraints = [
+            # `subject_ref` joins the key so that two appointments on one day are
+            # two events. The partial condition lets a correction supersede and
+            # re-record on the same day without colliding with what it replaced.
             models.UniqueConstraint(
-                fields=["entity", "key", "scope_ref", "occurred_on"],
+                fields=["entity", "key", "scope_ref", "occurred_on", "subject_ref"],
+                condition=Q(superseded_at__isnull=True),
                 name="entityevent_identity_uniq",
             ),
         ]
@@ -94,6 +121,20 @@ class EntityEvent(TenantScopedModel):
 
     def __str__(self) -> str:
         return f"{self.key} on {self.occurred_on}"
+
+    @property
+    def ref(self) -> str:
+        """The stable occurrence reference the engine numbers instances from.
+
+        The primary key itself, not a second identifier: a UUIDv7 generated in
+        Python before insert and never reused. A parallel column that has to be
+        kept in step with the primary key is a bug waiting to be written.
+        """
+        return str(self.pk)
+
+    def display_label(self) -> str:
+        """What the obligation row shows — "Ramesh Mehta", or the date."""
+        return self.subject_label or self.occurred_on.isoformat()
 
 
 #: Rendered into the partial index and into the SQL overdue annotation. Sorted so
@@ -135,7 +176,11 @@ class ObligationInstance(TenantScopedModel, SoftDeleteModel):
     scope_jurisdiction = models.CharField(max_length=12, blank=True, db_index=True)
 
     period_key = models.CharField(max_length=32, db_index=True)
-    period_label = models.CharField(max_length=60, blank=True)
+    #: 120 rather than 60: an event-driven row reads "Director appointed —
+    #: Ramesh Chandrashekhar Mehta", and truncating a person's name onto a
+    #: statutory filing — or raising DataError on the nightly job — are both
+    #: unacceptable ways to find out the column was too narrow.
+    period_label = models.CharField(max_length=120, blank=True)
     period_start = models.DateField(null=True, blank=True)
     period_end = models.DateField(null=True, blank=True)
     #: Distinguishes repeats within one period — four board meetings in a quarter,
@@ -353,6 +398,15 @@ class ObligationSuppression(TenantScopedModel):
     #: Empty suppresses every period of this definition for this scope — "we are
     #: not a factory, stop asking". A specific key suppresses one occurrence.
     period_key = models.CharField(max_length=32, blank=True)
+    #: Which repeat within the period. Zero for everything periodic, and the
+    #: occurrence number for an event-driven instance.
+    #:
+    #: Without this, dismissing one of two DIR-12s triggered on the same day
+    #: would build an ``Identity`` with ``occurrence=0`` and match whichever of
+    #: them happened to hash to zero — probably neither. The user dismisses a
+    #: row, the nightly job brings it back, and the calendar stops being
+    #: believed. That is the failure this whole model exists to prevent.
+    occurrence = models.PositiveSmallIntegerField(default=0)
 
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.NOT_APPLICABLE)
     reason = models.TextField()
@@ -366,7 +420,7 @@ class ObligationSuppression(TenantScopedModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["entity", "definition_code", "scope_ref", "period_key"],
+                fields=["entity", "definition_code", "scope_ref", "period_key", "occurrence"],
                 condition=Q(revoked_at__isnull=True),
                 name="suppression_identity_uniq",
             ),
@@ -383,6 +437,65 @@ class ObligationSuppression(TenantScopedModel):
         if self.revoked_at is not None:
             return False
         return not (self.expires_on and self.expires_on < timezone.localdate())
+
+
+class ObligationInclusion(TenantScopedModel):
+    """A user's decision that an obligation *does* apply to them after all.
+
+    The exact mirror of :class:`ObligationSuppression`, and the two are needed
+    for the same reason: the engine is a very good default and a poor final
+    authority. A client who knows they file something the rules cannot yet
+    infer — an unusual sectoral return, an obligation that follows from a fact
+    the profile does not model — needs to be able to say so, and needs it to
+    survive the nightly rebuild.
+
+    Reaching the planner as ``opted_in`` rather than as a written fact is a
+    deliberate choice. Subscribing to the "DPIIT startup" pack is not the same
+    claim as ``is_startup_dpiit = true``; writing the fact would make the
+    obligation's *explanation* wrong — "applicable because you are a
+    DPIIT-recognised startup" when the truth is "because you asked for it". The
+    reasons list is what the product is actually selling, and corrupting it to
+    save a parameter is a bad trade.
+    """
+
+    class Source(models.TextChoices):
+        USER = "USER", _("Chosen one at a time")
+        PACK = "PACK", _("Came with a compliance pack")
+
+    ENTITY_FIELD: ClassVar[str | None] = "entity_id"
+
+    entity = models.ForeignKey(
+        "tenancy.Entity", on_delete=models.CASCADE, related_name="obligation_inclusions"
+    )
+    definition_code = models.SlugField(max_length=64)
+    source = models.CharField(max_length=8, choices=Source.choices, default=Source.USER)
+    #: Which pack put it here, when it came from one. Removing a pack revokes its
+    #: rows, and needs no separate subscription model to do it.
+    pack_code = models.SlugField(max_length=64, blank=True)
+    reason = models.TextField(blank=True)
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entity", "definition_code"],
+                condition=Q(revoked_at__isnull=True),
+                name="inclusion_identity_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["entity", "definition_code"], name="inclusion_lookup_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.definition_code} added for {self.entity_id}"
+
+    @property
+    def is_live(self) -> bool:
+        return self.revoked_at is None
 
 
 class MaterialisationRun(TenantScopedModel):
@@ -403,6 +516,9 @@ class MaterialisationRun(TenantScopedModel):
         CATALOG_PUBLISH = "CATALOG_PUBLISH", _("Catalog published")
         MANUAL = "MANUAL", _("Requested by a user")
         ONBOARDING = "ONBOARDING", _("Entity onboarded")
+        #: An event was recorded, corrected or withdrawn. Distinct from MANUAL so
+        #: that "why did a DIR-12 appear on Tuesday" is answerable from the run log.
+        EVENT_RECORDED = "EVENT_RECORDED", _("Entity event recorded")
 
     entity = models.ForeignKey(
         "tenancy.Entity", on_delete=models.CASCADE, related_name="materialisation_runs"

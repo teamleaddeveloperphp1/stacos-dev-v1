@@ -1,0 +1,59 @@
+code: IN-PT-GENERIC-QUARTERLY-PAYMENT
+country: IN
+category: LABOUR
+family: Professional tax
+authority: STATE_TAX
+version: 1
+title: Professional tax — quarterly payment
+plain_language_summary: Smaller employers pay quarterly rather than monthly in several states. Which of
+  the two applies depends on the annual liability, so this and the monthly rule are alternatives rather
+  than both.
+statutory_reference: Applicable State / local Professional Tax Act and Rules
+tags:
+- professional-tax
+- payroll
+- payment
+- quarterly-filing
+periodicity: QUARTERLY
+period_anchor: CALENDAR
+jurisdictions:
+- IN-AS
+- IN-BR
+- IN-CT
+- IN-GA
+- IN-JH
+- IN-MN
+- IN-ML
+- IN-MZ
+- IN-NL
+- IN-OR
+- IN-PY
+- IN-PB
+- IN-SK
+- IN-TR
+instance_scope: REGISTRATION
+scope_selector:
+  registration_type: PT_RC
+applicability:
+  all:
+  - fact: registrations
+    op: includes
+    value: PT_RC
+    explain: you hold a professional tax PT_RC certificate
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 1
+    day_of_month: 15
+  shift_if_holiday: NONE
+evidence:
+- key: challan
+  label: Payment challan
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-hr
+penalty_summary: State-specific interest, late fee and penalty apply for delayed payment / return.
+effective_from: '1976-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: LOW

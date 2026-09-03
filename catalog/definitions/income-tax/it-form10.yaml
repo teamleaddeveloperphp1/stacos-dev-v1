@@ -1,0 +1,47 @@
+code: IN-IT-FORM10
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Form 10 — statement for accumulation / setting apart of income
+plain_language_summary: Income set aside rather than applied has to be declared, with the purpose, at
+  least two months before the return is due. Filed late, the accumulation is simply taxable.
+statutory_reference: Section 11(2) Income-tax Act r/w Rule 17 Income-tax Rules
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- exemption
+- declaration
+sector_tags:
+- ngo
+- trust
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - TRUST
+    - SOCIETY
+    - SECTION_8
+    explain: you are a trust, society or Section 8 company
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 4
+    day_of_month: 30
+  shift_if_holiday: NONE
+evidence:
+- key: form10
+  label: Form 10
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Late or invalid furnishing can jeopardise the accumulation benefit.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

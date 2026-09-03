@@ -1,0 +1,47 @@
+code: IN-IT-TRC
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Tax residency certificate — obtain / furnish for treaty claim
+plain_language_summary: A treaty benefit needs a residency certificate from the other country, held before
+  the benefit is claimed. Obtained after the fact, it is often refused for the year in question.
+statutory_reference: Section 90(4) Income-tax Act r/w applicable rules
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- treaty
+- non-resident
+- certificate
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - any:
+    - fact: has_foreign_shareholding
+      op: eq
+      value: true
+      explain: you have foreign shareholding
+    - fact: has_export_import
+      op: eq
+      value: true
+      explain: you deal across borders
+due:
+  anchor: FY_START
+  offset:
+    months: 3
+    day_of_month: 30
+  shift_if_holiday: NONE
+evidence:
+- key: trc
+  label: Tax residency certificate
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Treaty benefit may be denied if required residency evidence is not furnished.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

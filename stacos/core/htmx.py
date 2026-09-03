@@ -26,7 +26,15 @@ from typing import Any
 from django.http import HttpRequest, HttpResponse
 from django.template.loader import render_to_string
 
-__all__ = ["Fragment", "HtmxFragmentMixin", "Toast", "is_fragment_request", "oob", "trigger"]
+__all__ = [
+    "Fragment",
+    "HtmxFragmentMixin",
+    "Toast",
+    "is_fragment_request",
+    "oob",
+    "page_url",
+    "trigger",
+]
 
 
 def is_fragment_request(request: HttpRequest) -> bool:
@@ -41,6 +49,31 @@ def is_fragment_request(request: HttpRequest) -> bool:
     if not htmx:
         return False
     return not bool(getattr(htmx, "history_restore_request", False))
+
+
+def page_url(request: HttpRequest, fallback: str = "") -> str:
+    """The address bar's URL — where to send someone back to after an interstitial.
+
+    ``request.get_full_path()`` is the *endpoint's* address, and for an HTMX
+    request that is usually a fragment: a modal body, a table row, a panel. It
+    renders nothing on its own, so bouncing a user there after a sign-in or a
+    step-up leaves them staring at a blank page. Adding a registration did
+    exactly that — the "Add" button issues an ``hx-get`` for a modal, the
+    sensitive permission demanded a password, and confirming it navigated the
+    browser to the modal's own URL.
+
+    ``HX-Current-URL`` is the page the user was actually looking at. django-htmx
+    has already checked it is same-origin before exposing the path; the guard
+    here is belt and braces, and matches the one the sign-in flow applies to
+    ``?next=``.
+    """
+    htmx = getattr(request, "htmx", None)
+    # Not `htmx.current_url_abs_path` directly: middleware order, and tests that
+    # build a request by hand, both leave `request.htmx` as a bare bool.
+    current = getattr(htmx, "current_url_abs_path", None)
+    if isinstance(current, str) and current.startswith("/") and not current.startswith("//"):
+        return current
+    return fallback or request.get_full_path()
 
 
 @dataclass(slots=True)

@@ -1,0 +1,49 @@
+code: IN-IT-TAX-AUDIT-3CA
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Tax audit report — Form 3CA
+plain_language_summary: Form 3CA is the audit report used where the accounts are already audited under
+  another law — a company, for instance. 3CB is the alternative, and using the wrong one is a defect in
+  the report.
+statutory_reference: Section 44AB Income-tax Act r/w Rule 6G
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- audit-report
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - OPC
+    - SECTION_8
+    explain: you are a company
+  - fact: aggregate_turnover
+    op: gte
+    value: 10000000
+    explain: your turnover is above the tax audit threshold
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 6
+    day_of_month: 30
+  shift_if_holiday: NONE
+evidence:
+- key: 3ca
+  label: Form 3CA
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: 0.5% of turnover, capped at ₹1,50,000, under Section 271B.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

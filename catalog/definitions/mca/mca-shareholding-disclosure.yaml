@@ -1,0 +1,46 @@
+code: IN-MCA-SHAREHOLDING-DISCLOSURE
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: Shareholding details — annual return disclosure
+plain_language_summary: Shareholding particulars as they will appear in the annual return, reconciled
+  against the register of members before filing rather than after the Registrar queries them.
+statutory_reference: Section 92 Companies Act, 2013 r/w Companies (Management and Administration) Rules,
+  2014
+tags:
+- roc
+- shareholding
+- annual-return
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - OPC
+    - SECTION_8
+    explain: you are a company
+due:
+  anchor: EVENT_DATE
+  event_key: AGM_DATE
+  offset:
+    days: 45
+  shift_if_holiday: NONE
+evidence:
+- key: statement
+  label: Shareholding statement
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-secretarial
+penalty_summary: Incorrect or omitted annual-return particulars may attract penalties applicable to the
+  annual return.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

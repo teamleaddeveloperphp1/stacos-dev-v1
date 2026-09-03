@@ -100,10 +100,21 @@
       Transitions API allows one at a time and rejects the rest, which surfaces
       as an unhandled "Transition was skipped" rejection in the console. A panel
       filling itself in is not a navigation and should not animate like one.
+
+      `hx-target="this"` is load-bearing, and leaving it off is what broke this
+      page. `hx-target` is inherited, and the shell sets it to `#main` for
+      navigation — so a panel with no target of its own resolves to `#main` and,
+      with `outerHTML`, replaces the entire main region with one card. All three
+      fire at once, so whichever answered first won and the registrations table
+      and premises section vanished with it. Worse, `#main` carries
+      `hx-history-elt` and is what every later navigation targets, so once it is
+      gone the sidebar and the shortcuts stop responding until a manual reload.
+      `this` rather than the fragment's own id: the placeholder swaps itself out,
+      so it must not also claim the id its replacement carries.
     {% endcomment %}
     {% if "compliance.obligation.view" in access_scope.permissions %}
       <div hx-get="{% url 'compliance:entity_summary' entity.pk %}"
-           hx-trigger="load" hx-swap="outerHTML transition:false"
+           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
            class="card mb-4" aria-busy="true">
         <div class="card-body text-muted small">
           <span class="spinner-inline"></span>
@@ -114,7 +125,7 @@
 
     {% if "notices.notice.view" in access_scope.permissions %}
       <div hx-get="{% url 'notices:for_entity' entity.pk %}"
-           hx-trigger="load" hx-swap="outerHTML transition:false"
+           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
            class="card mb-4" aria-busy="true">
         <div class="card-body text-muted small">
           <span class="spinner-inline"></span>
@@ -125,7 +136,7 @@
 
     {% if "secretarial.view" in access_scope.permissions %}
       <div hx-get="{% url 'secretarial:entity_summary' entity.pk %}"
-           hx-trigger="load" hx-swap="outerHTML transition:false"
+           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
            class="card mb-4" aria-busy="true">
         <div class="card-body text-muted small">
           <span class="spinner-inline"></span>

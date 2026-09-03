@@ -1,0 +1,43 @@
+code: IN-GST-REG01
+country: IN
+category: TAX_INDIRECT
+family: GST
+authority: CBIC
+version: 1
+title: GST registration — application
+plain_language_summary: Registration is due within thirty days of becoming liable, and liability is backdated
+  to the day the threshold was crossed — so a late registration owes tax for a period in which it could
+  not issue a tax invoice.
+statutory_reference: Section 25 CGST Act, 2017 r/w Rule 8 CGST Rules, 2017
+filing_portal_url: https://www.gst.gov.in
+trigger_kind: EVENT_DRIVEN
+tags:
+- gst
+- registration
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: aggregate_turnover
+    op: gte
+    value: 2000000
+    explain: your turnover is at or above the registration threshold
+trigger:
+  event_key: GST_LIABILITY_AROSE
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 30
+  shift_if_holiday: NONE
+evidence:
+- key: rc
+  label: Registration certificate
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Failure to register when liable can attract tax, interest and penalty under the CGST
+  Act.
+effective_from: '2017-07-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

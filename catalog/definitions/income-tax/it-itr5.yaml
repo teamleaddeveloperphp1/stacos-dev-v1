@@ -1,0 +1,44 @@
+code: IN-IT-ITR5
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Income tax return — LLP / firm (ITR-5)
+plain_language_summary: The return for a firm or LLP. Which due date applies turns on whether a tax audit
+  is required, so the date is not a fixed offset from the year end — it is a consequence of the audit
+  question.
+statutory_reference: Section 139(1) Income-tax Act
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- return
+- annual-filing
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - LLP
+    - PARTNERSHIP
+    explain: you are a firm or LLP
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 7
+    day_of_month: 31
+  shift_if_holiday: NONE
+evidence:
+- key: ack
+  label: ITR-V acknowledgement
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Late filing can attract fee under Section 234F, interest and loss-related consequences.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

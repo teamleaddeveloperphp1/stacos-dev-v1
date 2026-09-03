@@ -72,6 +72,7 @@ def version_to_snapshot(version: DefinitionVersion) -> DefinitionSnapshot:
         category=version.definition.category,
         instance_scope=InstanceScope(version.instance_scope),
         scope_selector=dict(version.scope_selector or {}),
+        trigger=dict(version.trigger_rule or {}),
         period_anchor=version.period_anchor,
         effective_from=version.effective_from,
         effective_to=version.effective_to,

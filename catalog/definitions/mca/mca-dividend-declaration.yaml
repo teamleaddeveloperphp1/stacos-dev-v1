@@ -1,0 +1,46 @@
+code: IN-MCA-DIVIDEND-DECLARATION
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: Dividend — declaration, payment and records
+plain_language_summary: A declared dividend must reach shareholders within thirty days. Interest runs
+  from day thirty-one and the offence is on the officers personally, which is what makes this one of the
+  sharper deadlines in the Act.
+statutory_reference: Sections 123 and 127 Companies Act, 2013
+trigger_kind: EVENT_DRIVEN
+tags:
+- roc
+- dividend
+- payment
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - SECTION_8
+    explain: you are a company that holds general meetings
+trigger:
+  event_key: DIVIDEND_DECLARED
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 30
+  shift_if_holiday: NONE
+evidence:
+- key: records
+  label: Payment records
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Failure to distribute declared dividend within the statutory period can attract interest
+  and penalties under Section 127.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

@@ -1,0 +1,41 @@
+code: IN-IT-ITRU
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Updated return of income
+plain_language_summary: The updated return, available for years after the ordinary window has closed,
+  at the price of additional tax. Useful, and not a substitute for filing on time.
+statutory_reference: Section 139(8A) Income-tax Act r/w applicable updated-return provisions
+filing_portal_url: https://www.incometax.gov.in
+trigger_kind: INTERNAL
+tags:
+- income-tax
+- return
+- correction
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: registrations
+    op: includes
+    value: PAN
+    explain: you hold a PAN
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 23
+    day_of_month: 31
+  shift_if_holiday: NONE
+evidence:
+- key: ack
+  label: ITR-U acknowledgement
+  kind: DOC
+default_owner_role: org-finance
+penalty_summary: Additional income-tax is payable at the prescribed rate; eligibility restrictions apply.
+effective_from: '2022-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

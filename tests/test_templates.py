@@ -347,6 +347,46 @@ def test_the_app_shell_does_not_push_urls() -> None:
     )
 
 
+#: An element that fetches itself as soon as it appears. `hx-target` is not
+#: quoted here because the attribute may sit on any line of a multi-line tag.
+_SELF_LOADING_TRIGGER = re.compile(r'hx-trigger="[^"]*\b(?:load|revealed)\b')
+
+
+def test_load_triggered_fetches_declare_their_own_target() -> None:
+    """A box that fetches itself on load must say where the response goes.
+
+    `hx-target` is inherited, and the shell sets it to `#main` so that boosted
+    navigation replaces the page body. A lazily-loaded panel that declares no
+    target of its own therefore resolves to `#main`, and because these panels
+    swap `outerHTML`, the response replaces the entire main region with one
+    card — hiding everything else on the page.
+
+    The second-order damage is the one that reads as "the app froze": `#main`
+    carries `hx-history-elt` and is the target of every link in the shell, so
+    once it has been replaced the sidebar, the calendar link and the keyboard
+    shortcuts all stop responding until a manual reload. It happened on the
+    obligation detail page and on the entity detail page at once, and neither
+    produced an error anywhere.
+    """
+    offenders: list[str] = []
+    for path in _template_paths():
+        source = (TEMPLATES_DIR / path).read_text(encoding="utf-8")
+        for tag in re.finditer(r"<[a-zA-Z][^<>]*>", source, re.DOTALL):
+            markup = tag.group(0)
+            if not _SELF_LOADING_TRIGGER.search(markup):
+                continue
+            if "hx-target" in markup:
+                continue
+            line = source.count("\n", 0, tag.start()) + 1
+            offenders.append(f"{path}:{line}")
+
+    assert not offenders, (
+        f"These fetch themselves on load without declaring hx-target: {offenders}. "
+        f'They inherit the shell\'s hx-target="#main" and replace the whole main '
+        f'region with themselves. Add hx-target="this".'
+    )
+
+
 def test_no_links_point_at_a_bare_fragment() -> None:
     """`href="#"` means "go nowhere", and reads to a user as a broken button.
 

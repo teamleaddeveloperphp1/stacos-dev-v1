@@ -1,40 +1,53 @@
 {% load i18n crispy_forms_tags %}
 {% comment %}
-  The entity form, in a modal loaded on demand.
+  The entity form, in a modal loaded on demand. Creates and edits.
 
   Loaded by hx-get into #modal-container and shown by the modal hook in app.js.
   Loading it on demand rather than rendering a hidden dialog into every page
   keeps the shell small — there will eventually be a lot of these.
 
+  Where it posts and what it swaps come from the view — `form_action`,
+  `form_target`, `form_swap` — rather than from a `{% if %}` here. Creating
+  prepends a row to the table; editing replaces the row it was opened from.
+  There is no third case, and putting the choice in the view keeps the two
+  callers honest about which one they are.
+
   On a validation failure the view returns 422 with only this fragment, so the
   modal stays open and keeps what the user typed. HTMX is configured to swap
-  422 responses precisely for this.
+  422 responses precisely for this, and app.js retargets them back into
+  #modal-container so the form does not land in the list.
 {% endcomment %}
 <div class="modal fade" tabindex="-1" aria-labelledby="entity-form-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
 
-      <form hx-post="{% url 'app:entity_create' %}"
-            hx-target="#entity-rows tbody"
-            hx-swap="afterbegin"
+      <form hx-post="{{ form_action }}"
+            hx-target="{{ form_target }}"
+            hx-swap="{{ form_swap }}"
             hx-disabled-elt="find button[type=submit]"
             hx-indicator="#entity-form-spinner">
         {% csrf_token %}
 
         <div class="modal-header">
-          <h2 class="modal-title h5" id="entity-form-title">{% translate "Add an entity" %}</h2>
+          <h2 class="modal-title h5" id="entity-form-title">{{ modal_title }}</h2>
           <button type="button" class="btn-close" data-bs-dismiss="modal"
                   aria-label="{% translate 'Close' %}"></button>
         </div>
 
         <div class="modal-body">
-          <p class="text-muted small mb-4">
-            {% blocktranslate %}
-            Just the essentials for now. Turnover, headcount, registrations and
-            premises come next — those are what we use to work out which
-            obligations apply.
-            {% endblocktranslate %}
-          </p>
+          {% comment %}
+            Onboarding copy, and only that: someone correcting a typo has
+            already been told what comes next.
+          {% endcomment %}
+          {% if not entity %}
+            <p class="text-muted small mb-4">
+              {% blocktranslate %}
+              Just the essentials for now. Turnover, headcount, registrations and
+              premises come next — those are what we use to work out which
+              obligations apply.
+              {% endblocktranslate %}
+            </p>
+          {% endif %}
 
           {% if form.non_field_errors %}
             <div class="alert alert-danger py-2 small" role="alert">
@@ -53,7 +66,7 @@
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
             {% translate "Cancel" %}
           </button>
-          <button type="submit" class="btn btn-primary">{% translate "Add entity" %}</button>
+          <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
         </div>
       </form>
 

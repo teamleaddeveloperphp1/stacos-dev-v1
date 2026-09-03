@@ -1,0 +1,74 @@
+code: IN-MCA-KMP-APPOINTMENT
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: Key managerial personnel — appointment
+plain_language_summary: Prescribed companies must have a whole-time key managerial person, and a vacancy
+  has to be filled within six months. The board resolution is the appointment; DIR-12 is the report of
+  it.
+statutory_reference: Section 203 Companies Act, 2013 r/w Rules 8 and 8A Companies (Appointment and Remuneration
+  of Managerial Personnel) Rules, 2014
+trigger_kind: EVENT_DRIVEN
+tags:
+- roc
+- kmp
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - SECTION_8
+    explain: you are a company
+  - any:
+    - fact: is_listed
+      op: eq
+      value: true
+      explain: you are listed
+    - fact: paid_up_capital
+      op: gte
+      value: 100000000
+      explain: your paid-up capital is ₹10 crore or more
+    - fact: aggregate_turnover
+      op: gte
+      value: 2500000000
+      explain: your turnover is ₹250 crore or more
+trigger:
+  event_key: DIRECTOR_APPOINTED
+  when:
+    any:
+    - fact: role
+      op: in
+      value:
+      - MD
+      - WTD
+      - MANAGER
+      - CEO
+      - CFO
+      - COMPANY_SECRETARY
+      explain: the appointment was of a key managerial person
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 30
+  shift_if_holiday: NONE
+evidence:
+- key: srn
+  label: DIR-12 SRN
+  kind: DOC
+  mandatory_for_close: true
+- key: resolution
+  label: Board resolution
+  kind: DOC
+default_owner_role: org-secretarial
+penalty_summary: Contravention attracts penalties on the company and officers in default under Section
+  203.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

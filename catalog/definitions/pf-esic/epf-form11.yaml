@@ -1,0 +1,43 @@
+code: IN-EPF-FORM11
+country: IN
+category: LABOUR
+family: PF and ESIC
+authority: EPFO
+version: 1
+title: Form 11 — employee declaration of previous EPF / UAN details
+plain_language_summary: The joiner declares whether they were ever a member before, and with which UAN.
+  This is the form that prevents the duplicate UAN the previous obligation warns about, which is why it
+  is collected on day one.
+statutory_reference: EPF Scheme, 1952 / EPFO Form 11 requirements
+filing_portal_url: https://unifiedportal-emp.epfindia.gov.in
+trigger_kind: EVENT_DRIVEN
+tags:
+- epf
+- employee-onboarding
+- declaration
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: registrations
+    op: includes
+    value: PF
+    explain: you hold an EPFO establishment code
+trigger:
+  event_key: EMPLOYEE_JOINED
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 7
+  shift_if_holiday: NONE
+evidence:
+- key: form11
+  label: Signed Form 11
+  kind: DOC
+default_owner_role: org-hr
+penalty_summary: Incorrect or missing declaration can create duplicate UANs and contribution / service-history
+  issues.
+effective_from: '1952-11-15'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

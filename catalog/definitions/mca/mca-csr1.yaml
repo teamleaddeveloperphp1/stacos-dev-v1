@@ -1,0 +1,50 @@
+code: IN-MCA-CSR1
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: CSR-1 — registration of eligible CSR implementing entity
+plain_language_summary: An implementing agency has to be registered on CSR-1 *before* it takes CSR money.
+  A company that funds an unregistered agency does not get to count the spend, which makes this the funder's
+  problem as much as the agency's.
+statutory_reference: Rule 4(2) Companies (Corporate Social Responsibility Policy) Rules, 2014
+trigger_kind: EVENT_DRIVEN
+tags:
+- roc
+- csr
+- registration
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - SECTION_8
+    explain: you are a company
+  - fact: has_csr_obligation
+    op: eq
+    value: true
+    explain: you meet the CSR thresholds
+trigger:
+  event_key: CSR_AGENCY_ENGAGED
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 0
+  shift_if_holiday: NONE
+evidence:
+- key: csr1
+  label: CSR-1 registration number
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-secretarial
+penalty_summary: Without valid registration, the entity cannot act as an eligible implementing agency
+  for covered CSR projects.
+effective_from: '2021-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

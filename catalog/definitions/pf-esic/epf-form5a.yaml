@@ -1,0 +1,42 @@
+code: IN-EPF-FORM5A
+country: IN
+category: LABOUR
+family: PF and ESIC
+authority: EPFO
+version: 1
+title: EPF Form 5A — employer ownership / management particulars
+plain_language_summary: Ownership and management particulars of the establishment, updated whenever they
+  change. An out-of-date Form 5A slows down every other EPFO service the establishment needs.
+statutory_reference: Paragraph 36A EPF Scheme, 1952 / EPFO Form 5A requirements
+filing_portal_url: https://unifiedportal-emp.epfindia.gov.in
+trigger_kind: EVENT_DRIVEN
+tags:
+- epf
+- amendment
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: registrations
+    op: includes
+    value: PF
+    explain: you hold an EPFO establishment code
+trigger:
+  event_key: EPF_ESTABLISHMENT_CHANGED
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 15
+  shift_if_holiday: NONE
+evidence:
+- key: ack
+  label: Form 5A acknowledgement
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-hr
+penalty_summary: Failure to furnish required employer particulars can attract action under the EPF law
+  and delay establishment services.
+effective_from: '1952-11-15'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

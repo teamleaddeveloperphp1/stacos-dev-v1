@@ -1,0 +1,44 @@
+code: IN-IT-ITR3-ITR4
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Income tax return — individual / HUF using ITR-3 or ITR-4, as applicable
+plain_language_summary: The return for an individual or HUF with business income. ITR-4 for the presumptive
+  schemes, ITR-3 otherwise, and audit cases have a later date than non-audit ones.
+statutory_reference: Section 139(1) Income-tax Act
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- return
+- annual-filing
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PROPRIETORSHIP
+    - HUF
+    explain: you file as an individual or HUF
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 4
+    day_of_month: 31
+  shift_if_holiday: NONE
+evidence:
+- key: ack
+  label: ITR-V acknowledgement
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Late filing can attract fee under Section 234F, interest and restrictions on carry-forward
+  of certain losses.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

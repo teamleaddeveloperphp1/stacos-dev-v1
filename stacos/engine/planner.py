@@ -28,13 +28,16 @@ from stacos.engine.types import (
     CalendarSnapshot,
     DefinitionSnapshot,
     Diagnostic,
+    EventOccurrence,
     ExtensionSet,
     FiscalYearConvention,
     Identity,
     InstanceScope,
     Period,
+    Periodicity,
     ScopeRef,
     Severity,
+    occurrence_number,
 )
 
 __all__ = [
@@ -54,6 +57,11 @@ TERMINAL_STATES = frozenset({"FILED", "CLOSED"})
 #: history worth keeping.
 ARCHIVABLE_STATES = frozenset({"NOT_STARTED"})
 
+#: Shown first on an obligation that exists only because somebody added it. The
+#: reasons list is the product's core claim — "you file this because…" — and
+#: letting an opt-in borrow the rule's explanation would make that claim a lie.
+_OPT_IN_REASON = "you added this to your calendar"
+
 
 @dataclass(frozen=True, slots=True)
 class EntityProfileView:
@@ -65,7 +73,15 @@ class EntityProfileView:
     jurisdictions: frozenset[str] = field(default_factory=frozenset)
     registrations: tuple[ScopeRef, ...] = ()
     premises: tuple[ScopeRef, ...] = ()
+    #: Latest date per key. What an ``EVENT_DATE`` anchor reads, and what the
+    #: six AGM-anchored definitions have always used.
     events: Mapping[str, date] = field(default_factory=dict)
+    #: Every recorded event, individually. What an ``EVENT_BASED`` definition
+    #: materialises one instance per. Kept alongside ``events`` rather than
+    #: derived from it on each call, because ``resolve_due_date`` runs once per
+    #: definition x scope x period and collapsing there would regress a path
+    #: advertised at 10-25 ms.
+    occurrences: tuple[EventOccurrence, ...] = ()
     incorporation_date: date | None = None
     cessation_date: date | None = None
 
@@ -205,6 +221,82 @@ def _fan_out(definition: DefinitionSnapshot, profile: EntityProfileView) -> list
     return []
 
 
+def _trigger_occurrences(
+    definition: DefinitionSnapshot, profile: EntityProfileView
+) -> list[tuple[Period, EventOccurrence]]:
+    """The periods an event-triggered definition produces, one per occurrence.
+
+    This is the whole difference between a periodic obligation and a triggered
+    one. A monthly return exists because a month ended; DIR-12 exists because a
+    director was appointed, and there are exactly as many of them as there were
+    appointments.
+    """
+    key = str((definition.trigger or {}).get("event_key", ""))
+    if not key:
+        return []
+
+    condition = (definition.trigger or {}).get("when") or {}
+    matched: list[tuple[Period, EventOccurrence]] = []
+
+    for occurrence in profile.occurrences:
+        if occurrence.key != key:
+            continue
+        # The same three-valued evaluator as applicability, and the same reading
+        # of UNKNOWN: an appointment nobody classified as executive still
+        # materialises MR-1, unconfirmed, rather than being dropped because a
+        # question was never asked. Dropping it is the failure that gets a client
+        # fined.
+        if condition and evaluate(condition, occurrence.attributes).result is V.FALSE:
+            continue
+        matched.append(
+            (
+                Period(
+                    key=f"EV-{occurrence.occurred_on.isoformat()}",
+                    label=occurrence.label or occurrence.occurred_on.isoformat(),
+                    start=occurrence.occurred_on,
+                    end=occurrence.occurred_on,
+                ),
+                occurrence,
+            )
+        )
+    return matched
+
+
+def _assign_occurrences(
+    pairs: Sequence[tuple[Period, EventOccurrence | None]],
+) -> list[tuple[Period, EventOccurrence | None, int]]:
+    """Occurrence numbers within one (definition, scope) fan-out.
+
+    Derived from each event's own stable reference, never from its position.
+    Position-derived ordinals fail the case this feature exists for: plan over
+    two same-day appointments, delete the first, and the second renumbers — which
+    under ``(entity, definition_code, scope_ref, period_key, occurrence)`` is a
+    *different obligation*, so the row somebody had begun preparing is superseded
+    and an empty duplicate appears beside it.
+
+    Collisions can only happen between events sharing one definition, one scope
+    and one day — about one in ten thousand for five same-day events. They are
+    resolved by linear probing in ``ref`` order, so the winner is the same on
+    every replan and only the loser depends on ordering.
+    """
+    taken: set[int] = set()
+    numbered: list[tuple[Period, EventOccurrence | None, int]] = []
+
+    for period, occurrence in sorted(
+        pairs, key=lambda pair: pair[1].ref if pair[1] is not None else ""
+    ):
+        if occurrence is None:
+            numbered.append((period, None, 0))
+            continue
+        number = occurrence_number(occurrence.ref)
+        while number in taken:
+            number = (number + 1) % 65536
+        taken.add(number)
+        numbered.append((period, occurrence, number))
+
+    return numbered
+
+
 def plan(
     *,
     profile: EntityProfileView,
@@ -216,6 +308,7 @@ def plan(
     extensions: ExtensionSet | None = None,
     existing: Sequence[ExistingInstance] = (),
     suppressed: frozenset[Identity] = frozenset(),
+    opted_in: frozenset[str] = frozenset(),
     as_of: date | None = None,
 ) -> MaterialisationPlan:
     """Work out what this entity's obligation register should contain.
@@ -223,6 +316,13 @@ def plan(
     :param suppressed: identities the user has marked not-applicable or deferred.
         Passed in rather than inferred, because a nightly job that resurrects
         obligations somebody dismissed destroys trust faster than any bug.
+    :param opted_in: definition codes the user has deliberately added, whether
+        through a compliance pack or one at a time. The symmetric counterpart of
+        ``suppressed``, and it has to apply at the *top* of the loop rather than
+        at the diff: an opt-in must make the rule produce something it otherwise
+        would not, where a suppression removes something the rule already
+        produced. Revoking one then needs no new machinery at all — the next plan
+        simply finds the rule FALSE again.
     :param as_of: required for determinism; the engine never reads the clock.
     """
     calendars = calendars or CalendarSnapshot()
@@ -241,7 +341,11 @@ def plan(
             continue
 
         verdict = evaluate(definition.applicability_rule, profile.facts)
-        if verdict.result is V.FALSE:
+        # An opt-in overrides a definite NO. Somebody chose this deliberately, and
+        # a nightly job that deletes what a user asked for loses trust exactly as
+        # fast as one that resurrects what they dismissed.
+        forced = definition.code in opted_in
+        if verdict.result is V.FALSE and not forced:
             not_applicable[definition.code] = tuple(verdict.reasons())
             continue
 
@@ -249,19 +353,36 @@ def plan(
         if not scopes:
             continue
 
-        lag = static_max_lag_days(definition.due_rule)
-        periods = generate_periods(
-            periodicity=definition.periodicity,
-            fy=fy,
-            # Widened by the maximum lag: a period that closed before the window
-            # opened can still be due inside it.
-            window_start=horizon_start - _days(lag),
-            window_end=horizon_end,
-            period_anchor=definition.period_anchor,
-        )
+        if definition.periodicity is Periodicity.EVENT_BASED:
+            # No window is applied: an event series is exactly as large as the
+            # set of things somebody recorded, so there is nothing infinite to
+            # bound.
+            pairs: list[tuple[Period, EventOccurrence | None]] = list(
+                _trigger_occurrences(definition, profile)
+            )
+        else:
+            lag = static_max_lag_days(definition.due_rule)
+            pairs = [
+                (period, None)
+                for period in generate_periods(
+                    periodicity=definition.periodicity,
+                    fy=fy,
+                    # Widened by the maximum lag: a period that closed before the
+                    # window opened can still be due inside it.
+                    window_start=horizon_start - _days(lag),
+                    window_end=horizon_end,
+                    period_anchor=definition.period_anchor,
+                )
+            ]
 
         for scope in scopes:
-            for period in periods:
+            # An event naming one plant or one registration produces an instance
+            # for that scope alone; an entity-wide event produces one for every
+            # scope the definition fans out to.
+            in_scope = [
+                pair for pair in pairs if pair[1] is None or pair[1].scope_ref in ("", scope.ref)
+            ]
+            for period, occurrence, number in _assign_occurrences(in_scope):
                 if not definition.is_effective_for(period):
                     continue
                 if not scope.covers(period):
@@ -278,6 +399,7 @@ def plan(
                     fy=fy,
                     extensions=extensions,
                     events=profile.events,
+                    trigger_date=occurrence.occurred_on if occurrence else None,
                     scope_jurisdictions=(
                         frozenset({scope.jurisdiction})
                         if scope.jurisdiction
@@ -288,8 +410,19 @@ def plan(
 
                 # The horizon filters on the DUE date, not the period. This is
                 # the line that keeps annual returns in the calendar.
-                if resolution.effective_date is not None and not (
-                    horizon_start <= resolution.effective_date <= horizon_end
+                #
+                # Triggered instances are deliberately exempt, at both ends. The
+                # horizon exists to bound an *infinite* series; an event series is
+                # finite, and every member of it was typed in by a person on
+                # purpose. Apply the window and, on the first nightly run after
+                # the 120-day lookback rolls past it, a DIR-12 triggered eight
+                # months ago and never filed stops being desired — and `_diff`
+                # quietly archives the obligation carrying the largest live
+                # penalty in the register, on a night when nothing happened.
+                if (
+                    occurrence is None
+                    and resolution.effective_date is not None
+                    and not (horizon_start <= resolution.effective_date <= horizon_end)
                 ):
                     continue
 
@@ -297,6 +430,7 @@ def plan(
                     definition_code=definition.code,
                     scope_ref=scope.ref,
                     period_key=period.key,
+                    occurrence=number,
                 )
                 if identity in suppressed:
                     continue
@@ -328,8 +462,14 @@ def plan(
                         else ""
                     ),
                     owner_role=definition.default_owner_role,
-                    confirmed=verdict.result is V.TRUE,
-                    reasons=tuple(verdict.reasons()),
+                    # An opt-in is never "confirmed": the rule did not decide
+                    # this, a person did, and the row has to say which.
+                    confirmed=verdict.result is V.TRUE and not forced,
+                    reasons=(
+                        (_OPT_IN_REASON, *verdict.reasons())
+                        if forced and verdict.result is not V.TRUE
+                        else tuple(verdict.reasons())
+                    ),
                     needs_input=resolution.blocking_input,
                 )
 

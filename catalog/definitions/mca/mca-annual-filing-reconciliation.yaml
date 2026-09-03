@@ -1,0 +1,47 @@
+code: IN-MCA-ANNUAL-FILING-RECONCILIATION
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: ROC annual filing — reconciliation and completeness check
+plain_language_summary: An internal check that AOC-4 and MGT-7 tell the same story as each other and as
+  the accounts. Not a filing — a control, run before the filings so that a contradiction is caught by
+  us rather than by the Registrar.
+statutory_reference: Internal control supporting Sections 92 and 137 Companies Act, 2013
+trigger_kind: INTERNAL
+tags:
+- roc
+- reconciliation
+- internal-control
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - OPC
+    - SECTION_8
+    explain: you are a company
+due:
+  anchor: EVENT_DATE
+  event_key: AGM_DATE
+  offset:
+    days: 50
+  shift_if_holiday: NONE
+evidence:
+- key: recon
+  label: Filing reconciliation
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-secretarial
+penalty_summary: No separate filing penalty; non-compliance is dealt with under the applicable substantive
+  provision.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

@@ -1,0 +1,50 @@
+code: IN-IT-ITR7
+country: IN
+category: TAX_DIRECT
+family: Income tax
+authority: CBDT
+version: 1
+title: Income tax return — person / institution filing ITR-7
+plain_language_summary: The return for a trust, institution or political party claiming exemption. Filing
+  it late does not merely attract a fee — it can cost the exemption for the year, which is a different
+  order of consequence.
+statutory_reference: Section 139(1) r/w Sections 139(4A) to 139(4D), Income-tax Act
+filing_portal_url: https://www.incometax.gov.in
+tags:
+- income-tax
+- return
+- annual-filing
+- exemption
+sector_tags:
+- ngo
+- trust
+periodicity: ANNUAL
+period_anchor: FY
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - TRUST
+    - SOCIETY
+    - SECTION_8
+    explain: you are a trust, society or Section 8 company
+due:
+  anchor: PERIOD_END
+  offset:
+    months: 6
+    day_of_month: 30
+  shift_if_holiday: NONE
+evidence:
+- key: ack
+  label: ITR-V acknowledgement
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-finance
+penalty_summary: Late filing can attract fee, interest and restrictions on carry-forward / exemption claims,
+  as applicable.
+effective_from: '1962-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

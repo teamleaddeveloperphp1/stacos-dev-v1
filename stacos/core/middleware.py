@@ -26,6 +26,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from stacos.core.exceptions import PermissionDenied, StepUpRequired, UnscopedQueryError
+from stacos.core.htmx import page_url
 from stacos.core.request_context import (
     RequestMeta,
     bind_request_meta,
@@ -178,6 +179,13 @@ class AuthorizationExceptionMiddleware:
     HTMX requests get ``HX-Redirect`` rather than a 302, because HTMX follows a
     redirect and swaps the result into the target — which would inject a login
     form into the middle of a dashboard.
+
+    Where the user comes back to is :func:`~stacos.core.htmx.page_url`, not the
+    path that raised. Both interstitials are usually reached from a fragment
+    endpoint — a modal body, a row action — and those render nothing on their
+    own, so returning to one leaves the user on a blank page. The step-up on
+    "Add a registration" did precisely that, and the one on archiving an entity
+    returned to a POST-only URL that answered the follow-up GET with a 405.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
@@ -188,13 +196,14 @@ class AuthorizationExceptionMiddleware:
 
     def process_exception(self, request: HttpRequest, exception: Exception) -> HttpResponse | None:
         if isinstance(exception, StepUpRequired):
-            target = f"{reverse('accounts:step_up')}?next={quote(exception.next_url or request.get_full_path())}"
+            back_to = page_url(request, exception.next_url or "")
+            target = f"{reverse('accounts:step_up')}?next={quote(back_to)}"
             return self._redirect(request, target)
 
         if isinstance(exception, PermissionDenied):
             user = getattr(request, "user", None)
             if user is None or not user.is_authenticated:
-                target = f"{reverse('accounts:login')}?next={quote(request.get_full_path())}"
+                target = f"{reverse('accounts:login')}?next={quote(page_url(request))}"
                 return self._redirect(request, target)
 
             logger.info(

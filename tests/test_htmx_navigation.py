@@ -15,13 +15,15 @@ still gets an ordinary redirect.
 
 from __future__ import annotations
 
+from urllib.parse import parse_qs, quote, urlparse
+
 import pytest
 from django.test import Client
 from django.urls import reverse
 
 from stacos.accounts.middleware import SESSION_VERIFIED_KEY
 from stacos.accounts.models import User
-from stacos.tenancy.models import Tenant
+from stacos.tenancy.models import Entity, Tenant
 from tests.conftest import sign_in
 
 pytestmark = pytest.mark.django_db
@@ -175,6 +177,135 @@ def test_the_security_stamp_gate_itself_answers_an_htmx_caller_with_a_redirect(
     plain = middleware(stale_request(htmx=False))
     assert plain.status_code == 302
     assert plain["Location"] == reverse("accounts:login")
+
+
+# ---------------------------------------------------------------------------
+# Step-up
+#
+# Two legs. Getting *to* the confirmation screen already used HX-Redirect and
+# always worked. Coming *back* did not, in two separate ways: the return address
+# was the fragment endpoint that triggered the check rather than the page the
+# user was on, and the confirmation itself answered with a plain 302.
+# ---------------------------------------------------------------------------
+
+
+def _stale_step_up(client: Client, user: User) -> Client:
+    """Signed in, but with re-authentication no longer fresh."""
+    return sign_in(client, user, step_up=False)
+
+
+def test_step_up_returns_to_the_page_not_the_fragment(
+    client: Client, org_owner: User, entity_a: Entity
+) -> None:
+    """Adding a registration sent the user to a modal body and left them there.
+
+    "Add" is an ``hx-get`` for a modal, and ``tenancy.registration.manage`` is
+    sensitive — so the step-up captured the modal's own URL as ``next``.
+    Confirming the password then navigated the browser to a bare Bootstrap
+    dialog with no shell around it, which renders as an empty page. The address
+    to come back to is the one in the address bar, which HTMX sends as
+    ``HX-Current-URL``.
+    """
+    signed_in = _stale_step_up(client, org_owner)
+    page = reverse("app:entity_detail", args=[entity_a.pk])
+    fragment = reverse("app:registration_create", args=[entity_a.pk])
+
+    response = signed_in.get(
+        fragment, headers={**HTMX, "HX-Current-URL": f"http://testserver{page}"}
+    )
+
+    assert response.status_code == 204
+    redirect_to = response["HX-Redirect"]
+    assert redirect_to.startswith(reverse("accounts:step_up"))
+    assert quote(page) in redirect_to
+    assert quote(fragment) not in redirect_to, "the user would land on a bare modal"
+
+
+def test_step_up_falls_back_to_the_request_path(
+    client: Client, org_owner: User, entity_a: Entity
+) -> None:
+    """No ``HX-Current-URL`` — an ordinary browser request — is unchanged."""
+    signed_in = _stale_step_up(client, org_owner)
+    fragment = reverse("app:registration_create", args=[entity_a.pk])
+
+    response = signed_in.get(fragment)
+
+    assert response.status_code == 302
+    assert quote(fragment) in response["Location"]
+
+
+def test_a_cross_origin_current_url_is_ignored(
+    client: Client, org_owner: User, entity_a: Entity
+) -> None:
+    """``next`` is a redirect target, so it never leaves this site."""
+    signed_in = _stale_step_up(client, org_owner)
+    fragment = reverse("app:registration_create", args=[entity_a.pk])
+
+    response = signed_in.get(
+        fragment, headers={**HTMX, "HX-Current-URL": "https://phishing.example/app/"}
+    )
+
+    assert "phishing.example" not in response["HX-Redirect"]
+    assert quote(fragment) in response["HX-Redirect"]
+
+
+def test_confirming_a_password_over_htmx_instructs_the_browser_to_navigate(
+    client: Client, org_owner: User, entity_a: Entity
+) -> None:
+    """A 302 here is followed by HTMX and swapped into whatever asked for it."""
+    signed_in = _stale_step_up(client, org_owner)
+    page = reverse("app:entity_detail", args=[entity_a.pk])
+
+    response = signed_in.post(
+        reverse("accounts:step_up"),
+        {"password": "test-password-12345", "next": page},
+        headers=HTMX,
+    )
+
+    assert response.status_code == 204
+    assert response["HX-Redirect"] == page
+    assert not response.content, "an HX-Redirect response must carry no body to swap"
+
+
+def test_confirming_a_password_without_htmx_still_redirects_normally(
+    client: Client, org_owner: User, entity_a: Entity
+) -> None:
+    signed_in = _stale_step_up(client, org_owner)
+    page = reverse("app:entity_detail", args=[entity_a.pk])
+
+    response = signed_in.post(
+        reverse("accounts:step_up"), {"password": "test-password-12345", "next": page}
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == page
+
+
+def test_the_whole_round_trip_lands_on_the_entity_page(
+    client: Client, org_owner: User, entity_a: Entity
+) -> None:
+    """End to end, because each leg passing alone is what let this ship."""
+    signed_in = _stale_step_up(client, org_owner)
+    page = reverse("app:entity_detail", args=[entity_a.pk])
+
+    bounced = signed_in.get(
+        reverse("app:registration_create", args=[entity_a.pk]),
+        headers={**HTMX, "HX-Current-URL": f"http://testserver{page}"},
+    )
+    next_url = parse_qs(urlparse(bounced["HX-Redirect"]).query)["next"][0]
+
+    confirmed = signed_in.post(
+        reverse("accounts:step_up"), {"password": "test-password-12345", "next": next_url}
+    )
+    assert confirmed["Location"] == page
+
+    landed = signed_in.get(page)
+    assert landed.status_code == 200
+    assert b"<!doctype html>" in landed.content.lower(), "the user landed on a bare fragment"
+
+    # And the modal now opens, which is what the user was trying to do.
+    modal = signed_in.get(reverse("app:registration_create", args=[entity_a.pk]), headers=HTMX)
+    assert modal.status_code == 200
 
 
 # ---------------------------------------------------------------------------

@@ -31,8 +31,9 @@ from typing import Any
 
 from django.db.models import Q
 
+from stacos.engine.dates import collapse_occurrences
 from stacos.engine.planner import EntityProfileView
-from stacos.engine.types import InstanceScope, ScopeRef
+from stacos.engine.types import EventOccurrence, InstanceScope, ScopeRef
 from stacos.obligations.models import EntityEvent
 from stacos.tenancy.models import (
     Entity,
@@ -83,6 +84,7 @@ def build_profile_view(
     # reading the raw number disagree about the same entity.
     facts.update(_derived_facts(registrations, premises, facts))
 
+    occurrences = _occurrences(entity)
     jurisdictions = _jurisdictions(entity, profile, registrations, premises)
 
     return EntityProfileView(
@@ -92,7 +94,8 @@ def build_profile_view(
         jurisdictions=frozenset(jurisdictions),
         registrations=tuple(_registration_scope(row) for row in registrations),
         premises=tuple(_premises_scope(row) for row in premises),
-        events=_events(entity),
+        events=collapse_occurrences(occurrences),
+        occurrences=occurrences,
         incorporation_date=entity.incorporation_date,
         cessation_date=entity.cessation_date,
     )
@@ -221,16 +224,33 @@ def _premises_scope(row: EntityPremises) -> ScopeRef:
     )
 
 
-def _events(entity: Entity) -> dict[str, date]:
-    """Recorded dates that due rules anchor on.
+def _occurrences(entity: Entity) -> tuple[EventOccurrence, ...]:
+    """Every live recorded event, in the shape the planner reads.
 
-    The most recent date wins for a repeated event: "the last board meeting" is
-    what a 120-day gap rule needs, not the first one ever held.
+    Superseded rows are filtered *here* rather than in the engine: "recorded in
+    error" is a fact about our record-keeping, not about the world, and the
+    engine has no business holding a concept of a mistake.
+
+    Ordered explicitly by ``(occurred_on, id)`` rather than relying on
+    ``Meta.ordering``, because non-deterministic input ordering would make the
+    collision probing in ``_assign_occurrences`` non-deterministic — reintroducing
+    through the back door exactly the instability the ref-derived numbering was
+    chosen to avoid.
     """
-    events: dict[str, date] = {}
-    for row in EntityEvent.objects.filter(entity=entity).order_by("key", "occurred_on"):
-        events[row.key] = row.occurred_on
-    return events
+    rows = EntityEvent.objects.filter(entity=entity, superseded_at__isnull=True).order_by(
+        "occurred_on", "id"
+    )
+    return tuple(
+        EventOccurrence(
+            key=row.key,
+            occurred_on=row.occurred_on,
+            ref=row.ref,
+            scope_ref=row.scope_ref,
+            label=row.display_label(),
+            attributes=dict(row.attributes or {}),
+        )
+        for row in rows
+    )
 
 
 # ---------------------------------------------------------------------------

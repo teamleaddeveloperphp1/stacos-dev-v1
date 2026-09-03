@@ -1,0 +1,46 @@
+code: IN-MCA-IEPF4
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: IEPF-4 — statement of shares transferred to IEPF
+plain_language_summary: Shares whose dividend has been unclaimed for seven consecutive years are transferred
+  to the Investor Education and Protection Fund, and IEPF-4 reports the transfer within thirty days of
+  the corporate action.
+statutory_reference: Section 124(6) Companies Act, 2013 r/w Rule 6 IEPF Authority (Accounting, Audit,
+  Transfer and Refund) Rules, 2016
+trigger_kind: EVENT_DRIVEN
+tags:
+- roc
+- iepf
+- shareholding
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - SECTION_8
+    explain: you are a company that holds general meetings
+trigger:
+  event_key: IEPF_TRANSFER
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 30
+  shift_if_holiday: NONE
+evidence:
+- key: srn
+  label: IEPF-4 SRN
+  kind: DOC
+  mandatory_for_close: true
+default_owner_role: org-secretarial
+penalty_summary: Default can attract penalties under the Companies Act / IEPF Rules.
+effective_from: '2016-09-07'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM

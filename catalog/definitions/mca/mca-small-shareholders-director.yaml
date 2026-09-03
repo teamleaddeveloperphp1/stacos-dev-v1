@@ -1,0 +1,58 @@
+code: IN-MCA-SMALL-SHAREHOLDERS-DIRECTOR
+country: IN
+category: CORPORATE_SECRETARIAL
+family: ROC
+authority: MCA
+version: 1
+title: Small shareholders' director — election / appointment
+plain_language_summary: A listed company with enough small shareholders may be required to seat a director
+  elected by them. The election process runs on its own notice periods; the ROC filing follows the appointment.
+statutory_reference: Section 151 Companies Act, 2013 r/w Rule 7 Companies (Appointment and Qualification
+  of Directors) Rules, 2014
+trigger_kind: EVENT_DRIVEN
+tags:
+- roc
+- director
+- shareholding
+sector_tags:
+- listed
+periodicity: EVENT_BASED
+instance_scope: ENTITY
+applicability:
+  all:
+  - fact: entity_type
+    op: eq
+    value: PUBLIC_LTD
+    explain: you are a public company
+  - fact: is_listed
+    op: eq
+    value: true
+    explain: you are listed
+trigger:
+  event_key: DIRECTOR_APPOINTED
+  when:
+    any:
+    - fact: role
+      op: eq
+      value: SMALL_SHAREHOLDER_DIRECTOR
+      explain: the appointment was of a small shareholders' director
+due:
+  anchor: TRIGGER_DATE
+  offset:
+    days: 30
+  shift_if_holiday: NONE
+evidence:
+- key: srn
+  label: DIR-12 SRN
+  kind: DOC
+  mandatory_for_close: true
+- key: election
+  label: Election record
+  kind: DOC
+default_owner_role: org-secretarial
+penalty_summary: Additional filing fee and statutory penalties may apply if appointment-related filings
+  are delayed.
+effective_from: '2014-04-01'
+reviewed_by: Skorydov compliance desk
+reviewed_at: '2026-09-03'
+confidence: MEDIUM
