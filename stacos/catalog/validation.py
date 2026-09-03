@@ -42,6 +42,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import StrEnum
+from typing import Any
 
 from stacos.catalog.loader import DefinitionDocument
 from stacos.catalog.personas import PERSONAS
@@ -112,6 +113,7 @@ def validate_catalog(
     *,
     as_of: date,
     strict: bool = False,
+    bundles: Sequence[Any] = (),
 ) -> list[Finding]:
     """Check every definition, and the catalog as a population.
 
@@ -131,6 +133,8 @@ def validate_catalog(
         findings.extend(_check_population(document, profiles))
         findings.extend(_check_dates_resolve(document, as_of=as_of))
 
+    findings.extend(_check_bundles(bundles, documents))
+
     if strict:
         return [
             Finding(Level.ERROR, f.code, f.check, f.message) if f.level is Level.WARNING else f
@@ -140,6 +144,48 @@ def validate_catalog(
 
 
 # ---------------------------------------------------------------------------
+
+
+def _check_bundles(
+    bundles: Sequence[Any], documents: Sequence[DefinitionDocument]
+) -> list[Finding]:
+    """A pack has to deliver what its card promises.
+
+    Two ways it can fail to. A code that does not exist means the pack quietly
+    adds fewer obligations than it claims — the failure is invisible, because a
+    shorter list still looks like a list. And a pack whose definitions all apply
+    unconditionally is a card that adds nothing anybody did not already have.
+    """
+    findings: list[Finding] = []
+    known = {document.code for document in documents}
+    conditional = {document.code for document in documents if document.applicability_rule}
+
+    for bundle in bundles:
+        missing = [code for code in bundle.definition_codes if code not in known]
+        if missing:
+            findings.append(
+                Finding(
+                    Level.ERROR,
+                    bundle.code,
+                    "pack-unknown-code",
+                    f"references definitions that do not exist: {missing}. Pressing the "
+                    f"button would add fewer obligations than the card says.",
+                )
+            )
+            continue
+
+        if not any(code in conditional for code in bundle.definition_codes):
+            findings.append(
+                Finding(
+                    Level.WARNING,
+                    bundle.code,
+                    "pack-redundant",
+                    "every definition in this pack applies unconditionally, so adopting "
+                    "it adds nothing the entity did not already have.",
+                )
+            )
+
+    return findings
 
 
 def _check_effective_windows(documents: Sequence[DefinitionDocument]) -> list[Finding]:

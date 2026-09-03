@@ -15,6 +15,7 @@ from crispy_forms.layout import Column, Layout, Row
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from stacos.jurisdictions import subdivisions
 from stacos.jurisdictions.facts import ENTITY_TYPES, IN_STATE_CODES, REGISTRATION_TYPES
 from stacos.tenancy.models import Entity, EntityRegistration
 
@@ -37,44 +38,10 @@ ENTITY_TYPE_LABELS: dict[str, str] = {
     "HUF": "Hindu Undivided Family",
 }
 
-STATE_LABELS: dict[str, str] = {
-    "IN-AN": "Andaman and Nicobar Islands",
-    "IN-AP": "Andhra Pradesh",
-    "IN-AR": "Arunachal Pradesh",
-    "IN-AS": "Assam",
-    "IN-BR": "Bihar",
-    "IN-CH": "Chandigarh",
-    "IN-CT": "Chhattisgarh",
-    "IN-DH": "Dadra and Nagar Haveli and Daman and Diu",
-    "IN-DL": "Delhi",
-    "IN-GA": "Goa",
-    "IN-GJ": "Gujarat",
-    "IN-HP": "Himachal Pradesh",
-    "IN-HR": "Haryana",
-    "IN-JH": "Jharkhand",
-    "IN-JK": "Jammu and Kashmir",
-    "IN-KA": "Karnataka",
-    "IN-KL": "Kerala",
-    "IN-LA": "Ladakh",
-    "IN-LD": "Lakshadweep",
-    "IN-MH": "Maharashtra",
-    "IN-ML": "Meghalaya",
-    "IN-MN": "Manipur",
-    "IN-MP": "Madhya Pradesh",
-    "IN-MZ": "Mizoram",
-    "IN-NL": "Nagaland",
-    "IN-OR": "Odisha",
-    "IN-PB": "Punjab",
-    "IN-PY": "Puducherry",
-    "IN-RJ": "Rajasthan",
-    "IN-SK": "Sikkim",
-    "IN-TG": "Telangana",
-    "IN-TN": "Tamil Nadu",
-    "IN-TR": "Tripura",
-    "IN-UP": "Uttar Pradesh",
-    "IN-UT": "Uttarakhand",
-    "IN-WB": "West Bengal",
-}
+#: Derived from the subdivision table rather than hand-maintained. The old
+#: copy here was one of five independent spellings of the same 36 places, and
+#: nothing kept them in step.
+STATE_LABELS: dict[str, str] = dict(subdivisions.choices())
 
 
 class EntityForm(forms.ModelForm[Entity]):

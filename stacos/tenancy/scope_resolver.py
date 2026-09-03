@@ -65,9 +65,19 @@ def resolve_scope_for_request(request: HttpRequest) -> AccessScope | None:
     membership = _select_membership(request)
     if membership is None:
         # Authenticated but not a member of anything yet — mid-onboarding, or an
-        # invitation not yet accepted. An empty scope means every scoped query
-        # returns nothing rather than raising, so onboarding screens still work.
-        scope = AccessScope(reason="request:no-membership")
+        # invitation not yet accepted. Every scoped query returns nothing rather
+        # than raising, so the screens render.
+        #
+        # Exactly one permission is granted, and it is the reason this branch
+        # exists: without it a self-service user who has just verified their
+        # email is authenticated, owns nothing, and has no route in the product
+        # to create the company they signed up to manage. It confers no access to
+        # anybody else's data — there is no tenant bound, so the scoped managers
+        # still return nothing.
+        scope = AccessScope(
+            permissions=frozenset({"tenancy.onboarding.start"}),
+            reason="request:no-membership",
+        )
         setattr(request, REQUEST_CACHE_ATTR, scope)
         request.tenant = None  # type: ignore[attr-defined]
         return scope

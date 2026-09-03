@@ -1,0 +1,36 @@
+{% load i18n crispy_forms_tags %}
+<div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="event-modal-title">
+  <div class="modal-content">
+    <form hx-post="{% url 'compliance:event_create' entity.pk %}"
+          hx-target="#entity-events"
+          hx-swap="outerHTML"
+          hx-disabled-elt="find button[type=submit]">
+      {% csrf_token %}
+
+      <div class="modal-header">
+        <h2 class="modal-title h6" id="event-modal-title">{% translate "Record an event" %}</h2>
+      </div>
+
+      <div class="modal-body">
+        <p class="text-muted small">
+          {% translate "Filings that follow from it are added straight away, with their deadlines counted from the date you give." %}
+        </p>
+
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger py-2 small" role="alert">
+            {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+          </div>
+        {% endif %}
+
+        {% crispy form %}
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-modal-close>
+          {% translate "Cancel" %}
+        </button>
+        <button type="submit" class="btn btn-primary">{% translate "Record it" %}</button>
+      </div>
+    </form>
+  </div>
+</div>

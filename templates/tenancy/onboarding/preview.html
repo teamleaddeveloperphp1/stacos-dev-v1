@@ -1,0 +1,6 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "What applies to you" %} · STACOS{% endblock %}
+
+{% block main %}{% include "tenancy/onboarding/_fragments/preview_body.html" %}{% endblock %}

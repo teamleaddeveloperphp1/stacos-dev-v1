@@ -412,7 +412,8 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
     trigger_kind = str(raw.get("trigger_kind", "STATUTORY_PERIODIC"))
     if trigger_kind not in _TRIGGER_KINDS:
         raise CatalogError(
-            source, f"unknown trigger_kind {trigger_kind!r}; expected one of {sorted(_TRIGGER_KINDS)}"
+            source,
+            f"unknown trigger_kind {trigger_kind!r}; expected one of {sorted(_TRIGGER_KINDS)}",
         )
 
     effective_from = _as_date(source, "effective_from", required("effective_from"))

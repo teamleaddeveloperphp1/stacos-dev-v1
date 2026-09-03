@@ -1,0 +1,383 @@
+// The onboarding wizard, and the verdict grid at the end of it.
+//
+// Three columns of a few hundred rows each is a lot to take in, so the layout
+// does two jobs: it keeps the question queue permanently beside the result, so
+// the cause and the effect are visible together, and it makes the three verdicts
+// visually distinct without relying on colour alone — each carries a status chip
+// with its own icon and word, per the universal status vocabulary.
+
+.wizard {
+  max-width: 62rem;
+  margin: 0 auto;
+
+  &--wide {
+    max-width: 84rem;
+  }
+}
+
+.wizard__steps {
+  display: flex;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  border-bottom: 1px solid var(--stacos-border);
+  padding-bottom: 0.75rem;
+}
+
+.wizard__step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--stacos-text-muted);
+  font-size: 0.875rem;
+
+  &.is-current {
+    color: var(--stacos-text);
+    font-weight: 600;
+  }
+}
+
+.wizard__step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--stacos-border);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+
+  .wizard__step.is-current & {
+    background: var(--stacos-accent);
+    border-color: var(--stacos-accent);
+    color: #fff;
+  }
+}
+
+.wizard__step-label {
+  white-space: nowrap;
+}
+
+.wizard__panel {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.wizard__actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.wizard__split {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+
+  @media (max-width: 62rem) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wizard__aside {
+  position: sticky;
+  top: 1rem;
+}
+
+.wizard__main {
+  min-width: 0;
+}
+
+.wizard__readback {
+  background: var(--stacos-surface-sunken);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.wizard__readback-title,
+.wizard__hints-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--stacos-text-muted);
+  margin: 0 0 0.5rem;
+}
+
+.wizard__readback-note {
+  font-size: 0.8125rem;
+  color: var(--stacos-text-muted);
+  margin: 0.5rem 0 0;
+}
+
+// -- What we read from an identifier ----------------------------------------
+
+.hint-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+
+  &--facts {
+    margin-top: 0.75rem;
+  }
+}
+
+.hint-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+
+.hint-list__source {
+  color: var(--stacos-text-muted);
+  font-size: 0.75rem;
+}
+
+.hint-list__error {
+  color: var(--stacos-status-overdue);
+  font-size: 0.8125rem;
+}
+
+.hint-list__note,
+.hint-list__empty {
+  color: var(--stacos-text-muted);
+  font-size: 0.8125rem;
+  margin: 0.5rem 0 0;
+}
+
+// -- The ranked question queue ----------------------------------------------
+
+.question-queue__title {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.question-queue__lead {
+  font-size: 0.8125rem;
+  color: var(--stacos-text-muted);
+  margin: 0 0 1rem;
+}
+
+.question-card {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  padding: 0.875rem;
+  margin-bottom: 0.75rem;
+}
+
+.question-card__label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.question-card__help {
+  font-size: 0.8125rem;
+  color: var(--stacos-text-muted);
+  margin: 0 0 0.5rem;
+}
+
+.question-card__choices {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.question-card__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.question-card__unlocks {
+  font-size: 0.75rem;
+  color: var(--stacos-text-muted);
+  margin: 0.5rem 0 0;
+}
+
+// -- The three verdict columns -----------------------------------------------
+
+.verdict-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+
+.verdict-col {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  padding: 0.875rem;
+  min-width: 0;
+}
+
+// A left rule per verdict, so the three columns are separable at a glance.
+// Colour is the *secondary* signal here and never the only one: each column's
+// header carries a status chip with its own icon and word, per the universal
+// status vocabulary, so the grid still reads correctly in monochrome.
+.verdict-col--yes {
+  border-left: 3px solid var(--stacos-status-complete);
+}
+
+.verdict-col--maybe {
+  border-left: 3px solid var(--stacos-status-waiting);
+}
+
+.verdict-col--no {
+  border-left: 3px solid var(--stacos-status-na);
+}
+
+.verdict-col__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.verdict-col__count {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdict-col__lead,
+.verdict-col__empty {
+  font-size: 0.8125rem;
+  color: var(--stacos-text-muted);
+  margin: 0 0 0.75rem;
+}
+
+.verdict-col__family {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--stacos-text-muted);
+  margin: 0.75rem 0 0.25rem;
+}
+
+.verdict-col__details {
+  font-size: 0.875rem;
+
+  summary {
+    cursor: pointer;
+    color: var(--stacos-text-muted);
+  }
+}
+
+.verdict-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.verdict-list__item {
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--stacos-border);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.verdict-list__title {
+  display: block;
+  font-size: 0.875rem;
+}
+
+.verdict-list__why {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--stacos-text-muted);
+}
+
+.verdict-grid__footnote {
+  font-size: 0.75rem;
+  color: var(--stacos-text-muted);
+  margin: 0.75rem 0 0;
+}
+
+// -- Suggested packs ----------------------------------------------------------
+
+.pack-strip__title {
+  font-size: 1rem;
+  margin: 1.5rem 0 0.25rem;
+}
+
+.pack-strip__lead {
+  font-size: 0.8125rem;
+  color: var(--stacos-text-muted);
+  margin: 0 0 0.75rem;
+}
+
+.pack-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+
+.pack-card {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  padding: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+
+  &.is-accepted {
+    border-color: var(--stacos-accent);
+    box-shadow: inset 0 0 0 1px var(--stacos-accent);
+  }
+}
+
+.pack-card__name {
+  font-size: 0.9375rem;
+  margin: 0;
+}
+
+.pack-card__summary {
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.pack-card__why {
+  font-size: 0.75rem;
+  color: var(--stacos-text-muted);
+  margin: 0;
+}
+
+.pack-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.pack-card__count {
+  font-size: 0.75rem;
+  color: var(--stacos-text-muted);
+}

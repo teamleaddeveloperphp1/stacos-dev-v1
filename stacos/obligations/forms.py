@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout
+from crispy_forms.layout import Column, Layout, Row
 from django import forms
 from django.utils.functional import Promise
 from django.utils.translation import gettext_lazy as _
 
+from stacos.jurisdictions.events import EVENT_TYPES
 from stacos.obligations.models import EntityEvent, ObligationInstance
 
 #: A translated string is a ``Promise`` until something renders it, which is what
@@ -73,6 +74,117 @@ class EntityEventForm(forms.ModelForm[EntityEvent]):
         self.helper = FormHelper()
         self.helper.form_tag = False
         self.helper.layout = Layout("occurred_on", "note")
+
+    def clean_key(self) -> str:
+        """The key arrives in a hidden field, so it is client-controlled.
+
+        Not new, but sixty event types is sixty more things a forged post could
+        claim to be — and an unknown key would record an event that triggers
+        nothing and is invisible everywhere.
+        """
+        key = str(self.cleaned_data["key"])
+        if key not in EVENT_TYPES:
+            raise forms.ValidationError(_("That is not an event this product records."))
+        return key
+
+
+class RecordEventForm(forms.ModelForm[EntityEvent]):
+    """Record something that happened, from the entity's own events panel.
+
+    Distinct from :class:`EntityEventForm`, which answers one specific "we cannot
+    schedule this until you tell us the AGM date" prompt with a hidden key and a
+    single field. This one is the general case: the user picks *what* happened,
+    and the form grows the fields that event type declares.
+    """
+
+    class Meta:
+        model = EntityEvent
+        fields = ["key", "occurred_on", "subject_label", "subject_ref", "note"]
+        widgets = {"occurred_on": forms.DateInput(attrs={"type": "date"})}
+        labels = {
+            "occurred_on": _("Date it happened"),
+            "subject_label": _("Who or what"),
+            "subject_ref": _("Reference"),
+            "note": _("Note"),
+        }
+
+    def __init__(self, *args: Any, country: str = "IN", **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+        self.fields["key"] = forms.ChoiceField(
+            label=_("What happened"),
+            choices=[("", _("Select…"))]
+            + [
+                (definition.code, definition.label)
+                for definition in EVENT_TYPES.for_country(country)
+            ],
+        )
+
+        # Every declared attribute becomes a field. Two directors appointed on
+        # one day are only distinguishable if the role of each is captured, and
+        # `trigger.when` filters on exactly these values.
+        self._attribute_fields: list[str] = []
+        for definition in EVENT_TYPES.for_country(country):
+            for attribute in definition.attributes:
+                name = f"attr_{definition.code}_{attribute.key}"
+                if name in self.fields:
+                    continue
+                self.fields[name] = _attribute_field(attribute)
+                self._attribute_fields.append(name)
+
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            "key",
+            Row(Column("occurred_on"), Column("subject_label")),
+            Row(Column("subject_ref"), Column("note")),
+        )
+
+    def clean(self) -> dict[str, Any]:
+        cleaned: dict[str, Any] = super().clean() or {}
+        key = cleaned.get("key")
+        definition = EVENT_TYPES.get(str(key)) if key else None
+        if definition is None:
+            return cleaned
+
+        if definition.requires_subject and not cleaned.get("subject_label"):
+            self.add_error(
+                "subject_label",
+                _("%(label)s is needed — it is what tells two same-day records apart.")
+                % {"label": definition.subject_label},
+            )
+
+        attributes = {
+            attribute.key: cleaned.get(f"attr_{definition.code}_{attribute.key}")
+            for attribute in definition.attributes
+        }
+        attributes = {k: v for k, v in attributes.items() if v not in (None, "")}
+        for problem in EVENT_TYPES.validate_attributes(definition.code, attributes):
+            self.add_error(None, problem)
+
+        self.instance.attributes = attributes
+        return cleaned
+
+
+def _attribute_field(attribute: Any) -> forms.Field:
+    if attribute.type == "ENUM":
+        field: forms.Field = forms.ChoiceField(
+            required=False,
+            choices=[("", "—")]
+            + [
+                (value, value.replace("_", " ").title())
+                for value in (attribute.allowed_values or ())
+            ],
+        )
+    elif attribute.type == "BOOL":
+        field = forms.NullBooleanField(required=False)
+    elif attribute.type == "DECIMAL":
+        field = forms.DecimalField(required=False)
+    else:
+        field = forms.CharField(required=False, max_length=120)
+    field.label = attribute.label
+    field.help_text = attribute.help_text
+    return field
 
 
 #: Filters offered above the calendar. Kept as data so the toolbar, the empty

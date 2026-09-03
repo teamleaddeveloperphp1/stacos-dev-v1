@@ -49,5 +49,20 @@
     {% empty %}
       <p class="text-muted small p-2 mb-0">{% translate "You are not a member of any organisation yet." %}</p>
     {% endfor %}
+
+    {% comment %}
+      The way in for a user who has just signed up. Without it they are
+      authenticated, own nothing, and every other route is correctly forbidden —
+      which was the state the product left them in before the wizard existed.
+    {% endcomment %}
+    <a class="palette__item" href="{% url 'onboarding:identity' %}" role="option" aria-selected="false">
+      <span class="avatar"><c-icon name="plus" size="14" /></span>
+      <span class="flex-grow-1 text-start">
+        <span class="d-block">{% translate "Set up an organisation" %}</span>
+        <span class="palette__hint ms-0">
+          {% translate "We read your CIN or PAN and build the calendar" %}
+        </span>
+      </span>
+    </a>
   </div>
 </div>

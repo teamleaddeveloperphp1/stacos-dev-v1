@@ -8,6 +8,7 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 
+from stacos.catalog.bundles import iter_bundles, parse_bundle
 from stacos.catalog.loader import CatalogError, DefinitionDocument, iter_documents, parse_document
 from stacos.catalog.validation import Level, validate_catalog
 
@@ -50,8 +51,21 @@ class Command(BaseCommand):
                 self.stderr.write(self.style.ERROR(f"  ! {problem}"))
             raise CommandError(f"{len(parse_errors)} file(s) failed to parse.")
 
+        bundles = []
+        for path, raw in iter_bundles():
+            try:
+                bundles.append(parse_bundle(path, raw))
+            except CatalogError as exc:
+                parse_errors.append(str(exc))
+        if parse_errors:
+            for problem in parse_errors:
+                self.stderr.write(self.style.ERROR(f"  ! {problem}"))
+            raise CommandError(f"{len(parse_errors)} bundle(s) failed to parse.")
+
         as_of = options["as_of"] or date.today()  # noqa: DTZ011 - a date, not an instant
-        findings = validate_catalog(documents, as_of=as_of, strict=options["strict"])
+        findings = validate_catalog(
+            documents, as_of=as_of, strict=options["strict"], bundles=bundles
+        )
 
         errors = [f for f in findings if f.level is Level.ERROR]
         warnings = [f for f in findings if f.level is Level.WARNING]
@@ -63,7 +77,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.MIGRATE_HEADING(
-                f"Validated {len(documents)} definitions: "
+                f"Validated {len(documents)} definitions and {len(bundles)} packs: "
                 f"{len(errors)} errors, {len(warnings)} warnings."
             )
         )

@@ -1,0 +1,30 @@
+code: IN-PACK-DIRECTOR-CHANGES
+country: IN
+name: Director and KMP changes
+summary: The filings that follow an appointment, a resignation or a change of office — each one triggered
+  by the event rather than by the calendar.
+rationale: Add this if your board ever changes. Nothing appears until you record an appointment or a resignation,
+  and then the right forms appear with the right deadlines.
+tags:
+- roc
+- director
+- kmp
+suggest_for:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - PUBLIC_LTD
+    - OPC
+    - SECTION_8
+    explain: of your legal form
+definitions:
+- IN-MCA-DIR11-RESIGNATION
+- IN-MCA-DIR12-APPOINT-REAPPOINT
+- IN-MCA-DIR12-APPOINTMENT
+- IN-MCA-DIR12-RESIGNATION
+- IN-MCA-KMP-APPOINTMENT
+- IN-MCA-LOANS-TO-DIRECTORS
+- IN-MCA-MR1
+- IN-MCA-SMALL-SHAREHOLDERS-DIRECTOR

@@ -17,6 +17,7 @@ from enum import StrEnum
 from typing import Any
 
 __all__ = [
+    "OCCURRENCE_SPACE",
     "CalendarSnapshot",
     "DefinitionSnapshot",
     "Diagnostic",
@@ -358,6 +359,11 @@ class EventOccurrence:
     attributes: Mapping[str, Any] = field(default_factory=dict)
 
 
+#: How many distinct occurrences can share one period key. Bounded by the
+#: database column, not by the hash.
+OCCURRENCE_SPACE = 32768
+
+
 def occurrence_number(ref: str) -> int:
     """A stable small integer identifying one occurrence within a period key.
 
@@ -368,8 +374,14 @@ def occurrence_number(ref: str) -> int:
     event-driven obligation, every night, indefinitely. This line is the one most
     likely to be "simplified" into a catastrophe, which is why the tests pin its
     output to a literal.
+
+    Masked to fifteen bits because ``ObligationInstance.occurrence`` is a
+    ``PositiveSmallIntegerField`` — PostgreSQL ``smallint``, so 0-32767. Sixteen
+    bits overflowed it for about half of all inputs, which is not a rare edge
+    case but a coin flip on every event recorded.
     """
-    return int.from_bytes(hashlib.blake2s(ref.encode("utf-8"), digest_size=2).digest(), "big")
+    digest = int.from_bytes(hashlib.blake2s(ref.encode("utf-8"), digest_size=2).digest(), "big")
+    return digest % OCCURRENCE_SPACE
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,10 @@
+{% load i18n %}
+<ol class="wizard__steps" aria-label="{% translate 'Setup progress' %}">
+  {% for slug, label in steps %}
+    <li class="wizard__step {% if slug == current_step %}is-current{% endif %}"
+        {% if slug == current_step %}aria-current="step"{% endif %}>
+      <span class="wizard__step-number">{{ forloop.counter }}</span>
+      <span class="wizard__step-label">{{ label }}</span>
+    </li>
+  {% endfor %}
+</ol>

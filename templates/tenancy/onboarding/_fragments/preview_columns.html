@@ -1,0 +1,82 @@
+{% load i18n %}
+<c-oob id="onboarding-preview">
+  <div class="verdict-grid">
+
+    <section class="verdict-col verdict-col--yes">
+      <header class="verdict-col__head">
+        <c-status-chip status="complete" label="{% translate 'Applies' %}" />
+        <span class="verdict-col__count">{{ preview.applies_count }}</span>
+      </header>
+      {% for family, rows in preview.applies_by_family %}
+        <h4 class="verdict-col__family">{{ family }} <span>{{ rows|length }}</span></h4>
+        <ul class="verdict-list">
+          {% for row in rows %}
+            <li class="verdict-list__item">
+              <span class="verdict-list__title">{{ row.title }}</span>
+              {% if row.reason %}<span class="verdict-list__why">{{ row.reason }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% empty %}
+        <p class="verdict-col__empty">
+          {% translate "Nothing yet. Answer a question or two and this fills up." %}
+        </p>
+      {% endfor %}
+    </section>
+
+    <section class="verdict-col verdict-col--maybe">
+      <header class="verdict-col__head">
+        <c-status-chip status="waiting" label="{% translate 'Might apply' %}" />
+        <span class="verdict-col__count">{{ preview.might_count }}</span>
+      </header>
+      <p class="verdict-col__lead">
+        {% translate "We cannot rule these in or out until you answer the questions on the left." %}
+      </p>
+      {% for family, rows in preview.might_by_family %}
+        <h4 class="verdict-col__family">{{ family }} <span>{{ rows|length }}</span></h4>
+        <ul class="verdict-list">
+          {% for row in rows %}
+            <li class="verdict-list__item">
+              <span class="verdict-list__title">{{ row.title }}</span>
+              {% if row.blocked_on %}
+                <span class="verdict-list__why">
+                  {% blocktranslate with fact=row.blocked_on %}needs: {{ fact }}{% endblocktranslate %}
+                </span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% empty %}
+        <p class="verdict-col__empty">{% translate "Nothing outstanding." %}</p>
+      {% endfor %}
+    </section>
+
+    <section class="verdict-col verdict-col--no">
+      <header class="verdict-col__head">
+        <c-status-chip status="na" label="{% translate 'Does not apply' %}" />
+        <span class="verdict-col__count">{{ preview.excluded_count }}</span>
+      </header>
+      {% comment %}
+        Shown rather than hidden, and each with its reason. A user who sees
+        "not applicable because you are not a company" next to something they
+        know they file has spotted their own wrong answer — which is the fastest
+        correction loop available and costs nothing to offer.
+      {% endcomment %}
+      <details class="verdict-col__details">
+        <summary>{% translate "Show what we ruled out, and why" %}</summary>
+        <ul class="verdict-list">
+          {% for row in preview.does_not_apply %}
+            <li class="verdict-list__item">
+              <span class="verdict-list__title">{{ row.title }}</span>
+              {% if row.reason %}<span class="verdict-list__why">{{ row.reason }}</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </details>
+    </section>
+
+  </div>
+  <p class="verdict-grid__footnote">
+    {% blocktranslate with n=preview.considered %}{{ n }} rules considered.{% endblocktranslate %}
+  </p>
+</c-oob>

@@ -1,0 +1,24 @@
+code: IN-PACK-EXPORTER
+country: IN
+name: Exporter and importer
+summary: The FEMA reporting an exporting business accumulates — realisation reconciliation, software export
+  declarations and the annual foreign assets return — plus the IEC that underpins it.
+rationale: Add this if you export or import. Caution-listing by the RBI is the consequence nobody expects
+  until it happens.
+tags:
+- fema
+- rbi
+suggest_for:
+  all:
+  - fact: has_export_import
+    op: eq
+    value: true
+    explain: you export or import
+definitions:
+- IN-FEMA-APR-ODI
+- IN-FEMA-ECB2
+- IN-FEMA-EDPMS-RECON
+- IN-FEMA-FCGPR-REVIEW
+- IN-FEMA-FLA-RETURN
+- IN-FEMA-SOFTEX
+- IN-LIC-IEC-UPDATE

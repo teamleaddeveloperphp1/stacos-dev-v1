@@ -145,6 +145,8 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         permissions=_ENTITY_STEWARD
         | {
             "tenancy.tenant.manage",
+            # So an owner can set up a second organisation from inside the product.
+            "tenancy.onboarding.start",
             "tenancy.entity.create",
             "tenancy.entity.archive",
             "tenancy.registration.manage",

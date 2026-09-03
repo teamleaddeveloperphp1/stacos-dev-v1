@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+from django.db import transaction
 from django.db.models import Count, Q, QuerySet
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
@@ -28,13 +29,21 @@ from stacos.core.pagination import filters_querystring
 from stacos.core.permissions import require_permission
 from stacos.core.typing import current_user
 from stacos.engine.lifecycle import DUE_SOON_DAYS, OPEN_STATES, State
+from stacos.engine.types import occurrence_number
+from stacos.jurisdictions.events import EVENT_TYPES
 from stacos.obligations.forms import (
     STATUS_FILTERS,
     EntityEventForm,
+    RecordEventForm,
     TransitionForm,
     obligation_display,
 )
-from stacos.obligations.models import EntityEvent, ObligationEvent, ObligationInstance
+from stacos.obligations.models import (
+    EntityEvent,
+    MaterialisationRun,
+    ObligationEvent,
+    ObligationInstance,
+)
 from stacos.obligations.queries import annotate_status, keyset_page, live, status_counts
 from stacos.obligations.services import materialise
 from stacos.obligations.transitions import (
@@ -442,6 +451,150 @@ def record_entity_event(request: HttpRequest, pk: str) -> HttpResponse:
         ),
         toast=Toast(_("Date recorded. The calendar has been rebuilt.")),
     )
+
+
+@require_permission("compliance.obligation.view")
+def entity_events(request: HttpRequest, entity_pk: str) -> HttpResponse:
+    """The events recorded against one entity, and what each one produced.
+
+    Lazily loaded as a panel on the entity page, like the compliance summary
+    beside it. The "obligations produced" column is what makes the feature
+    legible: an event with nothing under it is either a definition gap or a date
+    somebody typed wrong, and both are worth seeing.
+    """
+    entity = _entity_or_404(entity_pk)
+    return render(
+        request,
+        "obligations/_fragments/entity_events.html",
+        _entity_events_context(entity),
+    )
+
+
+@require_permission("compliance.event.record")
+@require_http_methods(["GET", "POST"])
+def event_create(request: HttpRequest, entity_pk: str) -> HttpResponse:
+    """Record something that happened. Rebuilds the calendar immediately.
+
+    Synchronously, and in the same transaction as the event: an appointment
+    recorded without the DIR-12 it triggers is a calendar that is wrong in the
+    direction that costs money, and the whole reason somebody typed the date is
+    that something was waiting on it.
+    """
+    entity = _entity_or_404(entity_pk)
+    as_of = _today()
+    form = RecordEventForm(request.POST or None, country=entity.country)
+
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            event: EntityEvent = form.save(commit=False)
+            event.tenant = entity.tenant
+            event.entity = entity
+            event.recorded_by = current_user(request)
+            event.save()
+
+            run = materialise(
+                entity,
+                as_of=as_of,
+                trigger=MaterialisationRun.Trigger.EVENT_RECORDED,
+                actor=current_user(request),
+            )
+
+        return oob(
+            request,
+            Fragment("obligations/_fragments/entity_events.html", _entity_events_context(entity)),
+            toast=Toast(
+                _("%(event)s recorded. %(summary)s.")
+                % {"event": event.display_label(), "summary": run.summary()}
+            ),
+            triggers={"stacos:modal-close": True},
+        )
+
+    status = 422 if request.method == "POST" else 200
+    return render(
+        request,
+        "obligations/_fragments/event_form_modal.html",
+        {"form": form, "entity": entity},
+        status=status,
+    )
+
+
+@require_permission("compliance.event.withdraw")
+@require_http_methods(["POST"])
+def event_withdraw(request: HttpRequest, pk: str) -> HttpResponse:
+    """Take back an event recorded in error.
+
+    Soft, always. The event's primary key is the engine's stable occurrence
+    reference, so destroying the row destroys the identity of every obligation
+    derived from it — and undoing the mistake would then create a duplicate
+    beside the one somebody had already started work on.
+    """
+    event = EntityEvent.objects.filter(pk=pk, superseded_at__isnull=True).first()
+    if event is None:
+        raise Http404
+
+    entity = event.entity
+    as_of = _today()
+
+    with transaction.atomic():
+        event.superseded_at = timezone.now()
+        event.supersede_reason = request.POST.get("reason", "")[:250]
+        event.save(update_fields=["superseded_at", "supersede_reason"])
+        run = materialise(
+            entity,
+            as_of=as_of,
+            trigger=MaterialisationRun.Trigger.EVENT_RECORDED,
+            actor=current_user(request),
+        )
+
+    return oob(
+        request,
+        Fragment("obligations/_fragments/entity_events.html", _entity_events_context(entity)),
+        toast=Toast(
+            _("Event withdrawn. %(summary)s.") % {"summary": run.summary()},
+            level="warning" if run.needs_review else "info",
+        ),
+    )
+
+
+def _entity_or_404(entity_pk: str) -> Entity:
+    entity = Entity.objects.filter(pk=entity_pk, archived_at__isnull=True).first()
+    if entity is None:
+        raise Http404
+    return entity
+
+
+def _entity_events_context(entity: Entity) -> dict[str, object]:
+    """Events plus the obligations each one produced, in two queries.
+
+    The obligations are fetched once for the whole page and grouped in Python
+    rather than queried per row, because a company with thirty recorded events
+    would otherwise cost thirty-one queries to render a panel.
+    """
+    events = list(
+        EntityEvent.objects.filter(entity=entity, superseded_at__isnull=True).order_by(
+            "-occurred_on", "-id"
+        )[:50]
+    )
+    period_keys = {f"EV-{event.occurred_on.isoformat()}" for event in events}
+    produced: dict[tuple[str, int], list[ObligationInstance]] = {}
+    if period_keys:
+        for instance in ObligationInstance.objects.filter(
+            entity=entity, period_key__in=period_keys, archived_at__isnull=True
+        ):
+            key = (instance.period_key, instance.occurrence)
+            produced.setdefault(key, []).append(instance)
+
+    rows = [
+        {
+            "event": event,
+            "type": EVENT_TYPES.get(event.key),
+            "obligations": produced.get(
+                (f"EV-{event.occurred_on.isoformat()}", occurrence_number(event.ref)), []
+            ),
+        }
+        for event in events
+    ]
+    return {"entity": entity, "event_rows": rows}
 
 
 @require_permission("compliance.calendar.rebuild")

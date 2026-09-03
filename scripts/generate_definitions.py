@@ -1208,7 +1208,11 @@ _epf(
     "return filed without the remittance still leaves interest running under "
     "Section 7Q and damages under Section 14B.",
     periodicity="MONTHLY",
-    due={"anchor": "PERIOD_END", "offset": {"months": 1, "day_of_month": 15}, "shift_if_holiday": "NONE"},
+    due={
+        "anchor": "PERIOD_END",
+        "offset": {"months": 1, "day_of_month": 15},
+        "shift_if_holiday": "NONE",
+    },
     tags=["epf", "payroll", "payment", "monthly-filing"],
     evidence=[doc("challan", "Payment challan")],
 )
@@ -1219,7 +1223,11 @@ _epf(
     "interest for one month; found at an inspection it costs interest and damages "
     "for however many years it went unnoticed.",
     periodicity="MONTHLY",
-    due={"anchor": "PERIOD_END", "offset": {"months": 1, "day_of_month": 20}, "shift_if_holiday": "NONE"},
+    due={
+        "anchor": "PERIOD_END",
+        "offset": {"months": 1, "day_of_month": 20},
+        "shift_if_holiday": "NONE",
+    },
     trigger_kind="INTERNAL",
     tags=["epf", "reconciliation", "internal-control"],
     evidence=[doc("recon", "ECR and challan reconciliation")],
@@ -1336,7 +1344,11 @@ SPECS["IN-ESIC-CONTRIBUTION-PAYMENT"] = Spec(
         "problem."
     ),
     periodicity="MONTHLY",
-    due={"anchor": "PERIOD_END", "offset": {"months": 1, "day_of_month": 15}, "shift_if_holiday": "NONE"},
+    due={
+        "anchor": "PERIOD_END",
+        "offset": {"months": 1, "day_of_month": 15},
+        "shift_if_holiday": "NONE",
+    },
     applicability=HAS_ESIC,
     folder="pf-esic",
     authority="ESIC",
@@ -1355,8 +1367,20 @@ SPECS["IN-ESIC-CONTRIBUTION-PAYMENT"] = Spec(
 # calendar twice, and the client would pay it twice or ignore both.
 
 PT_UNCOVERED = [
-    "IN-AS", "IN-BR", "IN-CT", "IN-GA", "IN-JH", "IN-MN",
-    "IN-ML", "IN-MZ", "IN-NL", "IN-OR", "IN-PY", "IN-PB", "IN-SK", "IN-TR",
+    "IN-AS",
+    "IN-BR",
+    "IN-CT",
+    "IN-GA",
+    "IN-JH",
+    "IN-MN",
+    "IN-ML",
+    "IN-MZ",
+    "IN-NL",
+    "IN-OR",
+    "IN-PY",
+    "IN-PB",
+    "IN-SK",
+    "IN-TR",
 ]
 
 
@@ -1369,7 +1393,9 @@ def _pt(code: str, summary: str, periodicity: str, day: int, registration: str, 
             "offset": {"months": 1, "day_of_month": day},
             "shift_if_holiday": "NONE",
         },
-        applicability=holds(registration, f"you hold a professional tax {registration} certificate"),
+        applicability=holds(
+            registration, f"you hold a professional tax {registration} certificate"
+        ),
         instance_scope="REGISTRATION",
         scope_selector={"registration_type": registration},
         jurisdictions=PT_UNCOVERED,
@@ -1387,7 +1413,9 @@ _pt(
     "Professional tax deducted from salaries, paid monthly. The due date is set by "
     "each state and this is the general shape rather than any one state's rule — "
     "confirm the day against the local Act before relying on it.",
-    "MONTHLY", 15, "PT_RC",
+    "MONTHLY",
+    15,
+    "PT_RC",
     tags=["professional-tax", "payroll", "payment", "monthly-filing"],
     evidence=[doc("challan", "Payment challan")],
 )
@@ -1396,7 +1424,9 @@ _pt(
     "IN-PT-GENERIC-MONTHLY-RETURN",
     "The monthly employer return that accompanies the payment, in states that "
     "require the two separately.",
-    "MONTHLY", 20, "PT_RC",
+    "MONTHLY",
+    20,
+    "PT_RC",
     tags=["professional-tax", "payroll", "return", "monthly-filing"],
     evidence=[doc("return", "Filed return")],
 )
@@ -1406,7 +1436,9 @@ _pt(
     "Smaller employers pay quarterly rather than monthly in several states. Which "
     "of the two applies depends on the annual liability, so this and the monthly "
     "rule are alternatives rather than both.",
-    "QUARTERLY", 15, "PT_RC",
+    "QUARTERLY",
+    15,
+    "PT_RC",
     period_anchor="CALENDAR",
     tags=["professional-tax", "payroll", "payment", "quarterly-filing"],
     evidence=[doc("challan", "Payment challan")],
@@ -1414,9 +1446,10 @@ _pt(
 
 _pt(
     "IN-PT-GENERIC-QUARTERLY-RETURN",
-    "The quarterly employer return, where the state asks for one separately from "
-    "the payment.",
-    "QUARTERLY", 20, "PT_RC",
+    "The quarterly employer return, where the state asks for one separately from the payment.",
+    "QUARTERLY",
+    20,
+    "PT_RC",
     period_anchor="CALENDAR",
     tags=["professional-tax", "payroll", "return", "quarterly-filing"],
     evidence=[doc("return", "Filed return")],
@@ -1426,7 +1459,9 @@ _pt(
     "IN-PT-GENERIC-ANNUAL-RETURN",
     "The annual employer return reconciling the year's deductions. Several states "
     "ask for this on top of the periodic returns rather than instead of them.",
-    "ANNUAL", 30, "PT_RC",
+    "ANNUAL",
+    30,
+    "PT_RC",
     tags=["professional-tax", "payroll", "return", "annual-filing"],
     evidence=[doc("return", "Filed annual return")],
 )
@@ -1920,7 +1955,11 @@ def _tds_challan(code: str, summary: str, event: str, tag: str) -> None:
         summary=summary,
         periodicity="EVENT_BASED",
         trigger={"event_key": event},
-        due={"anchor": "TRIGGER_DATE", "offset": {"months": 1, "day_of_month": 30}, "shift_if_holiday": "NONE"},
+        due={
+            "anchor": "TRIGGER_DATE",
+            "offset": {"months": 1, "day_of_month": 30},
+            "shift_if_holiday": "NONE",
+        },
         applicability=HAS_PAN,
         trigger_kind="EVENT_DRIVEN",
         tags=["tds", "withholding", tag],
@@ -1990,7 +2029,11 @@ SPECS["IN-TDS-TRACES-DEFAULT"] = Spec(
         "waited for as a deadline."
     ),
     periodicity="QUARTERLY",
-    due={"anchor": "PERIOD_END", "offset": {"months": 2, "day_of_month": 28}, "shift_if_holiday": "NONE"},
+    due={
+        "anchor": "PERIOD_END",
+        "offset": {"months": 2, "day_of_month": 28},
+        "shift_if_holiday": "NONE",
+    },
     applicability=holds("TAN", "you hold a TAN and deduct tax at source"),
     trigger_kind="INTERNAL",
     tags=["tds", "reconciliation", "internal-control"],
@@ -2096,11 +2139,25 @@ _gst(
     "Using it fixes the liability before it is paid; not using it means an "
     "amendment in a later period and an interest exposure in between.",
     periodicity="MONTHLY",
-    due={"anchor": "PERIOD_END", "offset": {"months": 1, "day_of_month": 19}, "shift_if_holiday": "NONE"},
+    due={
+        "anchor": "PERIOD_END",
+        "offset": {"months": 1, "day_of_month": 19},
+        "shift_if_holiday": "NONE",
+    },
     applicability={
         "all": [
-            {"fact": "registrations", "op": "includes", "value": "GST", "explain": "you hold a GST registration"},
-            {"fact": "gst_scheme", "op": "eq", "value": "REGULAR", "explain": "you file under the regular scheme"},
+            {
+                "fact": "registrations",
+                "op": "includes",
+                "value": "GST",
+                "explain": "you hold a GST registration",
+            },
+            {
+                "fact": "gst_scheme",
+                "op": "eq",
+                "value": "REGULAR",
+                "explain": "you file under the regular scheme",
+            },
         ]
     },
     instance_scope="REGISTRATION",
@@ -2116,10 +2173,19 @@ _gst(
     "A UIN holder — an embassy or a notified body — files this to get its refund. "
     "Not a tax return; a claim, and it lapses if it is not made.",
     periodicity="MONTHLY",
-    due={"anchor": "PERIOD_END", "offset": {"months": 1, "day_of_month": 28}, "shift_if_holiday": "NONE"},
+    due={
+        "anchor": "PERIOD_END",
+        "offset": {"months": 1, "day_of_month": 28},
+        "shift_if_holiday": "NONE",
+    },
     applicability={
         "all": [
-            {"fact": "registrations", "op": "includes", "value": "GST", "explain": "you hold a GST registration"},
+            {
+                "fact": "registrations",
+                "op": "includes",
+                "value": "GST",
+                "explain": "you hold a GST registration",
+            },
             {
                 "fact": "gst_scheme",
                 "op": "in",
@@ -2265,7 +2331,11 @@ def main() -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             yaml.safe_dump(
-                build(row, spec), sort_keys=False, allow_unicode=True, default_flow_style=False, width=100
+                build(row, spec),
+                sort_keys=False,
+                allow_unicode=True,
+                default_flow_style=False,
+                width=100,
             ),
             encoding="utf-8",
         )

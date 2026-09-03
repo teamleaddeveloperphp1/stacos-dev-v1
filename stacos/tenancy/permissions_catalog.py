@@ -7,6 +7,19 @@ CATEGORY = "Entities and organisation"
 permission_registry.register_many(
     [
         Permission(
+            code="tenancy.onboarding.start",
+            label="Set up an organisation",
+            category=CATEGORY,
+            tenant_types=frozenset({TenantType.ORGANISATION}),
+            description=(
+                "Held by an authenticated user who is not yet a member of anything, "
+                "and by an owner adding a second organisation. Granted by the scope "
+                "resolver in the no-membership case — the one place in the product "
+                "where access is decided without a tenant, and deliberately the only "
+                "permission it hands out."
+            ),
+        ),
+        Permission(
             code="tenancy.tenant.view",
             label="View organisation settings",
             category=CATEGORY,

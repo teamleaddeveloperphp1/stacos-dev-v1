@@ -1,11 +1,11 @@
 # The compliance engine — design specification
 
 > **Status: built.** The pure engine, the `catalog` app, the `obligations`
-> register and the calendar UI all exist, with 129 seed definitions for India.
+> register and the calendar UI all exist, with **248 seed definitions** for India.
 > This document is now a description of what was built rather than a plan,
 > except where noted below.
 >
-> **Two things were built differently from this specification**, both for
+> **Three things were built differently from this specification**, all for
 > reasons worth knowing:
 >
 > * **Month-keyed offset overrides.** §3 models one offset per definition. The
@@ -14,16 +14,111 @@
 >   payment. `due.offset_by_month` handles it as data. The alternative was a
 >   duplicate definition carrying a copy of the applicability rule, and two
 >   copies of one rule drift apart within a year.
-> * **Event-driven materialisation is not built.** §8's 26QB/QC/QD family and
->   anything else with `periodicity: EVENT_BASED` generates no periods, so those
->   definitions were left out of the seed catalog rather than shipped as rows
->   that never appear. `PREVIOUS_INSTANCE_DATE` similarly resolves only through a
->   declared fallback.
+> * **Event-driven materialisation has its own `trigger:` block**, separate from
+>   `due.event_key`. The two answer opposite questions about the same date, and
+>   §8 conflated them. AOC-4 exists for FY 2025-26 *whether or not* an AGM has
+>   been recorded — null due date, and a prompt. DIR-12 does not exist until a
+>   director is actually appointed. Spell both as `due.event_key` and the only
+>   thing separating them is `periodicity`, so a mis-set periodicity silently
+>   flips a definition between "one a year, prompting forever" and "nothing,
+>   ever" — and neither raises. See §8a.
+> * **`PREVIOUS_INSTANCE_DATE`** still resolves only through a declared fallback,
+>   and no definition uses it. The `DefinitionSnapshot(**__dict__)` splat that
+>   would have raised `AttributeError` the first time one did — the type is
+>   `slots=True` — is now `dataclasses.replace`.
 >
 > **Still open from §7:** the golden-file scenario suite. The persona library
 > exists (`stacos/catalog/personas.py`, 16 personas) and drives the dead-rule and
 > discrimination checks; pinning "this persona gets exactly these 47 obligations"
 > against a frozen catalog snapshot has not been done.
+
+---
+
+## 8a. Event-driven materialisation
+
+An obligation that exists because something *happened*, as opposed to because a
+period ended. Roughly a quarter of the seed catalog: DIR-12 thirty days after
+each appointment, ADT-3 thirty days after a resignation, BEN-2 thirty days after
+a declaration arrives, GSTR-10 three months after a registration is cancelled.
+
+```yaml
+periodicity: EVENT_BASED
+trigger:
+  event_key: DIRECTOR_APPOINTED
+  # Optional. The same applicability DSL, evaluated against the event's own
+  # attributes rather than the entity's facts. MR-1 follows an appointment only
+  # when it was of a managing or whole-time director.
+  when:
+    any: [{ fact: role, op: in, value: [MD, WTD, MANAGER] }]
+due:
+  anchor: TRIGGER_DATE     # *this* instance's occurrence, not the latest for the key
+  offset: { days: 30 }
+  shift_if_holiday: NONE
+```
+
+Event types are declared in `stacos/jurisdictions/events.py` — pure, so
+`validatecatalog` can reject an unknown `event_key` without a database. The
+loader enforces five rules: EVENT_BASED needs a trigger, a trigger needs
+EVENT_BASED, the key must be registered, the event's scope must match the
+definition's, and the anchor must be `TRIGGER_DATE`.
+
+**Three decisions carry the design.**
+
+**`occurrence` is a hash of a stable event reference, never an ordinal.** Two
+directors appointed on one morning are two filings. Number them by position and
+deleting the first *renumbers the second* — which, under
+`(entity, definition_code, scope_ref, period_key, occurrence)`, is a different
+obligation: `_diff` supersedes the row somebody was preparing and creates an
+empty duplicate beside it. `occurrence_number()` uses `blake2s` and not the
+builtin `hash`, which is salted per process and would give the web process and
+the Celery worker different answers — duplicating every event-driven obligation
+every night, forever. Masked to fifteen bits, because the column is a
+`smallint`.
+
+**`period_key` is `EV-<iso date>`.** Sorts chronologically as a string, is stable
+across replans because it derives from one user-typed date, cannot collide with
+any generated key, and leaves `GovernmentExtension` matching on
+`(definition_code, period_key)` working unchanged.
+
+**Triggered instances are exempt from the horizon, at both ends.** The horizon
+exists to bound an *infinite* series; an event series is finite and every member
+of it was typed in on purpose. Apply the window and, on the first nightly run
+after the 120-day lookback rolls past it, a DIR-12 triggered eight months ago and
+never filed stops being desired — and the planner quietly archives the row
+carrying the largest live penalty in the register, on a night when nothing
+happened.
+
+Withdrawing an event is soft, always: the event's primary key *is* the engine's
+occurrence reference, so destroying the row destroys the identity of every
+obligation derived from it.
+
+---
+
+## 8b. Grouping, and choosing a set
+
+Three axes were added on top of `category` and `family`:
+
+* **`tags[]` and `sector_tags[]`** on `ComplianceDefinition`, against a controlled
+  vocabulary in `stacos/catalog/taxonomy.py`. Unversioned, like `category`: a tag
+  is how *we* file a thing, and re-tagging must not read as the law changing.
+* **`trigger_kind`** — periodic, event-driven, renewal, governance or internal.
+  Not derivable from periodicity: `IN-MCA-STATUTORY-REGISTERS` is ANNUAL and is a
+  register you keep, not a return you file.
+* **`DefinitionVersion.possible_entity_types`**, derived at load time by
+  `stacos/engine/probe.py` exactly as `facts_used` is. **Advisory only** — a
+  filter, never an authority. `possible_for` returns FALSE only when *no*
+  completion of the known facts could make the rule fire, and a property test
+  over the persona library asserts that soundness. It cannot use `evaluate`:
+  `exists` is deliberately never UNKNOWN there, and an empty `registrations` list
+  is definite absence, so an `evaluate`-based probe hides most of the catalog.
+
+**Compliance packs** (`catalog/bundles/*.yaml` → `CompliancePack`) are the
+curated half: what a business *like yours* usually tracks, as opposed to what the
+law requires of you. They reach the planner as `plan(opted_in=...)` — the exact
+mirror of `suppressed`, applied at the top of the loop because an opt-in must
+make a rule produce something it otherwise would not. Adopting one writes
+`ObligationInclusion` rows; revoking it revokes them, and the next plan finds the
+rule FALSE again with no new machinery.
 
 The product wins or loses on one thing: **does the compliance calendar for a given entity get generated correctly and automatically, with zero manual setup?** Everything else is supporting cast. This document is the design for that engine.
 

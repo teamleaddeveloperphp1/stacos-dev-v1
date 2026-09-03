@@ -1,0 +1,36 @@
+code: IN-PACK-TDS-DEDUCTOR
+country: IN
+name: TDS and TCS deductor
+summary: Monthly payments, quarterly returns, the certificates that follow them, and the reconciliation
+  that catches a default before it becomes a demand.
+rationale: Add this if you hold a TAN. The quarterly returns are the visible part; the reconciliation
+  is what stops a mismatch turning into a Section 201 demand.
+tags:
+- tds
+- tcs
+- withholding
+suggest_for:
+  all:
+  - fact: registrations
+    op: includes
+    value: TAN
+    explain: you hold a TAN
+definitions:
+- IN-TCS-27EQ
+- IN-TCS-FORM27D
+- IN-TCS-PAYMENT-MONTHLY
+- IN-TDS-24Q
+- IN-TDS-26AS-RECON
+- IN-TDS-26Q
+- IN-TDS-26QB
+- IN-TDS-26QC
+- IN-TDS-26QD
+- IN-TDS-26QE
+- IN-TDS-27Q
+- IN-TDS-CORRECTION
+- IN-TDS-FORM13-RENEWAL
+- IN-TDS-FORM15GH-UPLOAD
+- IN-TDS-FORM16
+- IN-TDS-FORM16A
+- IN-TDS-PAYMENT-MONTHLY
+- IN-TDS-TRACES-DEFAULT

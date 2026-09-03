@@ -1,0 +1,43 @@
+code: IN-PACK-PVT-ROC-ANNUAL
+country: IN
+name: Private limited — annual ROC kit
+summary: Everything a private limited company does with the Registrar once a year, from approving the
+  accounts to filing the annual return.
+rationale: The default starting point for a private company. If you file nothing else with the MCA, you
+  file these.
+tags:
+- roc
+- annual-filing
+suggest_for:
+  all:
+  - fact: entity_type
+    op: in
+    value:
+    - PVT_LTD
+    - OPC
+    explain: of your legal form
+definitions:
+- IN-MCA-ADT1
+- IN-MCA-ADT1-REAPPOINTMENT
+- IN-MCA-AGM
+- IN-MCA-AGM-MINUTES
+- IN-MCA-AGM-NOTICE
+- IN-MCA-ANNUAL-RETURN-PREPARATION
+- IN-MCA-ANNUAL-RETURN-WEBSITE
+- IN-MCA-AOC4
+- IN-MCA-AUDITORS-REPORT
+- IN-MCA-BOARD-REPORT-DISCLOSURES
+- IN-MCA-BOARDS-REPORT
+- IN-MCA-CSR-BOARD-REPORT
+- IN-MCA-DIR3-KYC
+- IN-MCA-DIR3-KYC-WEB
+- IN-MCA-DIRECTOR-ANNUAL-DECLARATIONS
+- IN-MCA-DIRECTOR-KMP-ANNUAL-DISCLOSURE
+- IN-MCA-FINANCIAL-STATEMENT-APPROVAL
+- IN-MCA-FINANCIAL-STATEMENTS-PREPARATION
+- IN-MCA-MBP1-DISCLOSURE
+- IN-MCA-MEMBER-LIST
+- IN-MCA-MGT7
+- IN-MCA-PROMOTER-SHAREHOLDING
+- IN-MCA-SHAREHOLDING-DISCLOSURE
+- IN-MCA-STATUTORY-REGISTERS

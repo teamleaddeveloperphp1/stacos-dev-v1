@@ -25,6 +25,7 @@ from typing import Any
 from stacos.engine.dates import generate_periods, resolve_due_date, static_max_lag_days
 from stacos.engine.rules import V, evaluate
 from stacos.engine.types import (
+    OCCURRENCE_SPACE,
     CalendarSnapshot,
     DefinitionSnapshot,
     Diagnostic,
@@ -290,7 +291,7 @@ def _assign_occurrences(
             continue
         number = occurrence_number(occurrence.ref)
         while number in taken:
-            number = (number + 1) % 65536
+            number = (number + 1) % OCCURRENCE_SPACE
         taken.add(number)
         numbered.append((period, occurrence, number))
 

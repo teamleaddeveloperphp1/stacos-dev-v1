@@ -71,6 +71,10 @@ GLOBAL_MODEL_ALLOWLIST: dict[str, str] = {
     "catalog.ComplianceDefinition": "Platform-owned reference data; the law is the same for all tenants.",
     "catalog.DefinitionVersion": "Platform-owned reference data; append-only versions of the above.",
     "catalog.GovernmentExtension": "Platform-owned reference data; a published notification is public.",
+    # A pack is a curated *suggestion* — which definitions a business like yours
+    # usually tracks. It carries no client data; what a particular entity has
+    # actually adopted is an ObligationInclusion row, which is tenant-scoped.
+    "catalog.CompliancePack": "Platform-owned reference data; adoption is recorded per entity.",
     # The price list is the same for everyone. A negotiated price is a discount
     # on a subscription, not a private plan — otherwise the list becomes
     # unenumerable and nobody can answer "what do we charge".

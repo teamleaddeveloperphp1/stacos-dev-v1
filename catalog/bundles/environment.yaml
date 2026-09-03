@@ -1,0 +1,28 @@
+code: IN-PACK-ENVIRONMENT
+country: IN
+name: Environmental consents and waste
+summary: Consent to operate, the environmental statement, and the waste streams — hazardous, e-waste and
+  plastic — that each carry their own return.
+rationale: Add this if you hold a pollution control board consent or handle any regulated waste stream.
+tags:
+- environment
+- waste
+- pollution
+suggest_for:
+  any:
+  - fact: registrations
+    op: includes
+    value: PCB_CONSENT
+    explain: you hold a pollution control board consent
+  - fact: deals_in_hazardous_material
+    op: eq
+    value: true
+    explain: you handle hazardous material
+definitions:
+- IN-ENV-CONSENT-TO-OPERATE
+- IN-ENV-EWASTE-RETURN
+- IN-ENV-FORM-V
+- IN-ENV-HAZARDOUS-WASTE-AUTH
+- IN-ENV-HAZARDOUS-WASTE-RETURN
+- IN-ENV-PLASTIC-WASTE-EPR
+- IN-ENV-WATER-CESS

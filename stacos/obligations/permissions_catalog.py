@@ -120,6 +120,18 @@ permission_registry.register_many(
             implies=frozenset({VIEW}),
         ),
         Permission(
+            code="compliance.event.withdraw",
+            label="Withdraw a recorded event",
+            category=CATEGORY,
+            description=(
+                "Takes filings back off a client's calendar. Recording an event is "
+                "routine data entry a junior does; withdrawing one removes "
+                "obligations somebody may already have started work on, which is a "
+                "different decision."
+            ),
+            implies=frozenset({"compliance.event.record"}),
+        ),
+        Permission(
             code="compliance.event.record",
             label="Record an entity event",
             category=CATEGORY,

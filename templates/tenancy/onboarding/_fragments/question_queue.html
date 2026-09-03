@@ -1,0 +1,37 @@
+{% load i18n %}
+<c-oob id="onboarding-questions">
+  <h3 class="question-queue__title">{% translate "Answer these first" %}</h3>
+  <p class="question-queue__lead">
+    {% translate "Ordered by how much each answer settles, not by how easy it is to ask." %}
+  </p>
+
+  {% for question in preview.questions %}
+    <form class="question-card"
+          hx-post="{% url 'onboarding:answer' question.key %}"
+          hx-target="#onboarding-preview"
+          hx-swap="outerHTML"
+          hx-trigger="change">
+      {% csrf_token %}
+      <label class="question-card__label" for="q-{{ question.key }}">
+        {{ question.fact.label }}
+      </label>
+      {% if question.fact.help_text %}
+        <p class="question-card__help">{{ question.fact.help_text }}</p>
+      {% endif %}
+
+      {% include "tenancy/onboarding/_fragments/question_input.html" %}
+
+      <p class="question-card__unlocks">
+        {% blocktranslate count counter=question.unlocks %}
+          Settles {{ counter }} rule
+        {% plural %}
+          Settles {{ counter }} rules
+        {% endblocktranslate %}
+      </p>
+    </form>
+  {% empty %}
+    <c-empty-state title="{% translate 'Nothing left to ask' %}"
+                   body="{% translate 'Everything we can decide from what you have told us is decided.' %}">
+    </c-empty-state>
+  {% endfor %}
+</c-oob>

@@ -1,0 +1,43 @@
+{% load i18n crispy_forms_tags %}
+
+<c-page-header title="{% translate 'Set up your organisation' %}"
+               subtitle="{% translate 'Start with any identifier you have. We read what we can from it so you type less.' %}">
+</c-page-header>
+
+{% include "tenancy/onboarding/_fragments/steps.html" %}
+
+<div class="wizard">
+  <form hx-post="{% url 'onboarding:identity' %}"
+        hx-target="body"
+        hx-swap="outerHTML"
+        method="post"
+        action="{% url 'onboarding:identity' %}">
+    {% csrf_token %}
+
+    <div class="wizard__panel">
+      {% comment %}
+        Decoding fires on change rather than on every keystroke: an identifier is
+        only meaningful complete, and a request per character would render eleven
+        "not a valid PAN" messages while somebody types a valid one.
+      {% endcomment %}
+      <div hx-post="{% url 'onboarding:identity_decode' %}"
+           hx-trigger="change from:closest form, keyup changed delay:400ms from:closest form"
+           hx-target="#identity-hints"
+           hx-swap="innerHTML"
+           hx-include="closest form">
+        {% crispy form %}
+      </div>
+    </div>
+
+    <div class="wizard__panel" id="identity-hints" aria-live="polite" aria-atomic="true">
+      {% include "tenancy/onboarding/_fragments/identity_hints.html" %}
+    </div>
+
+    <div class="wizard__actions">
+      <a class="btn btn-outline-secondary" href="{% url 'onboarding:profile' %}">
+        {% translate "Skip — I'll type it in" %}
+      </a>
+      <button type="submit" class="btn btn-primary">{% translate "Continue" %}</button>
+    </div>
+  </form>
+</div>

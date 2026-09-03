@@ -446,6 +446,72 @@ class DefinitionVersion(TimeStampedModel):
         return version_to_snapshot(self)
 
 
+class CompliancePack(TimeStampedModel):
+    """A curated set of definitions somebody can adopt in one decision.
+
+    The applicability engine answers "what does the law require of you". A pack
+    answers a different question — "what does a business like mine usually
+    track" — and the two are not the same. A newly incorporated private company
+    does not yet hold a GSTIN or a PF code, so the rules correctly infer almost
+    nothing; what it actually wants on day one is the ROC annual kit, chosen in
+    one click rather than assembled from a list of three hundred.
+
+    Platform-owned reference data like the rest of the catalog, authored as YAML
+    in ``catalog/bundles/`` and loaded by ``manage.py loadcatalog``.
+
+    ``definition_codes`` is an array of slugs rather than a many-to-many, for
+    three reasons. ``validatecatalog`` must be able to check a pack against parsed
+    YAML documents **with no database**, which a join table cannot support and
+    which is the property the whole merge gate rests on. ``code`` is already the
+    handle used by ``ObligationInstance``, ``ObligationSuppression`` and
+    ``GovernmentExtension``, so a fourth spelling would be the odd one out. And a
+    join table would make a pack that references a not-yet-loaded definition a
+    load-order dependency inside a single command.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
+
+    code = models.SlugField(max_length=64, unique=True)
+    country = models.CharField(max_length=2, db_index=True)
+    name = models.CharField(max_length=120)
+    summary = models.TextField(blank=True)
+    #: Why somebody would choose this, in their words rather than the statute's.
+    #: Rendered on the card, and the thing that makes a pack pickable at all.
+    rationale = models.TextField(blank=True)
+
+    definition_codes = ArrayField(models.SlugField(max_length=64), default=list)
+
+    #: The same applicability DSL, deciding whether to *offer* the pack. Only ever
+    #: a suggestion: a pack is never applied without somebody pressing a button,
+    #: which is exactly what distinguishes it from an applicability rule.
+    suggestion_rule = models.JSONField(default=dict, blank=True)
+    facts_used = ArrayField(models.CharField(max_length=64), default=list, blank=True)
+
+    tags = ArrayField(models.SlugField(max_length=40), default=list, blank=True)
+    jurisdictions = ArrayField(models.CharField(max_length=12), default=list, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    source_path = models.CharField(max_length=250, blank=True)
+    source_checksum = models.CharField(max_length=64, blank=True)
+
+    objects = models.Manager()
+
+    class Meta:
+        ordering = ["country", "name"]
+        indexes = [
+            models.Index(fields=["country", "is_active"], name="pack_country_active_idx"),
+            GinIndex(fields=["definition_codes"], name="pack_definitions_gin"),
+            GinIndex(fields=["facts_used"], name="pack_facts_gin"),
+        ]
+
+    def __str__(self) -> str:
+        return self.code
+
+    @property
+    def size(self) -> int:
+        return len(self.definition_codes)
+
+
 class GovernmentExtension(TimeStampedModel):
     """A notification that moved a date, waived a penalty, or opened an amnesty.
 

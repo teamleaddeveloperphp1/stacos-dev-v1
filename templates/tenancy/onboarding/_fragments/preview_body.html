@@ -1,0 +1,43 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'What applies to you' %}"
+               subtitle="{% translate 'Answer a question and watch it move. Nothing is saved until you finish.' %}">
+</c-page-header>
+
+{% include "tenancy/onboarding/_fragments/steps.html" %}
+
+<div class="wizard wizard--wide">
+  <div class="wizard__split">
+
+    <aside class="wizard__aside" id="onboarding-questions" aria-live="polite" aria-atomic="true">
+      {% include "tenancy/onboarding/_fragments/question_queue.html" %}
+    </aside>
+
+    <div class="wizard__main">
+      <div id="onboarding-preview" aria-live="polite" aria-atomic="true">
+        {% include "tenancy/onboarding/_fragments/preview_columns.html" %}
+      </div>
+
+      <div id="onboarding-packs">
+        {% include "tenancy/onboarding/_fragments/pack_strip.html" %}
+      </div>
+    </div>
+  </div>
+
+  <div class="wizard__actions">
+    <a class="btn btn-outline-secondary" href="{% url 'onboarding:profile' %}">
+      {% translate "Back" %}
+    </a>
+    <form method="post" action="{% url 'onboarding:finish' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary" hx-post="{% url 'onboarding:finish' %}"
+              hx-disabled-elt="this">
+        {% blocktranslate count counter=preview.applies_count %}
+          Create my calendar with {{ counter }} obligation
+        {% plural %}
+          Create my calendar with {{ counter }} obligations
+        {% endblocktranslate %}
+      </button>
+    </form>
+  </div>
+</div>

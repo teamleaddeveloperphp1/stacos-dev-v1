@@ -1,0 +1,36 @@
+{% load i18n %}
+{% comment %}
+  A boolean is three radio buttons, never a checkbox. "Not sure yet" has to stay
+  distinguishable from "no": an unticked box would reach the engine as a definite
+  denial and silently remove obligations the user never ruled out, which is the
+  whole point of three-valued evaluation thrown away at the last moment.
+{% endcomment %}
+{% if question.fact.type == "BOOL" %}
+  <div class="question-card__choices" role="radiogroup"
+       aria-label="{{ question.fact.label }}">
+    <label class="question-card__choice">
+      <input type="radio" name="answer" value="yes"> <span>{% translate "Yes" %}</span>
+    </label>
+    <label class="question-card__choice">
+      <input type="radio" name="answer" value="no"> <span>{% translate "No" %}</span>
+    </label>
+    <label class="question-card__choice">
+      <input type="radio" name="answer" value="" checked> <span>{% translate "Not sure yet" %}</span>
+    </label>
+  </div>
+{% elif question.fact.type == "INT" %}
+  <input class="form-control form-control-sm" type="number" min="0" name="answer"
+         id="q-{{ question.key }}" placeholder="{% translate 'A number' %}">
+{% elif question.fact.type == "DECIMAL" %}
+  <input class="form-control form-control-sm" type="number" min="0" step="1" name="answer"
+         id="q-{{ question.key }}" placeholder="{% translate 'Amount in rupees' %}">
+{% elif question.fact.type == "ENUM" %}
+  <select class="form-select form-select-sm" name="answer" id="q-{{ question.key }}">
+    <option value="">{% translate "Not sure yet" %}</option>
+    {% for value in question.fact.allowed_values %}
+      <option value="{{ value }}">{{ value|title }}</option>
+    {% endfor %}
+  </select>
+{% else %}
+  <input class="form-control form-control-sm" type="text" name="answer" id="q-{{ question.key }}">
+{% endif %}

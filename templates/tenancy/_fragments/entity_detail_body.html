@@ -123,6 +123,24 @@
       </div>
     {% endif %}
 
+    {% comment %}
+      The events panel. Sixty of the compliance definitions are event-triggered
+      and produce nothing at all until something is recorded, so this is the only
+      place outside a specific "tell us your AGM date" prompt where they can be
+      brought into existence. Built unreachable, they would silently never fire
+      with every test still green.
+    {% endcomment %}
+    {% if "compliance.obligation.view" in access_scope.permissions %}
+      <div hx-get="{% url 'compliance:entity_events' entity.pk %}"
+           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
+           class="card mb-4" aria-busy="true">
+        <div class="card-body text-muted small">
+          <span class="spinner-inline"></span>
+          <span class="ms-2">{% translate "Loading…" %}</span>
+        </div>
+      </div>
+    {% endif %}
+
     {% if "notices.notice.view" in access_scope.permissions %}
       <div hx-get="{% url 'notices:for_entity' entity.pk %}"
            hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"

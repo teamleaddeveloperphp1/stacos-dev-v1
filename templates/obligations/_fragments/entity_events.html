@@ -1,0 +1,72 @@
+{% load i18n %}
+<c-oob id="entity-events">
+  <section class="card">
+    <div class="card__header">
+      <h2 class="card__title">{% translate "Recorded events" %}</h2>
+      <button class="btn btn-sm btn-outline-primary"
+              hx-get="{% url 'compliance:event_create' entity.pk %}"
+              hx-target="#modal-container"
+              hx-swap="innerHTML">
+        <c-icon name="plus" size="14" /> {% translate "Record an event" %}
+      </button>
+    </div>
+
+    <div aria-live="polite" aria-atomic="false">
+      {% if event_rows %}
+        <table class="table mb-0">
+          <thead>
+            <tr>
+              <th>{% translate "What happened" %}</th>
+              <th>{% translate "When" %}</th>
+              <th>{% translate "Filings it produced" %}</th>
+              <th><span class="visually-hidden">{% translate "Actions" %}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in event_rows %}
+              <tr>
+                <td>
+                  <span class="d-block">{{ row.type.label|default:row.event.key }}</span>
+                  {% if row.event.subject_label %}
+                    <span class="text-muted small">{{ row.event.subject_label }}</span>
+                  {% endif %}
+                </td>
+                <td>{{ row.event.occurred_on|date:"j M Y" }}</td>
+                <td>
+                  {% for obligation in row.obligations %}
+                    <a class="d-block small" href="{% url 'compliance:detail' obligation.pk %}">
+                      {{ obligation.title }}
+                    </a>
+                  {% empty %}
+                    <span class="text-muted small">{% translate "None" %}</span>
+                  {% endfor %}
+                </td>
+                <td class="text-end">
+                  <form hx-post="{% url 'compliance:event_withdraw' row.event.pk %}"
+                        hx-target="#entity-events"
+                        hx-swap="outerHTML"
+                        hx-confirm="{% translate 'Withdraw this event? Filings already worked on are kept and marked no longer applicable.' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                      {% translate "Withdraw" %}
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <c-empty-state title="{% translate 'No events recorded' %}"
+                       body="{% translate 'Appointments, resignations and resolutions put filings on the calendar. Record one and the forms that follow it appear with their deadlines.' %}">
+          <button class="btn btn-sm btn-primary"
+                  hx-get="{% url 'compliance:event_create' entity.pk %}"
+                  hx-target="#modal-container"
+                  hx-swap="innerHTML">
+            {% translate "Record an event" %}
+          </button>
+        </c-empty-state>
+      {% endif %}
+    </div>
+  </section>
+</c-oob>

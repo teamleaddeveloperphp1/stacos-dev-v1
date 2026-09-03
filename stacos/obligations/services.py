@@ -45,7 +45,12 @@ from stacos.catalog.snapshots import (
 )
 from stacos.core.audit import record_event
 from stacos.core.models import AuditAction
-from stacos.engine.planner import ExistingInstance, MaterialisationPlan, PlannedInstance
+from stacos.engine.planner import (
+    EntityProfileView,
+    ExistingInstance,
+    MaterialisationPlan,
+    PlannedInstance,
+)
 from stacos.engine.planner import plan as run_planner
 from stacos.engine.types import Identity
 from stacos.jurisdictions.models import JurisdictionPack
@@ -61,7 +66,14 @@ from stacos.tenancy.models import Entity
 
 logger = structlog.get_logger(__name__)
 
-__all__ = ["MaterialisationPreview", "StaleCatalogError", "apply_plan", "materialise", "preview"]
+__all__ = [
+    "MaterialisationPreview",
+    "StaleCatalogError",
+    "apply_plan",
+    "materialise",
+    "preview",
+    "preview_for_profile",
+]
 
 #: Eighteen months forward. Long enough that a client planning a year ahead sees
 #: everything, short enough that the register does not fill with speculative rows
@@ -118,23 +130,54 @@ def preview(
     which is what makes this affordable to run synchronously on a profile edit and
     show as a diff.
     """
+    return preview_for_profile(
+        build_profile_view(entity, as_of=as_of),
+        country=entity.country,
+        as_of=as_of,
+        horizon_start=horizon_start,
+        horizon_end=horizon_end,
+        existing=_existing_instances(entity),
+        suppressed=_suppressed_identities(entity),
+        opted_in=_opted_in_codes(entity),
+    )
+
+
+def preview_for_profile(
+    profile_view: EntityProfileView,
+    *,
+    country: str,
+    as_of: date,
+    horizon_start: date | None = None,
+    horizon_end: date | None = None,
+    existing: Sequence[ExistingInstance] = (),
+    suppressed: frozenset[Identity] = frozenset(),
+    opted_in: frozenset[str] = frozenset(),
+) -> MaterialisationPreview:
+    """The same computation, against a profile rather than a saved entity.
+
+    Split out so that onboarding can show a live calendar preview **before
+    anything is written**. A wizard that has to create a tenant, a membership and
+    an entity just to answer "what would apply to me" leaves rows behind every
+    time somebody changes their mind halfway through.
+
+    :func:`preview` is now a thin wrapper that assembles the entity's own inputs
+    and calls this.
+    """
     started = time.perf_counter()
 
     horizon_start = horizon_start or (as_of - timedelta(days=HORIZON_LOOKBACK_DAYS))
     horizon_end = horizon_end or _add_months(as_of, HORIZON_MONTHS)
 
-    profile_view = build_profile_view(entity, as_of=as_of)
-
     catalog = build_catalog(
-        country=entity.country,
+        country=country,
         jurisdictions=profile_view.jurisdictions,
     )
     fingerprint = catalog_fingerprint(catalog)
 
-    pack = JurisdictionPack.objects.filter(country=entity.country).first()
+    pack = JurisdictionPack.objects.filter(country=country).first()
     if pack is None:
         raise RuntimeError(
-            f"No jurisdiction pack for {entity.country!r}. The fiscal year convention, "
+            f"No jurisdiction pack for {country!r}. The fiscal year convention, "
             f"weekend rules and holiday calendars all come from the pack — without one "
             f"there is nothing to compute dates against."
         )
@@ -143,7 +186,7 @@ def preview(
         definition_codes=[definition.code for definition in catalog], as_of=as_of
     )
     calendars = build_calendar_snapshot(
-        country=entity.country,
+        country=country,
         calendar_keys=calendar_keys_in(catalog),
         window_start=horizon_start,
         window_end=horizon_end,
@@ -158,15 +201,15 @@ def preview(
         fy=fiscal_year_for(pack),
         calendars=calendars,
         extensions=extensions,
-        existing=_existing_instances(entity),
-        suppressed=_suppressed_identities(entity),
-        opted_in=_opted_in_codes(entity),
+        existing=existing,
+        suppressed=suppressed,
+        opted_in=opted_in,
         as_of=as_of,
     )
 
     logger.info(
         "materialisation.previewed",
-        entity_id=str(entity.pk),
+        entity_id=profile_view.entity_id,
         definitions=len(catalog),
         summary=materialisation.summary(),
         elapsed_ms=int((time.perf_counter() - started) * 1000),

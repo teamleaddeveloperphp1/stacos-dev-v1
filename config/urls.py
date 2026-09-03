@@ -47,6 +47,10 @@ urlpatterns = [
     # --- Web application ---
     # Compliance first: `stacos.tenancy.urls` owns the bare `app/` route, so a
     # more specific prefix has to be registered before it to be reachable.
+    path(
+        "app/start/",
+        include("stacos.tenancy.onboarding.urls", namespace="onboarding"),
+    ),
     path("app/compliance/", include("stacos.obligations.urls", namespace="compliance")),
     path("app/requests/", include("stacos.requests.urls", namespace="rfi")),
     path("app/notices/", include("stacos.notices.urls", namespace="notices")),

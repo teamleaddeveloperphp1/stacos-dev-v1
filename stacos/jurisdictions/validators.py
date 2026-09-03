@@ -19,6 +19,10 @@ from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
 
+from stacos.jurisdictions.decode import PAN_HOLDER_TYPES
+from stacos.jurisdictions.decode import gstin_check_digit as _decode_check_digit
+from stacos.jurisdictions.subdivisions import GST_STATE_CODES
+
 __all__ = [
     "RegistrationValidator",
     "get_validator",
@@ -57,15 +61,29 @@ EPF_RE = re.compile(r"^[A-Z]{2}/[A-Z]{3}/[0-9]{7}/[0-9]{3}$|^[A-Z]{5}[0-9]{7}[0-
 ESIC_RE = re.compile(r"^[0-9]{17}$")
 
 #: State codes that may appear in the first two digits of a GSTIN.
-_GST_STATE_CODES = frozenset(f"{n:02d}" for n in range(1, 39)) | {"97", "99"}
+#:
+#: Derived from the subdivision table rather than the numeric range 01-38,
+#: which accepted codes that have never been issued. Historic codes stay valid
+#: because historic GSTINs are on real client records; `decode.decode_gstin`
+#: reads them and says which current jurisdiction they map to.
+_GST_STATE_CODES = GST_STATE_CODES
 
 
 def validate_pan(value: str) -> None:
     """Permanent Account Number — ``ABCDE1234F``.
 
     The fourth character encodes the holder type (``P`` individual, ``C``
-    company, ``F`` firm, ``T`` trust, ...), which is worth validating because a
-    PAN whose type contradicts the entity type is almost always a typo.
+    company, ``F`` firm, ``T`` trust, ...). The permitted set is derived from
+    ``decode.PAN_HOLDER_TYPES`` so that the character this accepts and the
+    character the decoder can read are the same set by construction — the bare
+    string literal that used to live here had drifted, and was missing ``B``.
+
+    The cross-check its old docstring promised — that the holder type agrees with
+    the declared entity type — lives in ``decode.read`` and is reported as a
+    *conflict*, not raised here. A Section 8 company legitimately holds a ``C``
+    PAN and an LLP and a partnership legitimately share ``F``; refusing the
+    user's own correct answer because a heuristic disagrees would be worse than
+    saying nothing.
     """
     value = value.upper().strip()
     if not PAN_RE.match(value):
@@ -73,7 +91,7 @@ def validate_pan(value: str) -> None:
             "A PAN is ten characters: five letters, four digits, then a letter (e.g. ABCDE1234F).",
             code="invalid_pan",
         )
-    if value[3] not in "ABCFGHJLPTK":
+    if value[3] not in PAN_HOLDER_TYPES:
         raise ValidationError(
             f"'{value[3]}' is not a recognised PAN holder-type character (position 4).",
             code="invalid_pan_type",
@@ -90,23 +108,16 @@ def validate_tan(value: str) -> None:
 
 
 def gstin_check_digit(first_fourteen: str) -> str:
-    """Compute the fifteenth character of a GSTIN.
+    """The fifteenth character of a GSTIN. See :mod:`stacos.jurisdictions.decode`.
 
-    Each character's value is weighted alternately by 1 and 2; each product is
-    folded (``quotient + remainder`` over 36) and summed; the check digit is the
-    complement of that sum modulo 36.
+    Re-exported here because this is where callers have always looked for it.
+    The implementation moved so that ``decode`` can verify a GSTIN it is asked
+    to read without importing this module, which imports it.
     """
-    total = 0
-    for index, char in enumerate(first_fourteen.upper()):
-        try:
-            value = _GST_ALPHABET.index(char)
-        except ValueError:
-            raise ValidationError(
-                f"'{char}' cannot appear in a GSTIN.", code="invalid_gstin_char"
-            ) from None
-        product = value * (2 if index % 2 else 1)
-        total += product // 36 + product % 36
-    return _GST_ALPHABET[(36 - total % 36) % 36]
+    try:
+        return _decode_check_digit(first_fourteen)
+    except ValueError as exc:
+        raise ValidationError(str(exc), code="invalid_gstin_char") from None
 
 
 def validate_gstin(value: str) -> None:

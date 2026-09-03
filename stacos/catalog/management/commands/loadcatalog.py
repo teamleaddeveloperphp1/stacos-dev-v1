@@ -7,6 +7,7 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 
+from stacos.catalog.bundles import load_bundles
 from stacos.catalog.loader import load_catalog, load_extensions
 from stacos.catalog.snapshots import invalidate_catalog_cache
 
@@ -36,6 +37,9 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument("--skip-extensions", action="store_true", help="Definitions only.")
+        parser.add_argument(
+            "--skip-bundles", action="store_true", help="Skip the compliance packs."
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         report = load_catalog(
@@ -48,6 +52,18 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"  + {code}"))
         for code in report.updated:
             self.stdout.write(f"  ~ {code}")
+
+        # Packs load after definitions, in the same command, because a pack that
+        # references a definition is only coherent alongside it. A pack failure
+        # is reported but does not roll back the definitions — different people
+        # author them, and a broken bundle must not block a rule change.
+        if not options["skip_bundles"]:
+            packs = load_bundles(dry_run=options["dry_run"])
+            report.errors.extend(packs.errors)
+            if packs.created or packs.updated:
+                self.stdout.write(
+                    f"  packs: {len(packs.created)} new, {len(packs.updated)} updated"
+                )
 
         if not options["skip_extensions"] and not options["dry_run"]:
             extensions = load_extensions()
