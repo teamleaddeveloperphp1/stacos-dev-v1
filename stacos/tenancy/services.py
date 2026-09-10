@@ -48,7 +48,11 @@ logger = structlog.get_logger(__name__)
 __all__ = ["OWNER_ROLE_CODES", "provision_tenant", "record_fact", "unique_slug"]
 
 #: The system role that owns a newly created tenant, per tenant type.
-OWNER_ROLE_CODES = {
+#:
+#: Keyed by the plain string rather than the enum member, because callers pass
+#: `Tenant.Type.ORGANISATION` (which *is* a str) and mypy will not accept a
+#: `str` index into a dict keyed by the enum.
+OWNER_ROLE_CODES: dict[str, str] = {
     Tenant.Type.ORGANISATION: "org-owner",
     Tenant.Type.PRACTICE: "practice-partner",
     Tenant.Type.DEALER: "dealer-principal",

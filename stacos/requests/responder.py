@@ -158,7 +158,9 @@ def upload_item(request: HttpRequest, token: str, item_pk: str) -> HttpResponse:
                 tenant=information_request.entity.tenant,
                 entity=information_request.entity,
                 upload=upload,
-                title=upload.name,
+                # `UploadedFile.name` is optional, and a document with no
+                # title renders as a blank row in the attachment list.
+                title=upload.name or "Attachment",
                 kind=DocumentKind.OTHER,
                 classification=Document.Classification.GENERAL,
                 actor=None,

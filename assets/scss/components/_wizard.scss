@@ -68,12 +68,26 @@
   margin-bottom: 1rem;
 }
 
+// The commit button, always reachable without hunting for it.
+//
+// Pinned to the bottom of the scrolling region rather than to the viewport, so
+// it cannot end up on top of the question queue or the header — the requirement
+// is that nothing pinned covers anything else pinned, and two viewport-fixed
+// elements on one screen is how that gets broken.
 .wizard__actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
   margin-top: 1.25rem;
+  position: sticky;
+  bottom: 0;
+  padding: $stacos-space-3 0;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--stacos-surface-sunken) 35%
+  );
 }
 
 .wizard__split {
@@ -87,9 +101,29 @@
   }
 }
 
+// Pinned beneath the header, not underneath it.
+//
+// `top: 1rem` measured from the viewport, and .app-header is itself sticky at
+// top: 0 with z-index 20 — so the question queue slid under the header and the
+// first card was permanently unreadable. It also had no height limit, so a long
+// queue was taller than the viewport and stopped sticking at all, which is the
+// other half of "the fixed sections cover the page".
 .wizard__aside {
   position: sticky;
-  top: 1rem;
+  top: calc(var(--stacos-header-height) + #{$stacos-space-3});
+  max-height: calc(100vh - var(--stacos-header-height) - #{$stacos-space-6});
+  overflow-y: auto;
+  // Nothing else on this screen is pinned, so no z-index contest to win — but
+  // it must stay below the header it now sits under.
+  z-index: 1;
+
+  @media (max-width: 62rem) {
+    // Stacked rather than beside, so pinning it would cover the very content it
+    // is meant to explain.
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 .wizard__main {
@@ -310,6 +344,63 @@
   display: block;
   font-size: 0.75rem;
   color: var(--stacos-text-muted);
+}
+
+// -- Rows that share an explanation -------------------------------------------
+//
+// The explanation used to be printed under every row, which made each column
+// several screens of one repeated sentence. Said once for the group it covers,
+// it becomes the thing that distinguishes one block from the next — and the
+// rows included for a different reason are the ones that stand out, which is
+// what somebody checking our working is looking for.
+
+.verdict-group {
+  margin-bottom: $stacos-space-3;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  // A group somebody can clear from this screen, marked so the eye finds the
+  // actionable ones first. The rest are genuinely undecided and genuinely not
+  // this user's next move.
+  &--actionable {
+    border-left: 2px solid var(--stacos-status-waiting);
+    padding-left: $stacos-space-2;
+  }
+}
+
+.verdict-group__why {
+  font-size: 0.75rem;
+  color: var(--stacos-text-muted);
+  margin: 0 0 0.25rem;
+}
+
+// A group that one question on this screen would settle. Styled as a link
+// because it is one: it goes to the control that clears the whole group.
+.verdict-group__ask {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--stacos-status-waiting);
+  margin: 0 0 0.25rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--stacos-accent);
+  }
+}
+
+.verdict-group__more {
+  font-size: 0.75rem;
+
+  summary {
+    cursor: pointer;
+    color: var(--stacos-text-muted);
+    padding: 0.125rem 0;
+  }
 }
 
 .verdict-grid__footnote {

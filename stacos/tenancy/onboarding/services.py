@@ -10,6 +10,7 @@ should not be told to come back tomorrow.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -37,20 +38,29 @@ from stacos.tenancy.models import (
     EntityRegistration,
     Tenant,
 )
-from stacos.tenancy.onboarding.questions import Question, rank_questions
+from stacos.tenancy.onboarding.questions import Question, askable_facts, rank_questions
 from stacos.tenancy.onboarding.state import OnboardingDraft
 from stacos.tenancy.services import provision_tenant
 
 __all__ = [
     "DraftPreview",
+    "FamilyGroup",
     "PackSuggestion",
+    "PreviewRow",
+    "ReasonGroup",
     "commit_draft",
     "preview_draft",
     "suggest_packs",
 ]
 
-#: How many definitions to name in each column before saying "and N more".
-_SHOWN_PER_GROUP = 60
+#: How many rows to show under a heading before folding the rest away.
+#:
+#: A display cap and nothing more. It used to be applied to the *stored* tuples,
+#: which meant ``applies_count`` — and therefore the number on the button
+#: somebody presses to create their calendar — reported 60 for a business with
+#: several hundred obligations. A screen short enough to read is worth having;
+#: one that is short because it understates the total is not.
+_SHOWN_PER_REASON = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,8 +75,81 @@ class PreviewRow:
 
 
 @dataclass(frozen=True, slots=True)
+class ReasonGroup:
+    """Rows within a family that are here for the same reason.
+
+    The reason is the point of the grouping. Printed against every row, the
+    column becomes several screens of one repeated sentence and nobody reads any
+    of it — which means the rows that are here for a *different* reason, the ones
+    somebody checking the product's working is looking for, are the hardest to
+    find. Said once per group, the reason is the thing that varies.
+    """
+
+    reason: str
+    rows: tuple[PreviewRow, ...]
+    #: The fact that would settle this group, for a "might apply" column. Empty
+    #: when nothing on this screen can settle it.
+    blocked_on: str = ""
+    #: The question in the queue beside this column that would settle the group,
+    #: when there is one. Carrying the object rather than the key is what lets
+    #: the template say *what* is being asked and link straight to it, instead of
+    #: printing a fact name at somebody and leaving them to find the control.
+    question: Question | None = None
+
+    @property
+    def is_answerable_here(self) -> bool:
+        """Whether the question that settles this group is on screen right now."""
+        return self.question is not None
+
+    @property
+    def is_askable_later(self) -> bool:
+        """Blocked on something a person could answer, just not in the queue yet.
+
+        The queue is capped at the most consequential handful, so a genuinely
+        answerable fact can sit outside it. Lumping that in with "comes from your
+        registrations" would tell the user something false about their own data —
+        the three states are *asked now*, *asked once the queue moves on*, and
+        *not a question at all*, and the screen has to say which.
+        """
+        return self.question is None and bool(self.blocked_on)
+
+    @property
+    def blocked_label(self) -> str:
+        """The blocking fact in words, for a group with no question on screen."""
+        definition = REGISTRY.get(self.blocked_on) if self.blocked_on else None
+        return definition.label if definition is not None else ""
+
+    @property
+    def count(self) -> int:
+        return len(self.rows)
+
+    @property
+    def shown(self) -> tuple[PreviewRow, ...]:
+        return self.rows[:_SHOWN_PER_REASON]
+
+    @property
+    def hidden(self) -> int:
+        return max(0, len(self.rows) - _SHOWN_PER_REASON)
+
+
+@dataclass(frozen=True, slots=True)
+class FamilyGroup:
+    family: str
+    groups: tuple[ReasonGroup, ...]
+
+    @property
+    def count(self) -> int:
+        return sum(group.count for group in self.groups)
+
+
+@dataclass(frozen=True, slots=True)
 class DraftPreview:
-    """Three columns, and the questions that would move rows between them."""
+    """Three columns, and the questions that would move rows between them.
+
+    The tuples hold **every** row. Counts are read off them, so the number on the
+    button is the number of obligations the user will actually get. How much of
+    that is drawn is decided in the grouping, one layer down.
+    """
 
     applies: tuple[PreviewRow, ...] = ()
     might_apply: tuple[PreviewRow, ...] = ()
@@ -86,24 +169,70 @@ class DraftPreview:
     def excluded_count(self) -> int:
         return len(self.does_not_apply)
 
-    def applies_by_family(self) -> list[tuple[str, list[PreviewRow]]]:
-        """Grouped by family, not category.
+    @property
+    def answerable_might_count(self) -> int:
+        """Of the undecided, how many a question on this screen would settle.
+
+        The rest wait on a registration or a premises. Presenting those as work
+        available here is what makes the column read as a list nobody can finish.
+        """
+        return sum(1 for row in self.might_apply if row.blocked_on)
+
+    def applies_by_family(self) -> list[FamilyGroup]:
+        """Grouped by family, then by the reason the rule fired.
 
         ``family`` is the vocabulary a CA already speaks — ROC, GST, TDS,
         Professional tax. ``category`` is the axis engagements are scoped along
         and reads as jargon on a screen a business owner is looking at.
         """
-        return _group(self.applies)
+        return _group(self.applies, key=lambda row: row.reason)
 
-    def might_by_family(self) -> list[tuple[str, list[PreviewRow]]]:
-        return _group(self.might_apply)
+    def might_by_family(self) -> list[FamilyGroup]:
+        """Grouped by what is *blocking* them rather than by why they fired.
+
+        An undecided rule has no reason worth printing — it has a missing fact,
+        and that fact is the thing the user can do something about. Grouping on
+        it is what lets each group point at the one question that clears it.
+        """
+        return _group(
+            self.might_apply,
+            key=lambda row: row.blocked_on,
+            questions={question.key: question for question in self.questions},
+        )
 
 
-def _group(rows: tuple[PreviewRow, ...]) -> list[tuple[str, list[PreviewRow]]]:
-    grouped: dict[str, list[PreviewRow]] = {}
+def _group(
+    rows: tuple[PreviewRow, ...],
+    *,
+    key: Callable[[PreviewRow], str],
+    questions: dict[str, Question] | None = None,
+) -> list[FamilyGroup]:
+    lookup = questions or {}
+    families: dict[str, dict[str, list[PreviewRow]]] = {}
     for row in rows:
-        grouped.setdefault(row.family or "Other", []).append(row)
-    return sorted(grouped.items(), key=lambda pair: (-len(pair[1]), pair[0]))
+        families.setdefault(row.family or "Other", {}).setdefault(key(row), []).append(row)
+
+    result = [
+        FamilyGroup(
+            family=family,
+            groups=tuple(
+                ReasonGroup(
+                    reason=reason,
+                    rows=tuple(group),
+                    blocked_on=group[0].blocked_on,
+                    question=lookup.get(group[0].blocked_on),
+                )
+                # Largest group first: the shared explanation covers the most
+                # ground, and the odd ones out fall to the bottom where they
+                # stand out rather than being buried in the middle.
+                for reason, group in sorted(
+                    by_reason.items(), key=lambda pair: (-len(pair[1]), pair[0])
+                )
+            ),
+        )
+        for family, by_reason in families.items()
+    ]
+    return sorted(result, key=lambda family: (-family.count, family.family))
 
 
 def preview_draft(draft: OnboardingDraft, *, question_limit: int = 8) -> DraftPreview:
@@ -142,9 +271,12 @@ def preview_draft(draft: OnboardingDraft, *, question_limit: int = 8) -> DraftPr
             excluded.append(row)
 
     return DraftPreview(
-        applies=tuple(applies[:_SHOWN_PER_GROUP]),
-        might_apply=tuple(might[:_SHOWN_PER_GROUP]),
-        does_not_apply=tuple(excluded[:_SHOWN_PER_GROUP]),
+        # Not truncated. The counts are read off these, and they feed the button
+        # that creates the calendar — a number short of the truth there is the
+        # single most damaging thing on this screen.
+        applies=tuple(applies),
+        might_apply=tuple(might),
+        does_not_apply=tuple(excluded),
         questions=rank_questions(catalog=catalog, facts=profile.facts, limit=question_limit),
         considered=len(catalog),
     )
@@ -158,10 +290,25 @@ def _family_of(definition: DefinitionSnapshot) -> str:
 
 
 def _first_askable(missing: frozenset[str]) -> str:
-    for key in sorted(missing):
-        definition = REGISTRY.get(key)
-        if definition is not None:
-            return definition.label
+    """The key of the fact to ask for, or ``""`` if none of them is askable.
+
+    A **key**, not a label, and that is the whole of the change. It used to
+    return ``definition.label``, which meant the value could never be matched
+    against a question — ``rank_questions`` is keyed on fact names — so the
+    column could only ever print a phrase at somebody and leave them to work out
+    which control cleared it. The screen had both halves of the answer and no way
+    to join them.
+
+    ``askable_facts`` rather than the raw set, for the second half of the same
+    problem: a derived fact has no input of its own (nobody types a turnover
+    *band*, they type a turnover), and a fact sourced from a registration or a
+    premises is not a question at all. Naming those was how the column filled up
+    with things like "Registrations held", which is not something anybody can
+    answer.
+    """
+    for key in sorted(askable_facts(missing)):
+        if REGISTRY.get(key) is not None:
+            return key
     return ""
 
 

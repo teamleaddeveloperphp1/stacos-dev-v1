@@ -6,7 +6,10 @@
   whole point of three-valued evaluation thrown away at the last moment.
 {% endcomment %}
 {% if question.fact.type == "BOOL" %}
-  <div class="question-card__choices" role="radiogroup"
+  {# The id is the anchor target: the verdict column links straight here. Without #}
+  {# it the label points at nothing and the link goes nowhere, which for a BOOL   #}
+  {# fact is most of the queue.                                                    #}
+  <div class="question-card__choices" role="radiogroup" id="q-{{ question.key }}"
        aria-label="{{ question.fact.label }}">
     <label class="question-card__choice">
       <input type="radio" name="answer" value="yes"> <span>{% translate "Yes" %}</span>

@@ -23,7 +23,7 @@ import hashlib
 import hmac
 import secrets
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from django.conf import settings
@@ -137,7 +137,7 @@ def resolve_invitation(raw: str) -> TenantInvitation | None:
         )
         if invitation is None or not invitation.is_open:
             return None
-        return invitation
+        return cast("TenantInvitation", invitation)
 
 
 @transaction.atomic
@@ -190,7 +190,7 @@ def accept_invitation(invitation: TenantInvitation, *, user: User) -> Membership
         tenant_id=str(invitation.tenant_id),
         user_id=str(user.pk),
     )
-    return membership
+    return cast("Membership", membership)
 
 
 @transaction.atomic

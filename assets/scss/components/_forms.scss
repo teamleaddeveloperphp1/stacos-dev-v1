@@ -17,7 +17,11 @@
 .form-control,
 .form-select {
   font-size: $stacos-text-base;
-  background: var(--stacos-surface);
+  // `background-color`, not the `background` shorthand. This is why every
+  // dropdown in the product read as a text box: Bootstrap draws a select's
+  // chevron with `background-image`, and the shorthand resets it to `none`. A
+  // control that does not look like what it is gets clicked last, or not at all.
+  background-color: var(--stacos-surface);
   border-color: var(--stacos-border-strong);
 
   &::placeholder { color: var(--stacos-text-subtle); }
@@ -42,6 +46,12 @@
   max-width: 26rem;
   margin: 0 auto;
 
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-xl);
+  box-shadow: var(--stacos-shadow-md);
+  padding: $stacos-space-6;
+
   // The responder screen is a checklist, not a sign-in form. It uses this
   // layout because its visitor has no session and therefore no application
   // shell to sit inside, but a column sized for an email field and a password
@@ -49,11 +59,6 @@
   &--wide {
     max-width: 44rem;
   }
-  background: var(--stacos-surface);
-  border: 1px solid var(--stacos-border);
-  border-radius: var(--stacos-radius-xl);
-  box-shadow: var(--stacos-shadow-md);
-  padding: $stacos-space-6;
 
   &__title {
     font-size: $stacos-text-xl;

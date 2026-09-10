@@ -316,7 +316,9 @@ class InviteColleagueForm(forms.Form):
     """
 
     email = forms.EmailField(label=_("Their work email"))
-    role = forms.ModelChoiceField(label=_("What can they do?"), queryset=Role.objects.none())
+    role: forms.ModelChoiceField[Role] = forms.ModelChoiceField(
+        label=_("What can they do?"), queryset=Role.objects.none()
+    )
     message = forms.CharField(
         required=False,
         label=_("Add a note (optional)"),
@@ -327,7 +329,7 @@ class InviteColleagueForm(forms.Form):
     def __init__(self, *args: Any, tenant: Any = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.tenant = tenant
-        role_field = cast("forms.ModelChoiceField", self.fields["role"])
+        role_field = cast("forms.ModelChoiceField[Role]", self.fields["role"])
         if tenant is not None:
             role_field.queryset = Role.objects.filter(
                 tenant__isnull=True, tenant_type=tenant.type
@@ -338,4 +340,4 @@ class InviteColleagueForm(forms.Form):
         self.helper.layout = Layout(Row(Column("email"), Column("role")), "message")
 
     def clean_email(self) -> str:
-        return self.cleaned_data["email"].strip().lower()
+        return str(self.cleaned_data["email"]).strip().lower()

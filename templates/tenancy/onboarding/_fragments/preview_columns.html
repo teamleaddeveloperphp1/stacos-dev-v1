@@ -1,4 +1,20 @@
 {% load i18n %}
+{% comment %}
+  The payoff of the whole setup: did we understand your business?
+
+  Three decisions shape this markup, and each one replaces something that was
+  making the screen unreadable:
+
+  * **The reason is said once per group, not once per row.** It used to repeat
+    under every line, which turned each column into screens of one sentence —
+    and buried the rows that are here for a *different* reason, which are the
+    ones somebody checking our working is actually looking for.
+  * **"Might apply" is grouped by what is blocking it**, and each group links to
+    the question beside it that would settle it. A group nothing here can settle
+    says where it *is* settled instead of posing as work available now.
+  * **Long groups fold, but the counts never do.** `applies_count` and the number
+    on the button come from the full set — see `services.DraftPreview`.
+{% endcomment %}
 <div class="verdict-grid">
 
   <section class="verdict-col verdict-col--yes">
@@ -6,16 +22,42 @@
       <c-status-chip status="complete" label="{% translate 'Applies' %}" />
       <span class="verdict-col__count">{{ preview.applies_count }}</span>
     </header>
-    {% for family, rows in preview.applies_by_family %}
-      <h4 class="verdict-col__family">{{ family }} <span>{{ rows|length }}</span></h4>
-      <ul class="verdict-list">
-        {% for row in rows %}
-          <li class="verdict-list__item">
-            <span class="verdict-list__title">{{ row.title }}</span>
-            {% if row.reason %}<span class="verdict-list__why">{{ row.reason }}</span>{% endif %}
-          </li>
-        {% endfor %}
-      </ul>
+
+    {% for family in preview.applies_by_family %}
+      <h4 class="verdict-col__family">{{ family.family }} <span>{{ family.count }}</span></h4>
+
+      {% for group in family.groups %}
+        <div class="verdict-group">
+          {% if group.reason %}
+            <p class="verdict-group__why">{{ group.reason }}</p>
+          {% endif %}
+          <ul class="verdict-list">
+            {% for row in group.shown %}
+              <li class="verdict-list__item">
+                <span class="verdict-list__title">{{ row.title }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+          {% if group.hidden %}
+            <details class="verdict-group__more">
+              <summary>
+                {% blocktranslate count counter=group.hidden %}
+                  and {{ counter }} more for the same reason
+                {% plural %}
+                  and {{ counter }} more for the same reason
+                {% endblocktranslate %}
+              </summary>
+              <ul class="verdict-list">
+                {% for row in group.rows|slice:"4:" %}
+                  <li class="verdict-list__item">
+                    <span class="verdict-list__title">{{ row.title }}</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+        </div>
+      {% endfor %}
     {% empty %}
       <p class="verdict-col__empty">
         {% translate "Nothing yet. Answer a question or two and this fills up." %}
@@ -29,22 +71,69 @@
       <span class="verdict-col__count">{{ preview.might_count }}</span>
     </header>
     <p class="verdict-col__lead">
-      {% translate "We cannot rule these in or out until you answer the questions on the left." %}
+      {% blocktranslate count counter=preview.answerable_might_count %}
+        {{ counter }} of these is waiting on a question you can answer on the left.
+      {% plural %}
+        {{ counter }} of these are waiting on questions you can answer on the left.
+      {% endblocktranslate %}
     </p>
-    {% for family, rows in preview.might_by_family %}
-      <h4 class="verdict-col__family">{{ family }} <span>{{ rows|length }}</span></h4>
-      <ul class="verdict-list">
-        {% for row in rows %}
-          <li class="verdict-list__item">
-            <span class="verdict-list__title">{{ row.title }}</span>
-            {% if row.blocked_on %}
-              <span class="verdict-list__why">
-                {% blocktranslate with fact=row.blocked_on %}needs: {{ fact }}{% endblocktranslate %}
-              </span>
-            {% endif %}
-          </li>
-        {% endfor %}
-      </ul>
+
+    {% for family in preview.might_by_family %}
+      <h4 class="verdict-col__family">{{ family.family }} <span>{{ family.count }}</span></h4>
+
+      {% for group in family.groups %}
+        <div class="verdict-group {% if group.is_answerable_here %}verdict-group--actionable{% endif %}">
+          {% if group.is_answerable_here %}
+            {% comment %}
+              Straight to the control that clears the group. This anchor is what
+              turns "which answer settles which rules" from something a reader
+              has to work out into one click.
+            {% endcomment %}
+            <a class="verdict-group__ask" href="#q-{{ group.question.key }}">
+              {% blocktranslate with fact=group.question.fact.label %}
+                Waiting on: {{ fact }}
+              {% endblocktranslate %}
+            </a>
+          {% elif group.is_askable_later %}
+            <p class="verdict-group__why">
+              {% blocktranslate with fact=group.blocked_label %}
+                Waiting on: {{ fact }}. It joins the questions on the left as you
+                work through them.
+              {% endblocktranslate %}
+            </p>
+          {% else %}
+            <p class="verdict-group__why">
+              {% translate "Settled by the registrations and premises you record after setup, not by a question here." %}
+            </p>
+          {% endif %}
+
+          <ul class="verdict-list">
+            {% for row in group.shown %}
+              <li class="verdict-list__item">
+                <span class="verdict-list__title">{{ row.title }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+          {% if group.hidden %}
+            <details class="verdict-group__more">
+              <summary>
+                {% blocktranslate count counter=group.hidden %}
+                  and {{ counter }} more waiting on the same thing
+                {% plural %}
+                  and {{ counter }} more waiting on the same thing
+                {% endblocktranslate %}
+              </summary>
+              <ul class="verdict-list">
+                {% for row in group.rows|slice:"4:" %}
+                  <li class="verdict-list__item">
+                    <span class="verdict-list__title">{{ row.title }}</span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </details>
+          {% endif %}
+        </div>
+      {% endfor %}
     {% empty %}
       <p class="verdict-col__empty">{% translate "Nothing outstanding." %}</p>
     {% endfor %}
@@ -56,9 +145,9 @@
       <span class="verdict-col__count">{{ preview.excluded_count }}</span>
     </header>
     {% comment %}
-      Shown rather than hidden, and each with its reason. A user who sees
-      "not applicable because you are not a company" next to something they
-      know they file has spotted their own wrong answer — which is the fastest
+      Folded rather than hidden, and each with its reason. A user who sees
+      "not applicable because you are not a company" next to something they know
+      they file has spotted their own wrong answer — which is the fastest
       correction loop available and costs nothing to offer.
     {% endcomment %}
     <details class="verdict-col__details">
