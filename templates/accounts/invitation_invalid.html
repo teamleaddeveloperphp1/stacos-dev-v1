@@ -1,0 +1,20 @@
+{% extends "layouts/auth.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "This invitation is not valid" %} · STACOS{% endblock %}
+
+{% block content %}
+{% comment %}
+  One screen for expired, withdrawn and never-existed. Saying which would tell
+  somebody guessing links which invitations used to be real.
+{% endcomment %}
+<div class="auth-card">
+  <h1 class="auth-card__title">{% translate "This invitation is not valid" %}</h1>
+  <p class="auth-card__lede">
+    {% blocktranslate %}It may have expired, or been withdrawn. Ask whoever invited you to send a new one.{% endblocktranslate %}
+  </p>
+  <a class="btn btn-outline-secondary w-100" href="{% url 'accounts:login' %}">
+    {% translate "Sign in" %}
+  </a>
+</div>
+{% endblock %}

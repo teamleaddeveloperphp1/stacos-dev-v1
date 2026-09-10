@@ -90,9 +90,7 @@ def provision_tenant(
         )
 
     role_code = OWNER_ROLE_CODES[tenant_type]
-    role = Role.objects.filter(
-        code=role_code, tenant__isnull=True, tenant_type=tenant_type
-    ).first()
+    role = Role.objects.filter(code=role_code, tenant__isnull=True, tenant_type=tenant_type).first()
     if role is None:
         # Loud, not silent. A membership with no role is a user who can sign in
         # and do nothing, and the cause would be invisible from the symptom.

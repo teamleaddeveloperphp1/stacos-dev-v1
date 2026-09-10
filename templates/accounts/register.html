@@ -12,6 +12,9 @@
 
   <form method="post" novalidate>
     {% csrf_token %}
+    {# Carried through the POST, so an invitation link survives sign-up and the #}
+    {# user is returned to it once both channels are verified. #}
+    <input type="hidden" name="next" value="{{ next }}">
     {% crispy form %}
   </form>
 

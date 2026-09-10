@@ -38,6 +38,7 @@ pytestmark = pytest.mark.django_db
 
 HTMX = {"HX-Request": "true"}
 
+
 #: Routes that take no arguments and answer a GET with a page. A route with URL
 #: parameters needs a fixture per parameter, which is what the module-level
 #: feature tests already do; the argument-free ones are where the whole-document

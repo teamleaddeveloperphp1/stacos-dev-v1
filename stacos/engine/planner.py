@@ -480,9 +480,7 @@ def plan(
                     # unconfirmed because a person chose it, and there is nothing
                     # to ask about that.
                     missing_facts=(
-                        tuple(sorted(verdict.missing_facts))
-                        if verdict.result is V.UNKNOWN
-                        else ()
+                        tuple(sorted(verdict.missing_facts)) if verdict.result is V.UNKNOWN else ()
                     ),
                     reasons=(
                         (_OPT_IN_REASON, *verdict.reasons())

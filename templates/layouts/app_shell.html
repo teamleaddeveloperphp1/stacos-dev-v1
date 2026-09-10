@@ -175,6 +175,12 @@
               <span>{% translate "Billing" %}</span>
             </a>
           {% endif %}
+          {% if "accounts.user.invite" in access_scope.permissions %}
+            <a class="app-nav__link" href="{% url 'app:team' %}" preload data-nav-match="/app/team/">
+              <c-icon name="building" />
+              <span>{% translate "People" %}</span>
+            </a>
+          {% endif %}
           <a class="app-nav__link" href="{% url 'accounts:security' %}" preload data-nav-match="/auth/security/">
             <c-icon name="shield" />
             <span>{% translate "Security" %}</span>

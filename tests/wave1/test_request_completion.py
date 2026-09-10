@@ -42,9 +42,8 @@ from stacos.requests.models import (
 )
 from stacos.requests.services import record_response, reject_response, send_request
 from stacos.tenancy.models import Entity, Tenant
-from stacos.vault.models import LinkTarget
+from stacos.vault.models import DocumentLink, LinkTarget
 from stacos.vault.services import attach, detach, store
-from stacos.vault.models import DocumentLink
 from tests.conftest import sign_in
 
 pytestmark = pytest.mark.django_db
@@ -128,9 +127,7 @@ def test_a_typed_or_yes_no_answer_completes_the_request(
     assert information_request.answered_at is not None
 
 
-def test_a_file_completes_the_request_too(
-    org: Tenant, entity_a: Entity, org_owner: User
-) -> None:
+def test_a_file_completes_the_request_too(org: Tenant, entity_a: Entity, org_owner: User) -> None:
     """The bug. A document item was answered by the vault, which never told the
     requests module — so the request stayed at SENT with every file supplied."""
     information_request = _make_request(org, entity_a, org_owner, [RequestItem.Kind.DOCUMENT])
@@ -200,9 +197,7 @@ def test_removing_the_only_file_reopens_the_request(
         information_request.refresh_from_db()
         assert information_request.state == RequestState.ANSWERED
 
-        link = DocumentLink.objects.get(
-            target_type=LinkTarget.REQUEST_ITEM, target_id=item.pk
-        )
+        link = DocumentLink.objects.get(target_type=LinkTarget.REQUEST_ITEM, target_id=item.pk)
         detach(link)
         information_request.refresh_from_db()
 
@@ -331,9 +326,7 @@ def test_the_requester_is_told_when_it_is_finished(
     assert notifications[0].recipient_id == org_owner.pk
 
 
-def test_a_partial_answer_does_not_notify(
-    org: Tenant, entity_a: Entity, org_owner: User
-) -> None:
+def test_a_partial_answer_does_not_notify(org: Tenant, entity_a: Entity, org_owner: User) -> None:
     """Two items, one answered. Nobody has finished anything."""
     information_request = _make_request(
         org, entity_a, org_owner, [RequestItem.Kind.DATA, RequestItem.Kind.DATA]

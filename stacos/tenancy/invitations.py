@@ -110,9 +110,7 @@ def invite_colleague(
         obj=invitation,
         after={"email": address, "role": role.code},
     )
-    logger.info(
-        "tenancy.invited", tenant_id=str(tenant.id), email=address, role=role.code
-    )
+    logger.info("tenancy.invited", tenant_id=str(tenant.id), email=address, role=role.code)
     return invitation, raw
 
 
@@ -224,8 +222,7 @@ def send_invitation_email(
     url = request.build_absolute_uri(path) if request is not None else path
 
     lines = [
-        f"{invitation.invited_by} has invited you to join "
-        f"{invitation.tenant.name} on STACOS.",
+        f"{invitation.invited_by} has invited you to join {invitation.tenant.name} on STACOS.",
         "",
     ]
     if invitation.message:

@@ -128,9 +128,7 @@ def _also_a_member_of(user: User, tenant: Tenant, status: str = Membership.Statu
     with platform_scope(reason="test-fixture"):
         existing = Membership.objects_unscoped.filter(user=user).first()
         assert existing is not None
-        Membership.objects.create(
-            tenant=tenant, user=user, role=existing.role, status=status
-        )
+        Membership.objects.create(tenant=tenant, user=user, role=existing.role, status=status)
 
 
 def test_switching_to_another_organisation_actually_switches(

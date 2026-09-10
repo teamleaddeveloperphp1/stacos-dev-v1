@@ -243,7 +243,9 @@ def commit_draft(
         raise ValueError("The draft needs at least a name, a legal form and a state.")
 
     if tenant is None:
-        tenant = provision_tenant(draft.name, owner=user, country=draft.country, reason="onboarding")
+        tenant = provision_tenant(
+            draft.name, owner=user, country=draft.country, reason="onboarding"
+        )
 
     with tenant_context(tenant_ids={tenant.id}, reason="onboarding"):
         entity = Entity(

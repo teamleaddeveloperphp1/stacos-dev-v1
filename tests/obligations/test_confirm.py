@@ -131,9 +131,7 @@ def test_the_badge_stays_inert_for_an_obligation_nobody_can_answer_for(
 def test_opening_the_question_offers_something_answerable(
     signed_in: Client, unconfirmed: ObligationInstance
 ) -> None:
-    response = signed_in.get(
-        reverse("compliance:confirm", args=[unconfirmed.pk]), headers=HTMX
-    )
+    response = signed_in.get(reverse("compliance:confirm", args=[unconfirmed.pk]), headers=HTMX)
     body = response.content.decode()
 
     assert response.status_code == 200
@@ -149,9 +147,7 @@ def test_an_obligation_with_no_question_is_not_reachable(
         unconfirmed.missing_facts = []
         unconfirmed.save(update_fields=["missing_facts", "updated_at"])
 
-    response = signed_in.get(
-        reverse("compliance:confirm", args=[unconfirmed.pk]), headers=HTMX
-    )
+    response = signed_in.get(reverse("compliance:confirm", args=[unconfirmed.pk]), headers=HTMX)
 
     assert response.status_code == 404
 
@@ -205,7 +201,7 @@ def test_answering_updates_the_screen_without_a_reload(
     body = response.content.decode()
 
     assert response.status_code == 200
-    assert 'hx-swap-oob' in body, "nothing was updated out of band"
+    assert "hx-swap-oob" in body, "nothing was updated out of band"
     assert "calendar-counts" in body, "the counters were left stale"
     assert "stacos:modal-close" in response.headers.get("HX-Trigger", "")
 
@@ -241,9 +237,7 @@ def test_answering_is_audited(
     _answer(signed_in, unconfirmed, "yes")
 
     with platform_scope(reason="test"):
-        entries = AuditLog.objects.filter(
-            object_type="tenancy.EntityProfile", action="UPDATE"
-        )
+        entries = AuditLog.objects.filter(object_type="tenancy.EntityProfile", action="UPDATE")
         assert entries.exists(), "changing the compliance profile left no audit trail"
         assert any(fact_key in (entry.after or {}) for entry in entries), (
             f"no audit entry names {fact_key}"

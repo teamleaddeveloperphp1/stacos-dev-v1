@@ -101,9 +101,7 @@ def invite(request: HttpRequest) -> HttpResponse:
     return oob(
         request,
         Fragment("tenancy/_fragments/team_body.html", _context(request)),
-        toast=Toast(
-            _("Invitation sent to %(email)s.") % {"email": invitation.email}
-        ),
+        toast=Toast(_("Invitation sent to %(email)s.") % {"email": invitation.email}),
     )
 
 
@@ -111,9 +109,7 @@ def invite(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["POST"])
 def invite_revoke(request: HttpRequest, pk: str) -> HttpResponse:
     """Withdraw an invitation. 404 on anything out of reach, as everywhere."""
-    invitation = TenantInvitation.objects.filter(
-        pk=pk, status=TenantInvitation.Status.SENT
-    ).first()
+    invitation = TenantInvitation.objects.filter(pk=pk, status=TenantInvitation.Status.SENT).first()
     if invitation is None:
         raise Http404
 

@@ -14,4 +14,7 @@ urlpatterns = [
     path("step-up/", views.step_up, name="step_up"),
     path("security/", views.security_settings, name="security"),
     path("security/revoke-all/", views.revoke_devices, name="revoke_devices"),
+    # Under /auth/, not /app/: an invitee has no membership yet, and everything
+    # behind /app/ redirects somebody in that position into organisation setup.
+    path("invite/<str:token>/", views.accept_invitation, name="accept_invitation"),
 ]

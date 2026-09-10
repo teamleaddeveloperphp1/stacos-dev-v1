@@ -511,7 +511,7 @@ def test_every_download_link_opts_out_of_boosting() -> None:
             offenders.append(f"{path}:{line}")
 
     assert not offenders, (
-        f'These download links are boosted and will render the file as text '
+        f"These download links are boosted and will render the file as text "
         f'instead of saving it: {offenders}. Add hx-boost="false".'
     )
 

@@ -344,9 +344,7 @@ def test_a_forged_link_is_refused_the_same_way(link: tuple[ResponderToken, str])
     assert response.status_code == 404
 
 
-def test_reissuing_revokes_the_previous_link(
-    external: InformationRequest, org_owner: User
-) -> None:
+def test_reissuing_revokes_the_previous_link(external: InformationRequest, org_owner: User) -> None:
     """Otherwise "send it again" quietly leaves two working keys in two inboxes."""
     with platform_scope(reason="test"):
         _first, first_raw = issue_responder_token(external, actor=org_owner)

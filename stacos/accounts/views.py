@@ -15,6 +15,8 @@ Proving a Google identity proves neither the email nor the phone STACOS holds.
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import structlog
 from django.contrib import messages
 from django.contrib.auth import login, logout
@@ -69,7 +71,15 @@ def register(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect(SAFE_REDIRECT_DEFAULT)
 
-    form = RegistrationForm(request.POST or None)
+    # An invitation link parks the invited address here, so somebody arriving
+    # from one does not have to retype it — and, more usefully, cannot mistype it
+    # into an account the invitation will not match.
+    initial = {}
+    invited_email = request.GET.get("email", "").strip()
+    if invited_email:
+        initial["email"] = invited_email
+
+    form = RegistrationForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
         user = User.objects.create_user(
             email=form.cleaned_data["email"],
@@ -98,7 +108,69 @@ def register(request: HttpRequest) -> HttpResponse:
             request.session[SESSION_PENDING_KEY] = str(verification.id)
             return redirect(reverse("accounts:verify"))
 
-    return render(request, "accounts/register.html", {"form": form})
+    return render(request, "accounts/register.html", {"form": form, "next": _safe_next(request)})
+
+
+#: Where an invitation link parks itself while the invitee signs up or signs in.
+SESSION_INVITATION_KEY = "stacos_pending_invitation"
+
+
+@public_view
+def accept_invitation(request: HttpRequest, token: str) -> HttpResponse:
+    """Join the organisation somebody invited you to.
+
+    Three states arrive here and the flow has to handle all of them, because the
+    common case is the one with no account:
+
+    * **Signed in and verified** — join, and land inside the organisation.
+    * **Signed in but not verified** — the verification gate has already sent
+      them elsewhere; they come back here afterwards.
+    * **Not signed in** — the token is parked on the session and they are sent to
+      sign up, with the invited address prefilled. After the dual OTP they are
+      returned to this URL and the first branch runs.
+
+    Nothing here weakens verification. The membership is created by
+    ``invitations.accept_invitation`` only once ``request.user`` is a real,
+    fully verified user — an invitation is permission to join, not proof of
+    identity, and treating a clicked link as both is how an invited address gets
+    claimed by whoever the link was forwarded to.
+
+    Lives under ``/auth/`` rather than ``/app/``, so the organisation gate does
+    not redirect the very people this exists for — an invitee has no membership
+    yet, by definition.
+    """
+    from stacos.tenancy.invitations import accept_invitation as bind_membership
+    from stacos.tenancy.invitations import resolve_invitation
+    from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
+
+    invitation = resolve_invitation(token)
+    if invitation is None:
+        # Expired, withdrawn and forged are one answer. Distinguishing them tells
+        # a guesser which invitations used to exist.
+        return render(request, "accounts/invitation_invalid.html", status=404)
+
+    if not request.user.is_authenticated:
+        request.session[SESSION_INVITATION_KEY] = token
+        target = reverse("accounts:register")
+        return redirect(f"{target}?next={quote(request.path)}&email={quote(invitation.email)}")
+
+    if not request.session.get(SESSION_VERIFIED_KEY):
+        # The gate will bounce them to the OTP screen and back here. Reaching
+        # this branch at all means they came in on a session that has not been
+        # verified on this device.
+        return redirect(f"{reverse('accounts:verify')}?next={quote(request.path)}")
+
+    membership = bind_membership(invitation, user=request.user)
+
+    request.session.pop(SESSION_INVITATION_KEY, None)
+    request.session[SESSION_TENANT_KEY] = str(membership.tenant_id)
+    request.session.modified = True
+
+    messages.success(
+        request,
+        _("You have joined %(name)s.") % {"name": invitation.tenant.name},
+    )
+    return redirect(SAFE_REDIRECT_DEFAULT)
 
 
 # ---------------------------------------------------------------------------

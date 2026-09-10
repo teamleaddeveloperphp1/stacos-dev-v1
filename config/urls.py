@@ -26,8 +26,8 @@ from django.views.generic.base import RedirectView
 
 from stacos.core.views import healthz
 from stacos.marketing.sitemaps import SITEMAPS
-from stacos.requests.urls import responder_urlpatterns
 from stacos.marketing.views import robots_txt
+from stacos.requests.urls import responder_urlpatterns
 
 urlpatterns = [
     # --- Operations ---
