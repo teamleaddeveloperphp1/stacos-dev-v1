@@ -27,7 +27,6 @@ from stacos.core.scope import tenant_context
 from stacos.engine.rules import V, evaluate
 from stacos.engine.types import DefinitionSnapshot
 from stacos.jurisdictions.facts import REGISTRY
-from stacos.jurisdictions.models import JurisdictionPack
 from stacos.obligations.models import MaterialisationRun, ObligationInclusion
 from stacos.obligations.services import materialise
 from stacos.tenancy.models import (
@@ -36,12 +35,11 @@ from stacos.tenancy.models import (
     EntityPremises,
     EntityProfile,
     EntityRegistration,
-    Membership,
-    Role,
     Tenant,
 )
 from stacos.tenancy.onboarding.questions import Question, rank_questions
 from stacos.tenancy.onboarding.state import OnboardingDraft
+from stacos.tenancy.services import provision_tenant
 
 __all__ = [
     "DraftPreview",
@@ -214,12 +212,25 @@ def suggest_packs(draft: OnboardingDraft, preview: DraftPreview) -> list[PackSug
 
 
 @transaction.atomic
-def commit_draft(draft: OnboardingDraft, *, user: User, as_of: date) -> Entity:
+def commit_draft(
+    draft: OnboardingDraft,
+    *,
+    user: User,
+    as_of: date,
+    tenant: Tenant | None = None,
+) -> Entity:
     """Turn the draft into real rows, and build the calendar before returning.
 
     One transaction, and the ordering matters: the tenant has to exist before a
     scope can be opened, and the scope has to be open before anything
     tenant-scoped is written.
+
+    ``tenant`` names an organisation that already exists — which is the ordinary
+    case now that sign-up provisions one from the Organisation Name. Running the
+    wizard then adds an entity to the workspace the user already owns; creating a
+    second organisation for their first entity is the bug that argument exists to
+    prevent. Left ``None``, one is provisioned here, which is the path for
+    somebody adding a second organisation from the tenant switcher.
 
     Materialisation runs synchronously at the end rather than being queued. The
     user has just spent five minutes answering questions; showing them the answer
@@ -231,37 +242,10 @@ def commit_draft(draft: OnboardingDraft, *, user: User, as_of: date) -> Entity:
     if not draft.is_ready_to_commit:
         raise ValueError("The draft needs at least a name, a legal form and a state.")
 
-    tenant = Tenant.objects.create(
-        name=draft.name,
-        slug=_unique_slug(draft.name),
-        type=Tenant.Type.ORGANISATION,
-        status=Tenant.Status.TRIAL,
-        country=draft.country,
-        jurisdiction_pack=JurisdictionPack.objects.filter(country=draft.country).first(),
-    )
+    if tenant is None:
+        tenant = provision_tenant(draft.name, owner=user, country=draft.country, reason="onboarding")
 
-    role = Role.objects.filter(
-        code="org-owner", tenant__isnull=True, tenant_type=Tenant.Type.ORGANISATION
-    ).first()
-    if role is None:
-        # Loud, not silent. A membership with no role is a user who can sign in
-        # and do nothing, and the cause would be invisible from the symptom.
-        raise RuntimeError(
-            "Missing system role 'org-owner'. Run manage.py sync_system_roles first."
-        )
-
-    # Not platform_scope: that would need an allowlist entry and write an audit
-    # row for a tenant this user is about to own outright.
     with tenant_context(tenant_ids={tenant.id}, reason="onboarding"):
-        Membership.objects.create(
-            tenant=tenant,
-            user=user,
-            role=role,
-            status=Membership.Status.ACTIVE,
-            all_entities=True,
-            joined_at=timezone.now(),
-        )
-
         entity = Entity(
             tenant=tenant,
             name=draft.name,
@@ -312,7 +296,8 @@ def commit_draft(draft: OnboardingDraft, *, user: User, as_of: date) -> Entity:
         _write_fact_history(tenant, entity, draft.answers, user=user, as_of=as_of)
         _adopt_packs(tenant, entity, draft.packs, user=user)
 
-        record_event(action=AuditAction.CREATE, actor=user, obj=tenant)
+        # The tenant's own CREATE row is written by `provision_tenant`, which is
+        # the only thing that creates one.
         record_event(action=AuditAction.CREATE, actor=user, obj=entity)
 
         materialise(
@@ -402,16 +387,6 @@ def _adopt_packs(tenant: Tenant, entity: Entity, packs: tuple[str, ...], *, user
                     "added_by": user,
                 },
             )
-
-
-def _unique_slug(name: str) -> str:
-    base = slugify(name)[:50] or "organisation"
-    slug = base
-    suffix = 2
-    while Tenant.objects.filter(slug=slug).exists():
-        slug = f"{base}-{suffix}"[:60]
-        suffix += 1
-    return slug
 
 
 def _short_code(name: str) -> str:

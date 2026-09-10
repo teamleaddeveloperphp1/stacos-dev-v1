@@ -109,3 +109,81 @@ def test_the_switcher_costs_no_extra_query(signed_in: Client, django_assert_num_
     assert len(membership_reads) <= 1, (
         f"the switcher issued its own membership query: {len(membership_reads)} reads"
     )
+
+
+# ---------------------------------------------------------------------------
+# Actually switching
+#
+# Listing the organisations was only half of it. Choosing one silently failed:
+# `switch_tenant` read the target membership through `objects_unscoped`, which
+# lifts the ORM's tenant filter and nothing else, while PostgreSQL's Row-Level
+# Security was still pointed at the tenant the user was already in. The row for
+# the tenant being switched *to* is by definition outside that set, so the lookup
+# found nothing and told a genuine member of both that they were not a member of
+# the second. `rls_bootstrap` is what the login-time listing has always used.
+# ---------------------------------------------------------------------------
+
+
+def _also_a_member_of(user: User, tenant: Tenant, status: str = Membership.Status.ACTIVE) -> None:
+    with platform_scope(reason="test-fixture"):
+        existing = Membership.objects_unscoped.filter(user=user).first()
+        assert existing is not None
+        Membership.objects.create(
+            tenant=tenant, user=user, role=existing.role, status=status
+        )
+
+
+def test_switching_to_another_organisation_actually_switches(
+    client: Client, org_owner: User, org: Tenant, other_org: Tenant
+) -> None:
+    _also_a_member_of(org_owner, other_org)
+    signed_in = sign_in(client, org_owner)
+
+    # Start in the first organisation, which is the one the resolver falls back to.
+    assert signed_in.get(reverse("app:dashboard")).wsgi_request.tenant == org
+
+    response = signed_in.post(reverse("app:switch_tenant"), {"tenant_id": str(other_org.id)})
+    assert response.status_code == 302
+
+    landed = signed_in.get(reverse("app:dashboard"))
+    assert landed.wsgi_request.tenant == other_org, "the switch bounced back to the current tenant"
+
+
+def test_switching_over_htmx_tells_the_browser_to_navigate(
+    client: Client, org_owner: User, other_org: Tenant
+) -> None:
+    """A tenant switch changes every part of the shell, so it is a navigation."""
+    _also_a_member_of(org_owner, other_org)
+    signed_in = sign_in(client, org_owner)
+
+    response = signed_in.post(
+        reverse("app:switch_tenant"),
+        {"tenant_id": str(other_org.id)},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 204
+    assert response["HX-Redirect"] == "/app/"
+
+
+def test_switching_to_a_suspended_membership_is_refused(
+    client: Client, org_owner: User, org: Tenant, other_org: Tenant
+) -> None:
+    """The bootstrap lifts RLS; it does not lift the status filter."""
+    _also_a_member_of(org_owner, other_org, status=Membership.Status.SUSPENDED)
+    signed_in = sign_in(client, org_owner)
+
+    signed_in.post(reverse("app:switch_tenant"), {"tenant_id": str(other_org.id)})
+
+    assert signed_in.get(reverse("app:dashboard")).wsgi_request.tenant == org
+
+
+def test_switching_to_a_tenant_you_are_not_in_is_refused(
+    client: Client, org_owner: User, org: Tenant, other_org: Tenant
+) -> None:
+    """A forged id in the form. The lookup is anchored on `user`, so it finds nothing."""
+    signed_in = sign_in(client, org_owner)
+
+    signed_in.post(reverse("app:switch_tenant"), {"tenant_id": str(other_org.id)})
+
+    assert signed_in.get(reverse("app:dashboard")).wsgi_request.tenant == org

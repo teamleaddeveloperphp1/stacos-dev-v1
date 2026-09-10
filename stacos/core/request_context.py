@@ -17,7 +17,7 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Iterator
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 from django.http import HttpRequest
@@ -25,6 +25,7 @@ from django.http import HttpRequest
 __all__ = [
     "RequestMeta",
     "bind_request_meta",
+    "bind_user_label",
     "clear_request_meta",
     "client_ip",
     "current_request_meta",
@@ -73,6 +74,19 @@ def clear_request_meta() -> None:
 
 def bind_request_meta(meta: RequestMeta) -> Token[RequestMeta]:
     return _current.set(meta)
+
+
+def bind_user_label(label: str) -> None:
+    """Name the actor for the audit trail when there is no ``User`` row.
+
+    An outside contact answering through a responder link is a real actor with
+    real consequences — they supplied the bank statement the filing rests on —
+    and ``record_event`` would otherwise write that row with no actor at all.
+    ``AuditLog.actor`` stays null because there is no user; ``actor_label`` says
+    who it was.
+    """
+    current = _current.get()
+    _current.set(replace(current, user_label=label[:255]))
 
 
 @contextlib.contextmanager

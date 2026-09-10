@@ -182,10 +182,17 @@ def document_download(request: HttpRequest, pk: str) -> HttpResponseBase:
         # 409 for "not yet" and 403 for "never": the first invites a retry and
         # the second forecloses it, and a client polling a quarantined file
         # forever is a support call nobody needs.
-        return HttpResponse(
-            document.download_refusal,
+        #
+        # Rendered as a page rather than returned as text/plain. This is a real
+        # navigation — the download links are deliberately not boosted — so a
+        # bare string arrives as a white screen of unstyled text with no way
+        # back, which is indistinguishable to the user from the download bug
+        # this endpoint was fixed for.
+        return render(
+            request,
+            "vault/refused.html",
+            {"document": document, "reason": document.download_refusal},
             status=403 if document.is_quarantined else 409,
-            content_type="text/plain; charset=utf-8",
         )
 
     record_download(

@@ -239,11 +239,16 @@ def profitability(request: HttpRequest) -> HttpResponse:
     """
     since = timezone.localdate() - timedelta(days=int(request.GET.get("days", 90) or 90))
 
+    # `total_hours`, not `hours`. An annotation named after the column it
+    # aggregates shadows that column for every later annotation in the same
+    # `.annotate()` call, and `billable_hours` then resolves `Sum("hours")`
+    # against the aggregate rather than the field: "Cannot compute Sum('hours'):
+    # 'hours' is an aggregate". The page raised on every request.
     rows = (
         TimeEntry.objects.filter(worked_on__gte=since)
         .values("client_tenant__id", "client_tenant__name")
         .annotate(
-            hours=Sum("hours"),
+            total_hours=Sum("hours"),
             billable_hours=Sum("hours", filter=Q(is_billable=True)),
             value=Sum(
                 F("hours") * F("rate"),
@@ -264,8 +269,8 @@ def profitability(request: HttpRequest) -> HttpResponse:
         {
             **row,
             "recovery": (
-                (row["billable_hours"] or Decimal("0")) / row["hours"] * 100
-                if row["hours"]
+                (row["billable_hours"] or Decimal("0")) / row["total_hours"] * 100
+                if row["total_hours"]
                 else Decimal("0")
             ),
         }

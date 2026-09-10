@@ -407,3 +407,143 @@ def test_no_links_point_at_a_bare_fragment() -> None:
         f"Links pointing at a bare fragment: {offenders}. Either wire them up or "
         f"remove them — a button that does nothing is worse than no button."
     )
+
+
+# ===========================================================================
+# 7. The sidebar's active item
+#
+# The highlight is applied by `syncNav()` in assets/js/app.js, from the prefix
+# each link declares. Two things have to hold for that to work, and neither is
+# visible from the JavaScript alone: every nav link has to declare a prefix, and
+# every prefix has to be a URL this project actually serves. Both are checked
+# here because the JavaScript is not in this suite.
+# ===========================================================================
+
+_NAV_LINK = re.compile(r"<a\b[^>]*class=\"app-nav__link\"[^>]*>", re.DOTALL)
+
+
+def _shell_source() -> str:
+    return (TEMPLATES_DIR / "layouts" / "app_shell.html").read_text(encoding="utf-8")
+
+
+def test_every_sidebar_link_declares_the_prefix_it_owns() -> None:
+    """A link with no `data-nav-match` can never be highlighted.
+
+    It is a silent failure: the page loads, the link works, and the sidebar just
+    never marks it — which is exactly the state `practice:profitability` and
+    `accounts:security` were already in before the highlight moved client-side.
+    """
+    links = _NAV_LINK.findall(_shell_source())
+    assert links, "no .app-nav__link elements found — has the shell been restructured?"
+
+    missing = [link for link in links if "data-nav-match" not in link]
+
+    assert not missing, (
+        f"{len(missing)} sidebar links declare no data-nav-match and can never be "
+        f"highlighted: {missing}"
+    )
+
+
+def test_the_shell_does_not_also_compute_the_active_item() -> None:
+    """One rule, in one place.
+
+    A server-rendered `aria-current` and the client-side one drifted apart the
+    moment they used different comparisons — which is what had happened: some
+    links compared by `url_name`, some by `namespace`, two not at all. The
+    server-side copy is gone and must stay gone.
+    """
+    source = _shell_source()
+    markup = re.sub(r"\{% comment %\}.*?\{% endcomment %\}", "", source, flags=re.DOTALL)
+
+    assert 'aria-current="page"' not in markup, (
+        "The app shell renders aria-current again. syncNav() in assets/js/app.js "
+        "is the single rule; a second copy here is how the highlight goes stale."
+    )
+
+
+def test_every_declared_nav_prefix_is_a_real_url() -> None:
+    """A prefix that resolves to nothing highlights nothing, forever."""
+    from django.urls import Resolver404, resolve
+
+    unresolvable: list[str] = []
+    for link in _NAV_LINK.findall(_shell_source()):
+        match = re.search(r'data-nav-match="([^"]+)"', link)
+        if match is None:
+            continue
+        try:
+            resolve(match.group(1))
+        except Resolver404:
+            unresolvable.append(match.group(1))
+
+    assert not unresolvable, (
+        f"These data-nav-match prefixes resolve to no view: {unresolvable}. "
+        f"A prefix nothing serves can never match the address bar."
+    )
+
+
+# ===========================================================================
+# 8. Downloads
+# ===========================================================================
+
+
+def test_every_download_link_opts_out_of_boosting() -> None:
+    """A boosted download is not a download.
+
+    The shell boosts every link inside it, so HTMX fetches the URL with an XHR.
+    Browsers honour `Content-Disposition` only on real navigations, so the
+    response is not saved — it is swapped into `#main`, and the user sees the
+    raw contents of their PDF as text. The view is correct; the link is what
+    decides.
+
+    Three separate templates offer a download and all three had the same bug, so
+    this is checked rather than remembered.
+    """
+    offenders: list[str] = []
+    for path in _template_paths():
+        source = (TEMPLATES_DIR / path).read_text(encoding="utf-8")
+        for tag in re.finditer(r"<a\b[^<>]*>", source, re.DOTALL):
+            markup = tag.group(0)
+            if "vault:download" not in markup:
+                continue
+            if 'hx-boost="false"' in markup:
+                continue
+            line = source.count("\n", 0, tag.start()) + 1
+            offenders.append(f"{path}:{line}")
+
+    assert not offenders, (
+        f'These download links are boosted and will render the file as text '
+        f'instead of saving it: {offenders}. Add hx-boost="false".'
+    )
+
+
+def test_no_form_or_link_replaces_the_whole_body() -> None:
+    """`hx-target="body"` destroys the shell it is swapping inside.
+
+    Everything the shell owns — Alpine's state, the sidebar, `#modal-container`,
+    `#toast-stack`, the palette — is re-created from the response, and anything
+    the response does not contain simply disappears. It is only ever reached for
+    by a view that has no fragment path, which is a bug to fix at the view rather
+    than to work around here.
+    """
+    offenders: list[str] = []
+    for path in _template_paths():
+        source = (TEMPLATES_DIR / path).read_text(encoding="utf-8")
+        # Comments are blanked rather than removed, so line numbers still point
+        # at the offending line. A comment explaining why this attribute is gone
+        # is not an occurrence of it.
+        markup = re.sub(
+            r"\{% comment %\}.*?\{% endcomment %\}",
+            lambda match: re.sub(r"[^\n]", " ", match.group(0)),
+            source,
+            flags=re.DOTALL,
+        )
+        offenders += [
+            f"{path}:{i + 1}"
+            for i, line in enumerate(markup.splitlines())
+            if re.search(r"""hx-target=["']body["']""", line)
+        ]
+
+    assert not offenders, (
+        f"These replace the entire document body: {offenders}. Give the view a "
+        f"fragment render path instead — see stacos.core.htmx."
+    )

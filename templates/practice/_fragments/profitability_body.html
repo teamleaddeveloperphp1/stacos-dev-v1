@@ -47,7 +47,7 @@
         {% for row in clients %}
           <tr>
             <td>{{ row.client_tenant__name|default:"—" }}</td>
-            <td class="num">{{ row.hours|default:0 }}</td>
+            <td class="num">{{ row.total_hours|default:0 }}</td>
             <td class="num">{{ row.billable_hours|default:0 }}</td>
             <td class="num">
               {# Low recovery is where a fixed fee is quietly losing money. #}

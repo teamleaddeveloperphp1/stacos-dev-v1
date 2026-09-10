@@ -18,12 +18,30 @@
       <div class="text-muted small">{{ obligation.scope_label }}</div>
     {% endif %}
     {% if not obligation.confirmed %}
-      {# UNKNOWN applicability. Materialised anyway and flagged, because silently #}
-      {# dropping an obligation is what gets a client penalised.                  #}
-      <span class="badge-soft badge-soft--attention"
-            title="{% translate 'We think this may apply. Confirm a few details and we will be sure.' %}">
-        {% translate "Confirm" %}
-      </span>
+      {% comment %}
+        UNKNOWN applicability. Materialised anyway and flagged, because silently
+        dropping an obligation is what gets a client penalised.
+
+        A button only when there is a fact to ask about. An obligation somebody
+        opted into by hand is also unconfirmed — the rule did not decide it, a
+        person did — and it carries no `missing_facts`, so there is no question
+        and it stays a plain badge. Offering an action that opens an empty modal
+        would be worse than the badge that did nothing.
+      {% endcomment %}
+      {% if obligation.missing_facts %}
+        <button type="button" class="badge-soft badge-soft--attention badge-soft--action"
+                hx-get="{% url 'compliance:confirm' obligation.pk %}"
+                hx-target="#modal-container"
+                hx-swap="innerHTML"
+                title="{% translate 'We think this may apply. Answer one question and we will be sure.' %}">
+          {% translate "Confirm" %}
+        </button>
+      {% else %}
+        <span class="badge-soft badge-soft--attention"
+              title="{% translate 'Added by hand, so we did not decide this one.' %}">
+          {% translate "Confirm" %}
+        </span>
+      {% endif %}
     {% endif %}
   </td>
   <td class="text-muted small">{{ obligation.entity.name }}</td>

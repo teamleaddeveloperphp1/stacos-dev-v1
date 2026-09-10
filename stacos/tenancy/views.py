@@ -25,6 +25,7 @@ from stacos.core.audit import diff_fields, record_event
 from stacos.core.htmx import Fragment, HtmxFragmentMixin, Toast, oob
 from stacos.core.models import AuditAction
 from stacos.core.permissions import RequirePermissionMixin, require_permission
+from stacos.core.rls import rls_bootstrap
 from stacos.core.typing import current_user
 from stacos.tenancy.forms import EntityForm, RegistrationForm
 from stacos.tenancy.models import Entity, EntityProfile, Membership
@@ -142,15 +143,30 @@ def switch_tenant(request: HttpRequest) -> HttpResponse:
     Filtered by ``user`` so a forged tenant id in the form cannot reach a tenant
     the user is not a member of — the switcher is a convenience, never an
     authorisation boundary.
+
+    ``rls_bootstrap`` is load-bearing, and its absence is why switching appeared
+    to be broken rather than merely restricted. ``objects_unscoped`` lifts the
+    *ORM* tenant filter and nothing else; PostgreSQL's Row-Level Security is
+    still pointed at the tenant the user is currently in, because
+    ``ScopeMiddleware`` published that set for this transaction. The membership
+    row being switched *to* therefore belongs to a tenant the policy excludes,
+    the lookup returns nothing, and a user who genuinely belongs to both
+    organisations is told they are not a member of the second one. Both layers
+    have to be satisfied, which is the whole point of having two.
+
+    The transaction the setting is local to is already open — ``ScopeMiddleware``
+    opened it. Same bootstrap as ``scope_resolver._select_membership`` and the
+    mobile ``/me/`` endpoint, and for the same reason.
     """
     tenant_id = request.POST.get("tenant_id", "")
-    membership = (
-        Membership.objects_unscoped.filter(
-            user=request.user, tenant_id=tenant_id, status=Membership.Status.ACTIVE
+    with rls_bootstrap():
+        membership = (
+            Membership.objects_unscoped.filter(
+                user=request.user, tenant_id=tenant_id, status=Membership.Status.ACTIVE
+            )
+            .select_related("tenant")
+            .first()
         )
-        .select_related("tenant")
-        .first()
-    )
 
     if membership is None:
         messages.error(request, _("You are not a member of that organisation."))

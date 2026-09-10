@@ -103,6 +103,12 @@ class PlannedInstance:
     #: TRUE means every condition was decided; UNKNOWN means a fact is missing
     #: and the user is asked to confirm rather than being told nothing applies.
     confirmed: bool = True
+    #: Which facts were absent *and* would have changed the answer. Carried out
+    #: of the engine rather than discarded with the verdict, because it is the
+    #: difference between a badge that says "confirm" and one that can say what
+    #: to confirm — the register had the flag and not the reason, so the badge
+    #: invited an action the product could not offer.
+    missing_facts: tuple[str, ...] = ()
     reasons: tuple[str, ...] = ()
     needs_input: str = ""
 
@@ -126,6 +132,10 @@ class ExistingInstance:
     #: UNKNOWN into a definite answer, and the "confirm this" flag has to go with
     #: it or the user is asked to confirm something already settled.
     confirmed: bool = True
+    #: The facts still blocking that decision. Compared like ``confirmed``, so
+    #: answering one of two open questions narrows the prompt instead of leaving
+    #: it asking for something already given.
+    missing_facts: tuple[str, ...] = ()
 
     @property
     def is_protected(self) -> bool:
@@ -466,6 +476,14 @@ def plan(
                     # An opt-in is never "confirmed": the rule did not decide
                     # this, a person did, and the row has to say which.
                     confirmed=verdict.result is V.TRUE and not forced,
+                    # Only when the rule is genuinely undecided. An opt-in is
+                    # unconfirmed because a person chose it, and there is nothing
+                    # to ask about that.
+                    missing_facts=(
+                        tuple(sorted(verdict.missing_facts))
+                        if verdict.result is V.UNKNOWN
+                        else ()
+                    ),
                     reasons=(
                         (_OPT_IN_REASON, *verdict.reasons())
                         if forced and verdict.result is not V.TRUE
@@ -530,6 +548,12 @@ def _diff(
 
         if current.confirmed != planned.confirmed:
             changes["confirmed"] = (current.confirmed, planned.confirmed)
+
+        if tuple(current.missing_facts) != tuple(planned.missing_facts):
+            changes["missing_facts"] = (
+                tuple(current.missing_facts),
+                tuple(planned.missing_facts),
+            )
 
         if changes:
             to_update.append(InstanceDelta(identity=identity, changes=changes))

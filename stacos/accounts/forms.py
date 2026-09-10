@@ -47,12 +47,38 @@ class _CrispyForm(forms.Form):
 
 
 class RegistrationForm(_CrispyForm):
-    """Sign-up. Collects both channels up front, because both must be verified."""
+    """Sign-up. Collects both channels up front, because both must be verified.
+
+    Two numbers, not one. ``phone`` is the WhatsApp channel the second
+    verification code goes to and is a hard requirement (``CLAUDE.md`` rule 5);
+    ``mobile`` is the ordinary contact number, which for a great many people is a
+    different number and was previously impossible to record.
+
+    ``organisation_name`` is optional and is what turns a bare personal login
+    into a working workspace. It is deliberately *not* acted on here — the tenant
+    is created once both channels are proven, so an abandoned sign-up leaves no
+    organisation behind. See ``accounts.views._complete_verification``.
+    """
 
     submit_label = _("Create account")
 
-    full_name = forms.CharField(label=_("Full name"), max_length=200)
+    first_name = forms.CharField(label=_("First name"), max_length=100)
+    last_name = forms.CharField(label=_("Last name"), max_length=100)
     email = forms.EmailField(label=_("Work email"))
+    mobile = forms.CharField(
+        label=_("Mobile number"),
+        max_length=20,
+        help_text=_("Include the country code if outside India."),
+    )
+    organisation_name = forms.CharField(
+        label=_("Organisation name"),
+        max_length=200,
+        required=False,
+        help_text=_(
+            "Optional. Give it and we create your organisation and make you its "
+            "owner. Leave it blank if you are joining one somebody else set up."
+        ),
+    )
     phone = forms.CharField(
         label=_("WhatsApp number"),
         max_length=20,
@@ -62,6 +88,41 @@ class RegistrationForm(_CrispyForm):
         ),
     )
     password = forms.CharField(label=_("Password"), widget=forms.PasswordInput, min_length=10)
+    confirm_password = forms.CharField(
+        label=_("Confirm password"),
+        widget=forms.PasswordInput,
+        help_text=_("Type it again. A typo here locks you out of the account you just made."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Declaration order already matches, but stating the layout pins it: the
+        # WhatsApp number sits immediately below the organisation name, and a
+        # field added later cannot silently land in the middle of the sequence.
+        self.helper.layout = Layout(
+            "first_name",
+            "last_name",
+            "email",
+            "mobile",
+            "organisation_name",
+            "phone",
+            "password",
+            "confirm_password",
+        )
+
+    def clean_mobile(self) -> str:
+        return normalise_phone(self.cleaned_data["mobile"])
+
+    def clean_organisation_name(self) -> str:
+        return self.cleaned_data["organisation_name"].strip()
+
+    def clean(self) -> dict[str, Any]:
+        data = super().clean() or self.cleaned_data
+        password = data.get("password")
+        confirmation = data.get("confirm_password")
+        if password and confirmation and password != confirmation:
+            self.add_error("confirm_password", _("The two passwords do not match."))
+        return data
 
     def clean_email(self) -> str:
         email = self.cleaned_data["email"].lower().strip()

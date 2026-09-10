@@ -28,9 +28,16 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from stacos.core.ids import uuid7
 from stacos.core.models import SoftDeleteModel, TenantScopedModel
 
-__all__ = ["InformationRequest", "RequestEvent", "RequestItem", "RequestState"]
+__all__ = [
+    "InformationRequest",
+    "RequestEvent",
+    "RequestItem",
+    "RequestState",
+    "ResponderToken",
+]
 
 
 class RequestState(models.TextChoices):
@@ -250,3 +257,81 @@ class RequestEvent(TenantScopedModel):
 
     def __str__(self) -> str:
         return f"{self.kind} at {self.occurred_at:%Y-%m-%d %H:%M}"
+
+
+class ResponderToken(models.Model):
+    """A link that lets one named outsider answer one request, and nothing else.
+
+    A practice routinely needs something from a bookkeeper at a client who will
+    never have a STACOS account. The product already modelled that — a request
+    carries ``assigned_email`` for exactly this — but the road stopped there:
+    ``services.notify`` returns early for such a recipient with a comment saying
+    the email "goes out through the request's own delivery path", and no such
+    path existed. The result was a request that could be addressed to somebody
+    and never answered by them.
+
+    **Deliberately not tenant-scoped**, the same exception and for the same
+    reason as ``engagements.EngagementInvitation``: the holder is not a member of
+    the tenant and has no scope of their own, so a tenant column would be a
+    filter nothing could satisfy. Access is controlled by a single hashed token,
+    an expiry, and the fact that the token names exactly one request. Listed in
+    ``core.checks`` beside the invitation.
+
+    **The token is never stored.** Only its HMAC lives here, so a database dump
+    does not hand anybody a working link — the same treatment as a trusted-device
+    secret and an engagement invitation.
+
+    What it grants is stated in one place, ``services.responder_scope``: read the
+    items of this one request, answer them, attach files to them. Not the other
+    requests of the same entity, not the vault, not the calendar.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", _("Active")
+        USED = "USED", _("Used")
+        REVOKED = "REVOKED", _("Revoked")
+
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
+
+    request = models.ForeignKey(
+        InformationRequest, on_delete=models.CASCADE, related_name="responder_tokens"
+    )
+    #: Who the link was sent to. Not a credential — anybody holding the link can
+    #: use it — but it is what the audit trail names as the actor, and what makes
+    #: revoking the right link possible.
+    email = models.EmailField()
+
+    token_hash = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.ACTIVE)
+
+    expires_at = models.DateTimeField()
+    #: Bumped on every use rather than set once: the link stays usable until it
+    #: expires, because "upload the bank statement, oh and the TDS working too"
+    #: is one conversation and a single-use link makes it two support calls.
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    use_count = models.PositiveIntegerField(default=0)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="responder_tokens_issued",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    objects = models.Manager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["request", "status"], name="rfitoken_request_idx"),
+            models.Index(fields=["expires_at"], name="rfitoken_expiry_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Responder link for {self.email}"
+
+    @property
+    def is_live(self) -> bool:
+        return self.status == self.Status.ACTIVE and timezone.now() < self.expires_at

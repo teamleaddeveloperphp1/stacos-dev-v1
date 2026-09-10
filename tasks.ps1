@@ -102,7 +102,40 @@ Import-DotEnv
 
 switch ($Task) {
     'run' {
-        uv run python manage.py runserver 0.0.0.0:8000 @Rest
+        <#
+        The dev server plus the asset watchers, because they are not optional.
+
+        `runserver` reloads Python, but nothing rebuilds `static/css/app.css` or
+        `static/js/app.js` -- so a styling change looks like it did nothing until
+        somebody remembers to run `tasks.ps1 watch` in a second terminal, and the
+        browser quietly renders whatever was compiled last. `start.ps1` already
+        keeps an `assets` service alive for exactly this reason; `run` was the
+        path that missed it.
+
+        Build once first so the very first page load is not unstyled, then leave
+        sass and esbuild watching for as long as this server runs.
+        #>
+        $assets = $null
+        if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            Write-Host 'npm is not on PATH; asset watchers not started.' -ForegroundColor Yellow
+        } elseif (-not (Test-Path 'node_modules')) {
+            Write-Host 'node_modules is missing; run `npm install` first.' -ForegroundColor Yellow
+        } else {
+            Invoke-Gate 'asset build' { npm run build }
+            $assets = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'npm', 'run', 'dev' -PassThru -WindowStyle Hidden
+            Write-Host 'Watching assets/scss and assets/js.' -ForegroundColor Cyan
+        }
+
+        try {
+            uv run python manage.py runserver 0.0.0.0:8000 @Rest
+        } finally {
+            # taskkill /T rather than Stop-Process: npm spawns sass and esbuild as
+            # children, and killing only the parent leaves both watching files and
+            # holding the output open. Same reasoning as scripts/_stack.ps1.
+            if ($assets -and -not $assets.HasExited) {
+                & cmd.exe /c "taskkill /PID $($assets.Id) /T /F >nul 2>&1"
+            }
+        }
     }
 
     # `run` is the server alone, in this terminal. `start` is the whole stack --
@@ -203,6 +236,13 @@ switch ($Task) {
         # behaviour to production while the source in review looks correct.
         Invoke-Gate 'js build' { npm run build:js }
 
+        # And then prove it was committed. Building it here makes the *tests*
+        # correct while leaving the repository holding a stale bundle -- and the
+        # repository is what deploys. `git diff --exit-code` is the only thing
+        # that notices. `static/css/` is gitignored, so this applies to the
+        # script bundle alone.
+        Invoke-Gate 'js bundle committed' { git diff --exit-code -- static/js/app.js }
+
         Invoke-Gate 'pytest' { uv run pytest }
 
         Write-Host "`nAll gates passed." -ForegroundColor Green
@@ -235,8 +275,8 @@ STACOS task runner
     (.\tasks.ps1 start/stop/status are aliases; extra arguments pass through)
 
   One process at a time, in this terminal
-    .\tasks.ps1 run                 Django dev server on :8000
-    .\tasks.ps1 watch               Rebuild CSS/JS on change
+    .\tasks.ps1 run                 Django dev server on :8000, watching assets
+    .\tasks.ps1 watch               Rebuild CSS/JS on change (watchers alone)
     .\tasks.ps1 worker              Celery worker (--pool=solo, Windows)
     .\tasks.ps1 beat                Celery beat scheduler
     .\tasks.ps1 flower              Celery inspector on :5555

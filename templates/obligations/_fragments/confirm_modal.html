@@ -1,0 +1,85 @@
+{% load i18n %}
+{% comment %}
+  The question behind an unconfirmed obligation.
+
+  Deliberately the same question card as the setup wizard — the same three-way
+  boolean, the same "Settles N rules" line — because it is literally the same
+  question, ranked by the same function against the same fact registry. Somebody
+  who answered ten of these during setup should recognise the eleventh.
+
+  One form per question rather than one form with several fields: each answer is
+  recorded and the calendar rebuilt on its own, so a person can answer the one
+  they are sure of and leave the rest. "Not sure yet" stays available and stays
+  distinct from "no" — an unticked box would reach the engine as a definite
+  denial and silently remove obligations nobody ruled out.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="confirm-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="confirm-modal-title">
+          {% translate "Does this apply to you?" %}
+        </h2>
+        <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                @click="$dispatch('stacos:modal-close')"></button>
+      </div>
+
+      <div class="modal-body">
+        <p class="text-muted small">
+          {% blocktranslate with title=obligation.title %}
+            We put <strong>{{ title }}</strong> on your calendar because we could not
+            rule it out. Answer this and we will know for certain.
+          {% endblocktranslate %}
+        </p>
+
+        {% if form and form.non_field_errors %}
+          <div class="alert alert-danger py-2 small" role="alert">
+            {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+          </div>
+        {% endif %}
+
+        {% for question in questions %}
+          <form class="question-card"
+                hx-post="{% url 'compliance:confirm' obligation.pk %}"
+                hx-target="#obligation-rows"
+                hx-swap="none">
+            {% csrf_token %}
+            <input type="hidden" name="fact_key" value="{{ question.key }}">
+
+            <label class="question-card__label" for="q-{{ question.key }}">
+              {{ question.fact.label }}
+            </label>
+            {% if question.fact.help_text %}
+              <p class="question-card__help">{{ question.fact.help_text }}</p>
+            {% endif %}
+
+            {% include "tenancy/onboarding/_fragments/question_input.html" %}
+
+            <div class="d-flex align-items-center justify-content-between gap-2 mt-2">
+              <p class="question-card__unlocks mb-0">
+                {% blocktranslate count counter=question.unlocks %}
+                  Settles {{ counter }} rule
+                {% plural %}
+                  Settles {{ counter }} rules
+                {% endblocktranslate %}
+              </p>
+              <button type="submit" class="btn btn-sm btn-primary">
+                {% translate "Save answer" %}
+              </button>
+            </div>
+          </form>
+        {% endfor %}
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary"
+                @click="$dispatch('stacos:modal-close')">
+          {% translate "Close" %}
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

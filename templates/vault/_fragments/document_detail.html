@@ -60,7 +60,9 @@
       </div>
       <div class="modal-footer">
         {% if document.is_downloadable %}
-          <a class="btn btn-primary" href="{% url 'vault:download' document.pk %}">
+          {# hx-boost="false": an XHR ignores Content-Disposition. #}
+          <a class="btn btn-primary" hx-boost="false" download
+             href="{% url 'vault:download' document.pk %}">
             {% translate "Download" %}
           </a>
         {% else %}

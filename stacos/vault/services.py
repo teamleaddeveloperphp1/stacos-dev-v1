@@ -153,33 +153,53 @@ def attach(
         },
     )
     if created:
-        _sync_denormalised_counts(target_type, target_id)
+        _sync_denormalised_counts(target_type, target_id, actor=actor)
     return link
 
 
 @transaction.atomic
-def detach(link: DocumentLink) -> None:
+def detach(link: DocumentLink, *, actor: Any = None) -> None:
     """Remove a link. The document itself is untouched."""
     target_type, target_id = link.target_type, link.target_id
     link.delete()
-    _sync_denormalised_counts(target_type, target_id)
+    _sync_denormalised_counts(target_type, target_id, actor=actor)
 
 
-def _sync_denormalised_counts(target_type: str, target_id: UUID | str) -> None:
-    """Keep the caller's cached attachment count honest.
+def _sync_denormalised_counts(
+    target_type: str,
+    target_id: UUID | str,
+    *,
+    actor: Any = None,
+) -> None:
+    """Keep the caller's cached attachment count honest — and tell it what happened.
 
     A request item renders its document count on every list row; counting links
     per row would be an N+1 on the busiest screen in the practice. The cost of
     the denormalisation is this function, and it is called from exactly the two
     places that can change the answer.
+
+    Updating the count was all this did, and that was the bug behind "the status
+    does not auto-complete for file uploads". A typed answer and a yes/no both go
+    through ``requests.services.record_response``, which stamps the item and
+    re-derives the request's state; a file went through here, which wrote a
+    number and returned. A request made entirely of document items could
+    therefore have every file supplied and stay at SENT indefinitely.
+
+    So it hands off rather than deciding anything: the requests module owns what
+    an answer means, and this only says that the attachments changed.
     """
     if target_type != LinkTarget.REQUEST_ITEM:
         return
 
     from stacos.requests.models import RequestItem
+    from stacos.requests.services import record_document_response
 
     count = DocumentLink.objects.filter(target_type=target_type, target_id=target_id).count()
     RequestItem.objects.filter(pk=target_id).update(document_count=count)
+
+    item = RequestItem.objects.filter(pk=target_id).select_related("request").first()
+    if item is not None:
+        record_document_response(item, actor=actor)
 
 
 def documents_for(*, target_type: str, target_id: UUID | str) -> list[Document]:

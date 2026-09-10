@@ -60,15 +60,28 @@ def test_a_user_with_no_membership_can_reach_the_wizard(signed_in: Client) -> No
     assert response.status_code == 200
 
 
-def test_a_user_with_no_membership_still_cannot_reach_anything_else(signed_in: Client) -> None:
+def test_a_user_with_no_membership_still_cannot_reach_anything_else(
+    signed_in: Client, newcomer: User
+) -> None:
     """The permission granted in the no-membership branch has to be exactly one.
 
     It is the only place in the product where access is decided without a tenant
     bound, so a second permission slipping in there would be a hole with no
     scope behind it.
+
+    Asserted on the **scope**, not on the status code. Such a user is now sent to
+    the setup flow rather than shown a 403, and a redirect looks identical
+    whether or not access leaked — so a status assertion here would pass just as
+    happily if the branch handed out every permission in the registry.
     """
     response = signed_in.get(reverse("app:entity_list"))
-    assert response.status_code in {403, 404}
+
+    scope = response.wsgi_request.access_scope
+    assert scope is not None
+    assert scope.permissions == frozenset({"tenancy.onboarding.start"})
+    assert scope.principal_tenant_id is None
+    assert scope.readable_tenant_ids == frozenset()
+    assert scope.writable_tenant_ids == frozenset()
 
 
 def test_identity_decoding_prefills_and_explains(signed_in: Client) -> None:

@@ -246,6 +246,7 @@ def _existing_instances(entity: Entity) -> list[ExistingInstance]:
             "definition_version",
             "needs_input",
             "confirmed",
+            "missing_facts",
             "archived_at",
             "event_count",
         )
@@ -264,6 +265,7 @@ def _existing_instances(entity: Entity) -> list[ExistingInstance]:
             definition_version=row["definition_version"],
             needs_input=row["needs_input"],
             confirmed=row["confirmed"],
+            missing_facts=tuple(row["missing_facts"] or ()),
             # Evidence lands in the vault module; until then an obligation with
             # human activity against it is the thing that must not be destroyed,
             # and the event log is the honest signal for that.
@@ -441,6 +443,7 @@ def _create_instances(
             applied_extension_reference=item.applied_extension_reference,
             owner_role=item.owner_role,
             confirmed=item.confirmed,
+            missing_facts=list(item.missing_facts),
             reasons=list(item.reasons)[:10],
             needs_input=item.needs_input,
         )
@@ -498,7 +501,10 @@ def _update_instances(entity: Entity, plan: MaterialisationPlan) -> int:
 
         fields: list[str] = []
         for name, (_before, after) in delta.changes.items():
-            setattr(instance, name, after)
+            # The planner is pure Python and speaks in tuples; an ArrayField
+            # wants a list. Converted here rather than in the engine, which has
+            # no business knowing what a Django field expects.
+            setattr(instance, name, list(after) if isinstance(after, tuple) else after)
             fields.append(name)
 
         if fields:

@@ -26,6 +26,7 @@ from django.views.generic.base import RedirectView
 
 from stacos.core.views import healthz
 from stacos.marketing.sitemaps import SITEMAPS
+from stacos.requests.urls import responder_urlpatterns
 from stacos.marketing.views import robots_txt
 
 urlpatterns = [
@@ -62,6 +63,10 @@ urlpatterns = [
     path("app/billing/", include("stacos.billing.urls", namespace="billing")),
     path("app/channel/", include("stacos.dealers.urls", namespace="dealers")),
     path("app/", include("stacos.tenancy.urls", namespace="app")),
+    # --- Answering a request from outside the tenant ---
+    # Not under `app/`: everything there assumes a session and a membership, and
+    # the holder of a responder link has neither. See `stacos.requests.responder`.
+    path("", include((responder_urlpatterns, "rfi"), namespace="respond")),
     # --- API (mobile and webhooks only) ---
     path("api/v1/", include("stacos.api.urls", namespace="api")),
     # --- Marketing, last so it never shadows an application route ---
@@ -71,3 +76,7 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += [path("__debug__/", include("debug_toolbar.urls"))]
+    # The long-poll endpoint the browser-reload script listens on. Development
+    # only, and registered here rather than in `dev.py` because URLs have one
+    # module.
+    urlpatterns += [path("__reload__/", include("django_browser_reload.urls"))]

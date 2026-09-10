@@ -1,15 +1,26 @@
 """
 The onboarding wizard.
 
-Four steps, each a page in its own right so the back button and a bookmarked URL
-both work, and each swapping fragments as the user answers so the preview keeps
-up without a reload.
+Three steps and a commit, each step a page in its own right so the back button
+and a bookmarked URL both work, and each swapping fragments as the user answers
+so the preview keeps up without a reload.
 
 Every view carries ``tenancy.onboarding.start``. That permission is granted by
 the scope resolver to a user with no membership at all — this is the one flow in
 the product that has to work before a tenant exists, and the reason
 ``entity_create`` cannot serve it is that it opens with ``raise Http404`` in
-exactly that situation.
+exactly that situation. It is deliberately *not* granted to somebody whose
+membership was suspended; see ``tenancy.middleware``.
+
+**Both render paths, on every step.** These three views used to answer every
+request with the whole document, HTMX or not. Reached by a boosted click — from
+the tenant switcher, from the setup redirect, or from the wizard's own Back link
+— that document was morphed into ``#main``, giving the page a second
+``.app-shell`` inside the first: two sidebars, two ``#main`` elements, two
+``#toast-stack``s, two step rails showing 1-2-3 apiece, and a re-executed
+``Alpine.start()``. The reported symptoms were "blank page", "sidebar stops
+responding" and "the steps are numbered twice", and all three are that one
+mistake. ``tests/test_htmx_navigation.py`` sweeps every app route for it.
 """
 
 from __future__ import annotations
@@ -23,7 +34,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
-from stacos.core.htmx import Fragment, Toast, oob
+from stacos.core.htmx import Fragment, Toast, derive_fragment_template, is_fragment_request, oob
 from stacos.core.permissions import require_permission
 from stacos.core.typing import current_user
 from stacos.jurisdictions import subdivisions
@@ -44,6 +55,15 @@ STEPS = (
 
 def _today() -> date:
     return timezone.localdate()
+
+
+def _template(request: HttpRequest, page: str) -> str:
+    """The page, or just its body, depending on who is asking.
+
+    ``obligations/list.html`` -> ``obligations/_fragments/list_body.html``. The
+    same idiom every other app in the project uses; see ``stacos.core.htmx``.
+    """
+    return derive_fragment_template(page) if is_fragment_request(request) else page
 
 
 def _step_context(step: str, draft: OnboardingDraft) -> dict[str, object]:
@@ -87,7 +107,7 @@ def identity(request: HttpRequest) -> HttpResponse:
 
     return render(
         request,
-        "tenancy/onboarding/identity.html",
+        _template(request, "tenancy/onboarding/identity.html"),
         {**_step_context("identity", draft), "form": form},
     )
 
@@ -163,7 +183,7 @@ def profile(request: HttpRequest) -> HttpResponse:
 
     return render(
         request,
-        "tenancy/onboarding/profile.html",
+        _template(request, "tenancy/onboarding/profile.html"),
         {**_step_context("profile", draft), "form": form, "report": report},
     )
 
@@ -208,7 +228,7 @@ def preview(request: HttpRequest) -> HttpResponse:
     result = preview_draft(draft)
     return render(
         request,
-        "tenancy/onboarding/preview.html",
+        _template(request, "tenancy/onboarding/preview.html"),
         {
             **_step_context("preview", draft),
             "preview": result,
@@ -242,6 +262,17 @@ def _render_preview_fragments(
     One response rather than three requests, because they are three views of one
     computation and letting them arrive separately would show the user a
     momentarily inconsistent screen.
+
+    ``swap="innerHTML"`` on both out-of-band fragments, and ``hx-swap="innerHTML"``
+    on the buttons that trigger this. The regions are declared once in
+    ``preview_body.html`` and carry attributes the fragments do not know about —
+    ``.wizard__aside``, and the ``aria-live`` that is the only reason a screen
+    reader notices any of this changed. Replacing them outright discards both.
+
+    The fragments no longer wrap themselves in ``<c-oob>`` either. They were
+    doing that *and* being wrapped again by ``oob()``, inside a region already
+    carrying the same id — three duplicate id pairs on first paint, and a fresh
+    level of nesting on every answer.
     """
     result = preview_draft(draft)
     context = {
@@ -257,11 +288,13 @@ def _render_preview_fragments(
                 "tenancy/onboarding/_fragments/question_queue.html",
                 context,
                 oob_target="onboarding-questions",
+                swap="innerHTML",
             ),
             Fragment(
                 "tenancy/onboarding/_fragments/pack_strip.html",
                 context,
                 oob_target="onboarding-packs",
+                swap="innerHTML",
             ),
         ],
         toast=toast,
@@ -269,7 +302,10 @@ def _render_preview_fragments(
 
 
 # ---------------------------------------------------------------------------
-# Step 4 — commit
+# Commit
+#
+# Not a fourth step in the rail: there is nothing to look at and nothing to
+# answer, only the button at the bottom of the preview.
 # ---------------------------------------------------------------------------
 
 
@@ -280,7 +316,15 @@ def finish(request: HttpRequest) -> HttpResponse:
     if not draft.is_ready_to_commit:
         return redirect("onboarding:profile")
 
-    entity = commit_draft(draft, user=current_user(request), as_of=_today())
+    # An organisation the user already owns is the one this entity belongs in.
+    # Without this, somebody who named their organisation at sign-up gets a
+    # second, empty one the first time they run the wizard.
+    entity = commit_draft(
+        draft,
+        user=current_user(request),
+        as_of=_today(),
+        tenant=getattr(request, "tenant", None),
+    )
 
     # Switch the session to the tenant just created, so the next page renders
     # inside it rather than falling back to the no-membership scope.

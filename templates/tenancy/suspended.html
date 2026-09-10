@@ -1,0 +1,6 @@
+{% extends "layouts/auth.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Access suspended" %} · STACOS{% endblock %}
+
+{% block content %}{% include "tenancy/_fragments/suspended_body.html" %}{% endblock %}

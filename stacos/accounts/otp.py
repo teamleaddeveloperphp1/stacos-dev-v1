@@ -103,6 +103,7 @@ def start_verification(
     user_agent: str = "",
     device_fingerprint: str = "",
     next_url: str = "",
+    organisation_name: str = "",
 ) -> tuple[PendingVerification | None, ThrottleDecision]:
     """Create a pending verification and dispatch both codes.
 
@@ -132,6 +133,7 @@ def start_verification(
         user_agent=user_agent[:512],
         device_fingerprint=device_fingerprint,
         next_url=next_url[:500],
+        organisation_name=organisation_name[:200],
         expires_at=timezone.now() + timedelta(seconds=ttl),
     )
     verification.save()

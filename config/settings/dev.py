@@ -10,10 +10,20 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]
 CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://localhost:3002"]
 CORS_ALLOWED_ORIGINS = ["http://localhost:3002"]
 
-INSTALLED_APPS += ["debug_toolbar"]
+INSTALLED_APPS += ["debug_toolbar", "django_browser_reload"]
 MIDDLEWARE.insert(
     MIDDLEWARE.index("django.middleware.common.CommonMiddleware"),
     "debug_toolbar.middleware.DebugToolbarMiddleware",
+)
+# Reload the browser when a template, a stylesheet or the script bundle changes.
+#
+# Placed immediately after the toolbar so it sees the finished HTML. It appends
+# its script tag before ``</body>`` and does nothing to a response that has no
+# ``</body>`` — which is every HTMX fragment — so unlike the toolbar it needs no
+# opt-out callback. Nothing here loads under production settings.
+MIDDLEWARE.insert(
+    MIDDLEWARE.index("django.middleware.common.CommonMiddleware"),
+    "django_browser_reload.middleware.BrowserReloadMiddleware",
 )
 INTERNAL_IPS = ["127.0.0.1"]
 DEBUG_TOOLBAR_CONFIG = {
@@ -25,6 +35,25 @@ DEBUG_TOOLBAR_CONFIG = {
         and not request.headers.get("HX-Request")
     ),
 }
+
+# ---------------------------------------------------------------------------
+# Static files in development
+#
+# Stated rather than inherited. WhiteNoise derives both of these from
+# ``settings.DEBUG`` by default, which is correct today and silently wrong the
+# moment somebody runs the dev server with DEBUG off to reproduce something —
+# they would then be served whatever `collectstatic` last wrote to
+# ``staticfiles/``, which in this repository was a month stale.
+#
+# ``WHITENOISE_MAX_AGE = 0`` matters as much as the autorefresh: `{% static %}`
+# emits an unhashed URL while DEBUG is on (``HashedFilesMixin`` short-circuits),
+# so the only thing stopping the browser reusing yesterday's stylesheet is the
+# absence of a cache header. The default is 60 seconds, which is long enough for
+# a rebuild to look like it did nothing.
+# ---------------------------------------------------------------------------
+WHITENOISE_AUTOREFRESH = True
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_MAX_AGE = 0
 
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = env("EMAIL_HOST", default="localhost")

@@ -11,8 +11,13 @@ from django.utils.translation import gettext_lazy as _
 
 from stacos.jurisdictions import subdivisions
 from stacos.jurisdictions.decode import Confidence, IdentityReport
-from stacos.jurisdictions.facts import REGISTRY, FactType
-from stacos.tenancy.forms import ENTITY_TYPE_LABELS
+
+#: ``QuestionForm`` is re-exported, not defined here. It moved to
+#: ``stacos.tenancy.forms`` when the compliance calendar started asking the same
+#: questions of a saved entity — it was never specific to onboarding, and two
+#: copies of the three-way boolean is one copy too many. Imported here so that
+#: every existing caller keeps working.
+from stacos.tenancy.forms import ENTITY_TYPE_LABELS, QuestionForm
 
 __all__ = ["IdentityForm", "ProfileForm", "QuestionForm"]
 
@@ -108,56 +113,3 @@ class ProfileForm(forms.Form):
             Row(Column("entity_type"), Column("registered_office_state")),
             Row(Column("incorporation_date"), Column("states_of_operation")),
         )
-
-
-class QuestionForm(forms.Form):
-    """One ranked question, rendered according to its fact type.
-
-    A boolean is a three-way choice, not a checkbox. "Unanswered" has to stay
-    distinguishable from "no", or the Kleene logic the whole engine rests on is
-    thrown away at the last moment by the UI: an unticked box would read as a
-    definite denial and silently remove obligations the user never ruled out.
-    """
-
-    def __init__(self, *args: Any, fact_key: str = "", **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        definition = REGISTRY.get(fact_key)
-        if definition is None:
-            return
-
-        self.fact = definition
-        match definition.type:
-            case FactType.BOOL:
-                field: forms.Field = forms.ChoiceField(
-                    required=False,
-                    choices=[("", _("Not sure yet")), ("yes", _("Yes")), ("no", _("No"))],
-                    widget=forms.RadioSelect,
-                )
-            case FactType.INT:
-                field = forms.IntegerField(required=False, min_value=0)
-            case FactType.DECIMAL:
-                field = forms.DecimalField(required=False, min_value=0, decimal_places=2)
-            case FactType.ENUM:
-                field = forms.ChoiceField(
-                    required=False,
-                    choices=[("", _("Not sure yet"))]
-                    + [
-                        (value, value.replace("_", " ").title())
-                        for value in (definition.allowed_values or ())
-                    ],
-                )
-            case _:
-                field = forms.CharField(required=False)
-
-        field.label = definition.label
-        field.help_text = definition.help_text
-        self.fields["answer"] = field
-
-    def answer(self) -> Any:
-        """The answer in the shape the fact registry expects, or ``None``."""
-        raw = self.cleaned_data.get("answer")
-        if raw in (None, ""):
-            return None
-        if getattr(self, "fact", None) is not None and self.fact.type is FactType.BOOL:
-            return raw == "yes"
-        return raw

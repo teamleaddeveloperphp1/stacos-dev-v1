@@ -7,6 +7,20 @@
   application never blinks. That single decision is most of the difference
   between "a website" and "an app".
 
+  Which is also why nothing here computes the active nav item. It used to, from
+  `request.resolver_match`, and because the sidebar never re-renders the
+  highlight stayed frozen on whatever page was last loaded from the address bar
+  — correct only after a manual refresh. Each link now declares the URL prefix it
+  owns as `data-nav-match`, and `syncNav()` in assets/js/app.js applies
+  `aria-current="page"` to the longest match on first paint and after every
+  navigation. One rule, in one place: a server-side copy and a client-side copy
+  drifted apart the moment the two used different comparisons, which is exactly
+  what had happened (`url_name` for some links, `namespace` for others, and none
+  at all for two of them).
+
+  `data-nav-exact` is for Dashboard, whose `/app/` prefix would otherwise match
+  every page in the product.
+
   Every link inside .app-shell inherits hx-boost from the wrapper, so it swaps
   #main, pushes the URL, and morphs rather than replaces. A direct GET to any of
   those URLs still returns this full page, which is what keeps deep links,
@@ -68,13 +82,11 @@
 
       <nav class="app-nav" aria-label="{% translate 'Main' %}">
         <div class="app-nav__group">
-          <a class="app-nav__link" href="{% url 'app:dashboard' %}" preload
-             {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'app:dashboard' %}" preload data-nav-match="/app/" data-nav-exact>
             <c-icon name="home" />
             <span>{% translate "Dashboard" %}</span>
           </a>
-          <a class="app-nav__link" href="{% url 'app:entity_list' %}" preload
-             {% if request.resolver_match.url_name == 'entity_list' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'app:entity_list' %}" preload data-nav-match="/app/entities/">
             <c-icon name="building" />
             <span>{% translate "Entities" %}</span>
             <span class="app-nav__count" id="entity-count">{{ entity_count|default:"" }}</span>
@@ -88,42 +100,35 @@
         {% endcomment %}
         <div class="app-nav__group">
           <div class="app-nav__label">{% translate "Compliance" %}</div>
-          <a class="app-nav__link" href="{% url 'compliance:calendar' %}" preload
-             {% if request.resolver_match.namespace == 'compliance' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'compliance:calendar' %}" preload data-nav-match="/app/compliance/">
             <c-icon name="calendar" />
             <span>{% translate "Calendar" %}</span>
             <span class="app-nav__count app-nav__count--alert" id="overdue-count">
               {{ overdue_count|default:"" }}
             </span>
           </a>
-          <a class="app-nav__link" href="{% url 'rfi:list' %}" preload
-             {% if request.resolver_match.namespace == 'rfi' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'rfi:list' %}" preload data-nav-match="/app/requests/">
             <c-icon name="inbox" />
             <span>{% translate "Information requests" %}</span>
           </a>
-          <a class="app-nav__link" href="{% url 'notices:list' %}" preload
-             {% if request.resolver_match.namespace == 'notices' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'notices:list' %}" preload data-nav-match="/app/notices/">
             <c-icon name="alert" />
             <span>{% translate "Notices" %}</span>
           </a>
-          <a class="app-nav__link" href="{% url 'vault:list' %}" preload
-             {% if request.resolver_match.namespace == 'vault' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'vault:list' %}" preload data-nav-match="/app/documents/">
             <c-icon name="folder" />
             <span>{% translate "Documents" %}</span>
           </a>
-          <a class="app-nav__link" href="{% url 'returns:list' %}" preload
-             {% if request.resolver_match.namespace == 'returns' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'returns:list' %}" preload data-nav-match="/app/returns/">
             <c-icon name="document" />
             <span>{% translate "Returns" %}</span>
           </a>
-          <a class="app-nav__link" href="{% url 'secretarial:meetings' %}" preload
-             {% if request.resolver_match.url_name == 'meetings' %}aria-current="page"{% endif %}>
+          <a class="app-nav__link" href="{% url 'secretarial:meetings' %}" preload data-nav-match="/app/secretarial/meetings/">
             <c-icon name="briefcase" />
             <span>{% translate "Secretarial" %}</span>
           </a>
           {% if "secretarial.resolution.manage" in access_scope.permissions %}
-            <a class="app-nav__link" href="{% url 'secretarial:resolutions' %}" preload
-               {% if request.resolver_match.url_name == 'resolutions' %}aria-current="page"{% endif %}>
+            <a class="app-nav__link" href="{% url 'secretarial:resolutions' %}" preload data-nav-match="/app/secretarial/resolutions/">
               <c-icon name="document" />
               <span>{% translate "Resolutions" %}</span>
             </a>
@@ -139,13 +144,12 @@
         {% if "practice.work.view" in access_scope.permissions %}
           <div class="app-nav__group">
             <div class="app-nav__label">{% translate "Practice" %}</div>
-            <a class="app-nav__link" href="{% url 'practice:board' %}" preload
-               {% if request.resolver_match.namespace == 'practice' %}aria-current="page"{% endif %}>
+            <a class="app-nav__link" href="{% url 'practice:board' %}" preload data-nav-match="/app/practice/">
               <c-icon name="briefcase" />
               <span>{% translate "Work board" %}</span>
             </a>
             {% if "practice.wip.view" in access_scope.permissions %}
-              <a class="app-nav__link" href="{% url 'practice:profitability' %}" preload>
+              <a class="app-nav__link" href="{% url 'practice:profitability' %}" preload data-nav-match="/app/practice/profitability/">
                 <c-icon name="history" />
                 <span>{% translate "Profitability" %}</span>
               </a>
@@ -156,8 +160,7 @@
         {% if "dealers.commission.view" in access_scope.permissions %}
           <div class="app-nav__group">
             <div class="app-nav__label">{% translate "Channel" %}</div>
-            <a class="app-nav__link" href="{% url 'dealers:statement' %}" preload
-               {% if request.resolver_match.namespace == 'dealers' %}aria-current="page"{% endif %}>
+            <a class="app-nav__link" href="{% url 'dealers:statement' %}" preload data-nav-match="/app/channel/">
               <c-icon name="link" />
               <span>{% translate "Commission" %}</span>
             </a>
@@ -167,13 +170,12 @@
         <div class="app-nav__group">
           <div class="app-nav__label">{% translate "Settings" %}</div>
           {% if "billing.view" in access_scope.permissions %}
-            <a class="app-nav__link" href="{% url 'billing:overview' %}" preload
-               {% if request.resolver_match.namespace == 'billing' %}aria-current="page"{% endif %}>
+            <a class="app-nav__link" href="{% url 'billing:overview' %}" preload data-nav-match="/app/billing/">
               <c-icon name="briefcase" />
               <span>{% translate "Billing" %}</span>
             </a>
           {% endif %}
-          <a class="app-nav__link" href="{% url 'accounts:security' %}" preload>
+          <a class="app-nav__link" href="{% url 'accounts:security' %}" preload data-nav-match="/auth/security/">
             <c-icon name="shield" />
             <span>{% translate "Security" %}</span>
           </a>

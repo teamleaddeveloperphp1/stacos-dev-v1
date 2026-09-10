@@ -29,11 +29,14 @@ from stacos.requests.models import (
     RequestState,
 )
 from stacos.requests.services import (
+    RESPONDER_TOKEN_DAYS,
     RequestError,
     close_request,
+    issue_responder_token,
     record_response,
     reject_response,
     send_request,
+    send_responder_link,
 )
 from stacos.vault.models import LinkTarget
 from stacos.vault.services import documents_for
@@ -274,6 +277,42 @@ def request_close(request: HttpRequest, pk: str) -> HttpResponse:
         note=request.POST.get("note", ""),
     )
     return _detail_panel(request, _get(pk), toast=Toast(_("Request closed.")))
+
+
+@require_permission("rfi.request.send")
+@require_http_methods(["POST"])
+def request_invite_responder(request: HttpRequest, pk: str) -> HttpResponse:
+    """Email the outside contact a link they can actually answer on.
+
+    The gap this closes: a request addressed to ``assigned_email`` was delivered
+    to nobody and answerable by nobody. ``services.notify`` says as much in a
+    comment — it returns early for a recipient with no account, deferring to a
+    delivery path that did not exist.
+
+    Deliberately an explicit action rather than something that fires on send. The
+    link is a bearer credential for one request; issuing it is a decision
+    somebody takes, and the audit trail says who took it.
+    """
+    information_request = _get(pk)
+
+    try:
+        token, raw = issue_responder_token(
+            information_request,
+            actor=current_user(request),
+        )
+    except RequestError as exc:
+        return _detail_panel(request, information_request, error=str(exc), status=422)
+
+    send_responder_link(information_request, token=token, raw_token=raw, request=request)
+
+    return _detail_panel(
+        request,
+        _get(pk),
+        toast=Toast(
+            _("Link sent to %(email)s. It works for %(days)s days.")
+            % {"email": token.email, "days": RESPONDER_TOKEN_DAYS}
+        ),
+    )
 
 
 def _detail_panel(

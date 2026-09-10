@@ -130,6 +130,12 @@ MIDDLEWARE = [
     "stacos.accounts.middleware.VerificationGateMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "stacos.core.middleware.ScopeMiddleware",
+    # After ScopeMiddleware, so `request.tenant` is resolved, and before the
+    # authorisation middleware, so a user who belongs to no organisation is sent
+    # to the setup flow instead of being shown a 403 for a permission only a
+    # member could hold. Deciding it here is what makes it hold for pages that
+    # do not exist yet.
+    "stacos.tenancy.middleware.OrganisationGateMiddleware",
     # Innermost, so it is the first to see an exception raised by a view and can
     # turn an authorisation failure into a redirect or a 403 rather than a 500.
     "stacos.core.middleware.AuthorizationExceptionMiddleware",

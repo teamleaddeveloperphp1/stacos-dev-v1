@@ -273,6 +273,23 @@
     border-color: var(--stacos-status-overdue);
     color: var(--stacos-status-overdue);
   }
+
+  // A badge that is actually a button has to look like one. It sat there as an
+  // inert chip inviting a click that did nothing, so the cursor, the focus ring
+  // and the hover state are the whole difference between a label and a control.
+  &--action {
+    cursor: pointer;
+    font: inherit;
+    font-size: $stacos-text-xs;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover,
+    &:focus-visible {
+      background: var(--stacos-status-waiting);
+      color: #fff;
+    }
+  }
 }
 
 .progress-fraction {

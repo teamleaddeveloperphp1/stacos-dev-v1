@@ -1,0 +1,22 @@
+{% load i18n %}
+{% comment %}
+  Why the bytes were withheld, as a page.
+
+  Reached by a real navigation: the download links carry hx-boost="false"
+  precisely so the browser handles the response itself, which means a refusal
+  arrives in the address bar rather than as a swap. The model's
+  `download_refusal` already says which of the three situations this is — wait,
+  tell somebody, or stop trying — so this only has to render it somewhere a
+  person can read it and get back from.
+{% endcomment %}
+<c-page-header title="{% translate 'This file is not available' %}"
+               subtitle="{{ document.title }}">
+</c-page-header>
+
+<div class="card">
+  <p class="callout callout--attention">{{ reason }}</p>
+
+  <a class="btn btn-outline-secondary" href="{% url 'vault:list' %}">
+    {% translate "Back to documents" %}
+  </a>
+</div>

@@ -87,7 +87,8 @@
             </td>
             <td class="text-end">
               {% if document.is_downloadable %}
-                <a class="btn btn-sm btn-outline-secondary"
+                {# hx-boost="false": an XHR ignores Content-Disposition. #}
+                <a class="btn btn-sm btn-outline-secondary" hx-boost="false" download
                    href="{% url 'vault:download' document.pk %}">{% translate "Download" %}</a>
               {% endif %}
               {% comment %}

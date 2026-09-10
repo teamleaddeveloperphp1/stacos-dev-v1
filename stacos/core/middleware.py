@@ -22,11 +22,11 @@ import structlog
 from django.conf import settings
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.urls import reverse
 
 from stacos.core.exceptions import PermissionDenied, StepUpRequired, UnscopedQueryError
-from stacos.core.htmx import page_url
+from stacos.core.htmx import navigate, page_url
 from stacos.core.request_context import (
     RequestMeta,
     bind_request_meta,
@@ -229,8 +229,4 @@ class AuthorizationExceptionMiddleware:
 
     @staticmethod
     def _redirect(request: HttpRequest, target: str) -> HttpResponse:
-        if getattr(request, "htmx", False):
-            response = HttpResponse(status=204)
-            response["HX-Redirect"] = target
-            return response
-        return redirect(target)
+        return navigate(request, target)

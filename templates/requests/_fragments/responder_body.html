@@ -1,0 +1,120 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The checklist as an outside contact sees it.
+
+  Rendered on the auth layout, not the application shell: this person is not a
+  member of anything and there is nothing for them to navigate to. Everything
+  they can see is on this page, which is the honest shape for a bearer link.
+
+  Deliberately absent: the timeline, the entity, the firm's other requests, the
+  vault, any navigation into the application. The scope behind the page
+  (`services.responder_scope`) would refuse all of it anyway; not drawing it is
+  what stops somebody trying.
+{% endcomment %}
+<div class="auth-card auth-card--wide" id="responder-panel" aria-live="polite" aria-atomic="true">
+
+  <h1 class="auth-card__title">{{ request_obj.title }}</h1>
+  <p class="auth-card__lede">
+    {% blocktranslate with who=request_obj.requested_by %}
+      {{ who }} has asked you for the following. You can answer here — there is
+      nothing to sign up for.
+    {% endblocktranslate %}
+  </p>
+
+  {% if error %}
+    <p class="callout callout--danger" role="alert">{{ error }}</p>
+  {% endif %}
+
+  {% if request_obj.message %}
+    <p class="callout">{{ request_obj.message }}</p>
+  {% endif %}
+
+  {% if request_obj.state == "ANSWERED" or request_obj.state == "CLOSED" %}
+    <p class="callout callout--attention">
+      {% translate "Everything here has come back. Thank you — there is nothing left to do." %}
+    </p>
+  {% endif %}
+
+  <ol class="checklist">
+    {% for row in items %}
+      <li class="checklist__item {% if row.item.is_answered %}checklist__item--done{% endif %}">
+        <div class="checklist__label">
+          {{ row.item.label }}
+          {% if not row.item.is_mandatory %}
+            <span class="badge-soft">{% translate "Optional" %}</span>
+          {% endif %}
+        </div>
+
+        {% if row.item.help_text %}
+          <p class="text-muted small mb-1">{{ row.item.help_text }}</p>
+        {% endif %}
+
+        {% if row.item.rejection_reason %}
+          <p class="callout callout--warning small">
+            {% blocktranslate with reason=row.item.rejection_reason %}Sent back: {{ reason }}{% endblocktranslate %}
+          </p>
+        {% endif %}
+
+        {% comment %}
+          Not `vault/_fragments/attachments.html`. That strip links to
+          `vault:download` and opens the vault's upload modal, both of which live
+          under `/app/` behind a session this visitor does not have — the links
+          would render and then 404 or bounce to a sign-in page. So the file list
+          here names what has arrived and nothing more, and the upload posts to
+          the one endpoint scoped to this item.
+        {% endcomment %}
+        {% if row.item.kind == "DOCUMENT" %}
+          <ul class="attachments__list">
+            {% for document in row.documents %}
+              <li class="attachments__item">
+                <c-icon name="document" size="14" />
+                <span class="attachments__name">{{ document.title }}</span>
+                {% if document.is_quarantined %}
+                  <span class="badge-soft badge-soft--danger">{% translate "Rejected by the virus scanner" %}</span>
+                {% elif not document.is_downloadable %}
+                  <span class="text-muted small">{% translate "Checking…" %}</span>
+                {% else %}
+                  <span class="text-muted small">{% translate "Received" %}</span>
+                {% endif %}
+              </li>
+            {% empty %}
+              <li class="text-muted small">{% translate "Nothing sent yet." %}</li>
+            {% endfor %}
+          </ul>
+
+          <form hx-post="{% url 'respond:responder_upload' token=token_value item_pk=row.item.pk %}"
+                hx-target="#responder-panel" hx-swap="outerHTML"
+                hx-encoding="multipart/form-data"
+                method="post" enctype="multipart/form-data"
+                action="{% url 'respond:responder_upload' token=token_value item_pk=row.item.pk %}"
+                class="d-flex gap-2 align-items-end">
+            {% csrf_token %}
+            <label class="visually-hidden" for="files-{{ row.item.pk }}">
+              {% translate "Choose a file" %}
+            </label>
+            <input class="form-control form-control-sm" type="file" name="files" multiple
+                   id="files-{{ row.item.pk }}">
+            <button class="btn btn-sm btn-primary" type="submit">{% translate "Send" %}</button>
+          </form>
+        {% else %}
+          {% if row.item.response_value %}
+            <p class="answer-value">{{ row.item.response_value }}</p>
+          {% endif %}
+          <form hx-post="{% url 'respond:responder_item' token=token_value item_pk=row.item.pk %}"
+                hx-target="#responder-panel" hx-swap="outerHTML"
+                method="post"
+                action="{% url 'respond:responder_item' token=token_value item_pk=row.item.pk %}"
+                class="d-flex gap-2 align-items-end">
+            {% csrf_token %}
+            {{ row.form.value|as_crispy_field }}
+            <button class="btn btn-sm btn-primary" type="submit">{% translate "Send" %}</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ol>
+
+  <p class="text-muted mt-3 mb-0" style="font-size:.75rem">
+    {% translate "This link was sent to you and works for a limited time. Do not forward it — anybody who has it can answer on your behalf." %}
+  </p>
+</div>

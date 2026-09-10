@@ -64,19 +64,28 @@ def resolve_scope_for_request(request: HttpRequest) -> AccessScope | None:
 
     membership = _select_membership(request)
     if membership is None:
-        # Authenticated but not a member of anything yet — mid-onboarding, or an
-        # invitation not yet accepted. Every scoped query returns nothing rather
-        # than raising, so the screens render.
+        # Authenticated but not a member of anything *active*. Every scoped query
+        # returns nothing rather than raising, so the screens render.
         #
-        # Exactly one permission is granted, and it is the reason this branch
-        # exists: without it a self-service user who has just verified their
-        # email is authenticated, owns nothing, and has no route in the product
-        # to create the company they signed up to manage. It confers no access to
-        # anybody else's data — there is no tenant bound, so the scoped managers
-        # still return nothing.
+        # Which permission that comes with depends on why, and the difference is
+        # the whole of it:
+        #
+        # * **Nothing, or an invitation not yet accepted** — one permission,
+        #   ``tenancy.onboarding.start``. Without it a self-service user who has
+        #   just verified their email is authenticated, owns nothing, and has no
+        #   route in the product to create the company they signed up to manage.
+        # * **Suspended** — none at all. Somebody revoked this deliberately, and
+        #   handing them the permission to create a fresh organisation would make
+        #   the revocation a formality. ``OrganisationGateMiddleware`` renders the
+        #   screen that says so; this is what makes it a boundary rather than a
+        #   sign on a door that opens.
+        #
+        # Neither confers access to anybody else's data: no tenant is bound, so
+        # the scoped managers and the RLS policy both return nothing.
+        suspended = getattr(request, "suspended_memberships", None)
         scope = AccessScope(
-            permissions=frozenset({"tenancy.onboarding.start"}),
-            reason="request:no-membership",
+            permissions=frozenset() if suspended else frozenset({"tenancy.onboarding.start"}),
+            reason="request:suspended" if suspended else "request:no-membership",
         )
         setattr(request, REQUEST_CACHE_ATTR, scope)
         request.tenant = None  # type: ignore[attr-defined]
@@ -104,6 +113,13 @@ def _select_membership(request: HttpRequest) -> Membership | None:
     answer with the one organisation the user is already looking at. Reusing the
     bootstrap read that has to happen anyway is cheaper than a second escape
     hatch, and keeps the one RLS lift in the request path where it is.
+
+    The read covers suspended and invited rows as well. Only the active ones are
+    ever selected from — that has not changed — but "suspended", "invited, not
+    yet accepted" and "belongs to nothing at all" are three situations that need
+    three different answers, and one of them must not be given the permission to
+    create an organisation. Widening this one query is what lets the caller tell
+    them apart, without a second query or a second lift of Row-Level Security.
     """
     user = request.user
 
@@ -111,13 +127,27 @@ def _select_membership(request: HttpRequest) -> Membership | None:
     # is bound yet. Anchored on the authenticated user, so it can only ever
     # return rows about them.
     with rls_bootstrap():
-        memberships = list(
-            Membership.objects_unscoped.filter(user=user, status=Membership.Status.ACTIVE)
+        rows = list(
+            Membership.objects_unscoped.filter(
+                user=user,
+                status__in=(
+                    Membership.Status.ACTIVE,
+                    Membership.Status.SUSPENDED,
+                    Membership.Status.INVITED,
+                ),
+            )
             .select_related("tenant", "role")
             .order_by("created_at")
         )
 
+    memberships = [m for m in rows if m.status == Membership.Status.ACTIVE]
     request.user_memberships = memberships  # type: ignore[attr-defined]
+    # Only when there is nothing active. A user suspended from one organisation
+    # and active in another is simply a member of the second — showing them a
+    # refusal would be wrong, and so would revoking their permissions.
+    request.suspended_memberships = (  # type: ignore[attr-defined]
+        [m for m in rows if m.status == Membership.Status.SUSPENDED] if not memberships else []
+    )
     by_tenant = {str(m.tenant_id): m for m in memberships}
 
     for selected, source in (

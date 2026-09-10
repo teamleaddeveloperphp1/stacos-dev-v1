@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect
 from django.template.loader import render_to_string
 
 __all__ = [
@@ -31,10 +32,37 @@ __all__ = [
     "HtmxFragmentMixin",
     "Toast",
     "is_fragment_request",
+    "navigate",
     "oob",
     "page_url",
     "trigger",
 ]
+
+
+def navigate(request: HttpRequest, target: str) -> HttpResponse:
+    """Send the browser to ``target``, whether or not HTMX is driving.
+
+    An ordinary 302 is invisible to HTMX: it follows the redirect itself, gets
+    the destination back as a perfectly successful response, and swaps it into
+    whatever region the caller targeted. That is how signing out came to leave a
+    sign-in form rendered inside a still-signed-in shell, and it is why an
+    interstitial reached from a boosted click looks to the user like nothing
+    happened at all. ``HX-Redirect`` is the instruction the browser acts on.
+
+    Lives here because four places need it — both accounts gates, the
+    authorisation middleware, the organisation gate and the tenant switcher — and
+    three of them had grown their own copy. The response carries no body: HTMX
+    must have nothing to swap.
+
+    Callers in middleware must be listed *below* ``HtmxMiddleware``, or
+    ``request.htmx`` does not exist yet, the question silently answers "no", and
+    this quietly degrades to the broken behaviour.
+    """
+    if getattr(request, "htmx", False):
+        response = HttpResponse(status=204)
+        response["HX-Redirect"] = target
+        return response
+    return redirect(target)
 
 
 def is_fragment_request(request: HttpRequest) -> bool:

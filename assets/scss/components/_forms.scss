@@ -41,6 +41,14 @@
 .auth-card {
   max-width: 26rem;
   margin: 0 auto;
+
+  // The responder screen is a checklist, not a sign-in form. It uses this
+  // layout because its visitor has no session and therefore no application
+  // shell to sit inside, but a column sized for an email field and a password
+  // makes a six-item request unreadable.
+  &--wide {
+    max-width: 44rem;
+  }
   background: var(--stacos-surface);
   border: 1px solid var(--stacos-border);
   border-radius: var(--stacos-radius-xl);

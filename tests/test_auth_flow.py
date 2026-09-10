@@ -90,6 +90,27 @@ def test_htmx_requests_get_a_redirect_header_not_a_302(client: Client) -> None:
 # ===========================================================================
 
 
+def _registration_payload(**overrides: str) -> dict[str, str]:
+    """A complete, valid sign-up.
+
+    Written once because sign-up now has eight fields and a confirmation, and a
+    test that omits one gets a 200 with form errors rather than the redirect it
+    asserts — a failure that reads as "verification broke".
+    """
+    payload = {
+        "first_name": "Priya",
+        "last_name": "Vaibhav",
+        "email": "priya@example.com",
+        "mobile": "9876500000",
+        "organisation_name": "",
+        "phone": "9876543210",
+        "password": "a-long-enough-password",
+        "confirm_password": "a-long-enough-password",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_registration_requires_both_codes_together(client: Client) -> None:
     """The whole policy, in one test.
 
@@ -98,12 +119,7 @@ def test_registration_requires_both_codes_together(client: Client) -> None:
     """
     response = client.post(
         reverse("accounts:register"),
-        {
-            "full_name": "Priya Vaibhav",
-            "email": "priya@example.com",
-            "phone": "9876543210",
-            "password": "a-long-enough-password",
-        },
+        _registration_payload(),
     )
     assert response.status_code == 302
     assert response["Location"] == reverse("accounts:verify")
@@ -112,6 +128,9 @@ def test_registration_requires_both_codes_together(client: Client) -> None:
     assert not user.email_verified, "registration alone must not verify anything"
     assert not user.phone_verified
     assert user.phone_e164 == "+919876543210", "phone should be normalised to E.164"
+    assert user.mobile_e164 == "+919876500000", "the contact number is kept separately"
+    assert (user.first_name, user.last_name) == ("Priya", "Vaibhav")
+    assert user.full_name == "Priya Vaibhav", "the display name follows the two halves"
 
     email_code, phone_code = _codes()
     assert email_code != phone_code, "the two channels must carry different codes"
@@ -146,12 +165,12 @@ def test_remembering_the_device_creates_a_revocable_record(client: Client) -> No
     """Device trust is what makes a mandatory dual-OTP policy livable."""
     client.post(
         reverse("accounts:register"),
-        {
-            "full_name": "Ramesh Patel",
-            "email": "ramesh@example.com",
-            "phone": "9876543211",
-            "password": "a-long-enough-password",
-        },
+        _registration_payload(
+            first_name="Ramesh",
+            last_name="Patel",
+            email="ramesh@example.com",
+            phone="9876543211",
+        ),
     )
     email_code, phone_code = _codes()
     client.post(
@@ -170,12 +189,12 @@ def test_wrong_codes_burn_attempts_and_eventually_lock_out(client: Client) -> No
     """Rate limiting, not hash cost, is what protects a six-digit code."""
     client.post(
         reverse("accounts:register"),
-        {
-            "full_name": "Test User",
-            "email": "attempts@example.com",
-            "phone": "9876543212",
-            "password": "a-long-enough-password",
-        },
+        _registration_payload(
+            first_name="Test",
+            last_name="User",
+            email="attempts@example.com",
+            phone="9876543212",
+        ),
     )
 
     for _ in range(5):
@@ -193,12 +212,12 @@ def test_a_verified_session_reaches_the_application(client: Client) -> None:
     """The end of the flow: past the gate, the dashboard renders."""
     client.post(
         reverse("accounts:register"),
-        {
-            "full_name": "Anita Rao",
-            "email": "anita@example.com",
-            "phone": "9876543213",
-            "password": "a-long-enough-password",
-        },
+        _registration_payload(
+            first_name="Anita",
+            last_name="Rao",
+            email="anita@example.com",
+            phone="9876543213",
+        ),
     )
     email_code, phone_code = _codes()
     client.post(
@@ -206,10 +225,12 @@ def test_a_verified_session_reaches_the_application(client: Client) -> None:
         {"email_code": email_code, "phone_code": phone_code, "remember_device": "on"},
     )
 
-    # No membership yet, so the scope is empty — but the shell must still render
-    # rather than erroring, because this is what a brand-new user sees.
+    # No membership yet. What a brand-new user must NOT see is a refusal: they
+    # are sent to the flow that gives them an organisation. See
+    # `tenancy.middleware.OrganisationGateMiddleware`.
     response = client.get("/app/")
-    assert response.status_code in (200, 403)
+    assert response.status_code == 302
+    assert response["Location"] == reverse("onboarding:identity")
 
 
 # ===========================================================================

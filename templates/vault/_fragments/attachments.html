@@ -13,7 +13,16 @@
         <c-icon name="document" size="14" />
         <span class="attachments__name">{{ document.title }}</span>
         {% if document.is_downloadable %}
-          <a class="attachments__action" href="{% url 'vault:download' document.pk %}">
+          {% comment %}
+            hx-boost="false" is load-bearing, not decoration. This strip is
+            included inside #main, so without it the link inherits the shell's
+            boost, HTMX fetches the file with XHR — which ignores
+            Content-Disposition entirely, because browsers only honour it for
+            real navigations — and the bytes get morphed into the page as text.
+            That is the "it shows some text instead of downloading" report.
+          {% endcomment %}
+          <a class="attachments__action" hx-boost="false" download
+             href="{% url 'vault:download' document.pk %}">
             {% translate "Download" %}
           </a>
         {% elif document.is_quarantined %}

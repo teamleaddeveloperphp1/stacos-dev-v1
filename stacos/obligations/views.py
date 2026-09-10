@@ -51,7 +51,9 @@ from stacos.obligations.transitions import (
     apply_transition,
     available_actions,
 )
+from stacos.tenancy.forms import QuestionForm
 from stacos.tenancy.models import ComplianceCategory, Entity
+from stacos.tenancy.services import record_fact
 
 PAGE_SIZE = 50
 
@@ -450,6 +452,214 @@ def record_entity_event(request: HttpRequest, pk: str) -> HttpResponse:
             },
         ),
         toast=Toast(_("Date recorded. The calendar has been rebuilt.")),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Confirming an obligation
+#
+# "Confirm" was a badge and nothing else — an inert `<span>` whose tooltip said
+# "confirm a few details" beside no way to do so. The detail the user is being
+# asked for is `Verdict.missing_facts`, which the engine computes on every
+# evaluation and which is now persisted on the row (`missing_facts`) instead of
+# being discarded with the verdict.
+#
+# Only obligations with a fact to ask about get the action. One that is
+# unconfirmed because a person opted into it by hand has an empty `missing_facts`
+# and stays a plain badge: there is no question, and inventing one would be
+# worse than the silence.
+# ---------------------------------------------------------------------------
+
+
+def _askable_questions(obligation: ObligationInstance, *, as_of: date) -> list[Any]:
+    """The blocking facts, ranked, in the order worth asking them.
+
+    Reuses ``rank_questions`` — the same pure function the setup wizard ranks by,
+    against the same fact registry — so the questions asked here are the questions
+    asked there, in the same order, phrased the same way. It also does the work
+    this view could not do for itself: mapping a fact nobody can answer directly
+    onto one they can, and dropping the facts that are derived from a
+    registration or a premises rather than typed by a person.
+    """
+    from stacos.catalog.snapshots import build_catalog
+    from stacos.obligations.profile import build_profile_view
+    from stacos.tenancy.onboarding.questions import askable_facts, rank_questions
+
+    raw = frozenset(obligation.missing_facts or ())
+    if not raw:
+        return []
+
+    # Not the raw set. A derived fact has no input of its own — nobody types a
+    # turnover *band*, they type a turnover — so the question that settles this
+    # obligation may be keyed differently from the fact the rule went looking
+    # for. `askable_facts` follows `depends_on` to find it, and drops the facts
+    # that come from a registration or a premises rather than from a person.
+    # Filtering the ranked list on the raw set instead would silently offer no
+    # question for exactly the obligations that have one.
+    blocking = askable_facts(raw)
+    if not blocking:
+        return []
+
+    profile = build_profile_view(obligation.entity, as_of=as_of)
+    # Same prefilter the materialiser uses: country and the jurisdictions this
+    # entity actually operates in. Ranking against the whole catalog would score
+    # the question by rules that could never apply here.
+    catalog = build_catalog(
+        country=obligation.entity.country,
+        jurisdictions=profile.jurisdictions,
+    )
+    # No `limit`: the default keeps the wizard's queue short, which is right
+    # there and wrong here — this is filtered down to one obligation's blocking
+    # facts immediately afterwards, and a fact ranked thirteenth overall is still
+    # the only thing standing between this row and a decision.
+    ranked = rank_questions(catalog=catalog, facts=profile.facts, limit=len(catalog) or 1)
+    return [question for question in ranked if question.key in blocking]
+
+
+@require_permission("tenancy.profile.edit")
+@require_http_methods(["GET", "POST"])
+def confirm_obligation(request: HttpRequest, pk: str) -> HttpResponse:
+    """Ask the question behind an unconfirmed obligation, and answer it.
+
+    Recalculates immediately rather than queueing. The user has just told the
+    product something that changes what applies to them; "your calendar will
+    catch up overnight" throws away the entire point of asking. Same trade as
+    ``record_entity_event`` two functions up, and for the same reason.
+
+    Gated on ``tenancy.profile.edit`` rather than on an obligation permission:
+    the answer is written to the entity's compliance profile, and changing the
+    profile changes what applies. ``tenancy.onboarding.start`` would be the wrong
+    one twice over — it is the pre-tenant permission, and it is granted to people
+    who are not members of this tenant at all.
+    """
+    as_of = _today()
+    obligation = _get(pk, as_of=as_of)
+    questions = _askable_questions(obligation, as_of=as_of)
+
+    if not questions:
+        if not obligation.missing_facts:
+            # Nothing was ever unknown about this one — it is unconfirmed because
+            # a person opted into it by hand. The badge is not a button in that
+            # case, so arriving here is a stale page or a guessed URL.
+            raise Http404
+
+        # Undecided, but on something nobody can type: a fact that comes from a
+        # registration or a premises. Say so and say where it is answered, rather
+        # than showing an empty form or a 404 that reads as a broken button.
+        return render(
+            request,
+            "obligations/_fragments/confirm_elsewhere.html",
+            {"obligation": obligation},
+        )
+
+    if request.method == "GET":
+        return render(
+            request,
+            "obligations/_fragments/confirm_modal.html",
+            {"obligation": obligation, "questions": questions},
+        )
+
+    fact_key = request.POST.get("fact_key", "")
+    question = next((q for q in questions if q.key == fact_key), None)
+    if question is None:
+        raise Http404
+
+    form = QuestionForm(request.POST, fact_key=fact_key)
+    if not form.is_valid():
+        return render(
+            request,
+            "obligations/_fragments/confirm_modal.html",
+            {"obligation": obligation, "questions": questions, "form": form},
+            status=422,
+        )
+
+    answer = form.answer()
+    if answer is None:
+        # "Not sure yet" is a real answer in three-valued logic — it just is not
+        # a change. Saying so beats writing a null and rebuilding the calendar to
+        # produce exactly what is already on screen.
+        return oob(
+            request,
+            "",
+            toast=Toast(_("Nothing recorded — the obligation stays unconfirmed."), level="info"),
+            triggers={"stacos:modal-close": True},
+        )
+
+    with transaction.atomic():
+        record_fact(
+            obligation.entity,
+            fact_key,
+            answer,
+            actor=current_user(request),
+            as_of=as_of,
+        )
+        materialise(
+            obligation.entity,
+            as_of=as_of,
+            trigger=MaterialisationRun.Trigger.MANUAL,
+            actor=current_user(request),
+        )
+
+    return _confirmed_response(request, pk, question, as_of=as_of)
+
+
+def _confirmed_response(
+    request: HttpRequest,
+    pk: str,
+    question: Any,
+    *,
+    as_of: date,
+) -> HttpResponse:
+    """Update the row and the counters, and say what actually changed.
+
+    The obligation may no longer exist: an answer that resolves the rule to FALSE
+    archives it, which is the correct outcome and a confusing one to discover as
+    a blank row. So the row is removed rather than re-rendered, and the toast
+    says which way it went.
+
+    One answer can settle several obligations at once — that is the whole point
+    of ranking questions by how much each one unlocks — so the counters are
+    re-rendered too rather than only the row that was clicked.
+    """
+    counts = status_counts(as_of=as_of)
+    counters = Fragment(
+        "obligations/_fragments/status_counts.html",
+        {"counts": counts},
+        oob_target="calendar-counts",
+    )
+
+    refreshed = (
+        annotate_status(ObligationInstance.objects.all(), as_of=as_of)
+        .select_related("entity", "assigned_to")
+        .filter(pk=pk)
+        .first()
+    )
+
+    if refreshed is None or refreshed.archived_at is not None:
+        return oob(
+            request,
+            f'<tr id="obligation-{pk}" hx-swap-oob="delete"></tr>',
+            also=[counters],
+            toast=Toast(
+                _("Answered — %(fact)s. This one does not apply to you after all.")
+                % {"fact": question.fact.label}
+            ),
+            triggers={"stacos:modal-close": True},
+        )
+
+    return oob(
+        request,
+        Fragment(
+            "obligations/_fragments/obligation_row.html",
+            {"obligation": refreshed, "as_of": as_of},
+            oob_target=f"obligation-{pk}",
+        ),
+        also=[counters],
+        toast=Toast(
+            _("Answered — %(fact)s. Your calendar has been rebuilt.")
+            % {"fact": question.fact.label}
+        ),
+        triggers={"stacos:modal-close": True},
     )
 
 

@@ -1,0 +1,52 @@
+{% load i18n %}
+{% comment %}
+  Undecided, but on something nobody can type into a form.
+
+  Some facts come from a registration or a premises rather than from an answer —
+  whether you hold a factory licence, which states you are registered in. The
+  honest response is to say the obligation is genuinely unresolved and point at
+  the place it gets resolved, rather than showing an empty question or a 404 that
+  reads as a broken button.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="confirm-elsewhere-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="confirm-elsewhere-title">
+          {% translate "This one is settled elsewhere" %}
+        </h2>
+        <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                @click="$dispatch('stacos:modal-close')"></button>
+      </div>
+
+      <div class="modal-body">
+        <p class="mb-2">
+          {% blocktranslate with title=obligation.title %}
+            We could not rule <strong>{{ title }}</strong> in or out, but what is
+            missing is not something to answer here.
+          {% endblocktranslate %}
+        </p>
+        <p class="text-muted small mb-0">
+          {% translate "It depends on the registrations and premises recorded for this entity. Add or correct those and the calendar will settle it." %}
+        </p>
+      </div>
+
+      <div class="modal-footer">
+        <a class="btn btn-primary"
+           href="{% url 'app:entity_detail' obligation.entity_id %}"
+           hx-get="{% url 'app:entity_detail' obligation.entity_id %}"
+           hx-target="#main" hx-push-url="true"
+           @click="$dispatch('stacos:modal-close')">
+          {% translate "Open this entity" %}
+        </a>
+        <button type="button" class="btn btn-outline-secondary"
+                @click="$dispatch('stacos:modal-close')">
+          {% translate "Close" %}
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

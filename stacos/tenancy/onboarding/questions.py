@@ -27,7 +27,7 @@ from stacos.engine.rules import V, evaluate
 from stacos.engine.types import DefinitionSnapshot, Periodicity
 from stacos.jurisdictions.facts import REGISTRY, FactDef, FactSource
 
-__all__ = ["Question", "rank_questions"]
+__all__ = ["Question", "askable_facts", "rank_questions"]
 
 #: How much an undecided definition is worth to the ranking, by how often it
 #: recurs. A monthly filing is worth twelve annual ones to somebody deciding
@@ -91,7 +91,7 @@ def rank_questions(
         if verdict.result is not V.UNKNOWN:
             continue
         recurrence = _PERIODICITY_WEIGHT.get(definition.periodicity, 1)
-        for key in _askable(verdict.missing_facts):
+        for key in askable_facts(verdict.missing_facts):
             unlocks[key] = unlocks.get(key, 0) + 1
             weight[key] = weight.get(key, 0) + recurrence
             if len(examples.setdefault(key, [])) < 5:
@@ -119,7 +119,7 @@ def rank_questions(
     return tuple(questions[:limit])
 
 
-def _askable(missing: frozenset[str]) -> set[str]:
+def askable_facts(missing: frozenset[str]) -> set[str]:
     """Substitute a question a person can actually answer.
 
     A derived fact has no input of its own: nobody types a turnover *band*, they

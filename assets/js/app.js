@@ -369,6 +369,75 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Sidebar highlighting
+//
+// The shell renders once and #main is all that navigation replaces, so nothing
+// in the sidebar re-renders after a click. The active item used to be decided
+// server-side from `request.resolver_match`, which meant it was correct for
+// whatever page the browser last *loaded* and stale for every boosted navigation
+// after it — the highlight only caught up on a manual refresh.
+//
+// So the decision moved here, and it moved here rather than being duplicated
+// here: the shell no longer emits `aria-current` at all. Two copies of this rule
+// is how it broke in the first place, with some links compared by url_name, some
+// by namespace, and two not compared at all.
+//
+// Each link declares the URL prefix it owns as `data-nav-match`. Longest match
+// wins, so /app/practice/profitability/ highlights Profitability rather than the
+// Work board it also sits under. `data-nav-exact` is for Dashboard, whose /app/
+// prefix would otherwise match every page in the product.
+// ---------------------------------------------------------------------------
+function syncNav() {
+  const path = window.location.pathname;
+  const links = document.querySelectorAll(".app-nav__link[data-nav-match]");
+
+  let best = null;
+  let bestLength = 0;
+
+  links.forEach((link) => {
+    const prefix = link.dataset.navMatch;
+    const hit = link.hasAttribute("data-nav-exact") ? path === prefix : path.startsWith(prefix);
+    if (hit && prefix.length >= bestLength) {
+      best = link;
+      bestLength = prefix.length;
+    }
+  });
+
+  links.forEach((link) => {
+    // `aria-current` is the styling hook as well as the announcement, so setting
+    // it is the whole of the change. Removed rather than set to "false": a
+    // screen reader treats any non-empty value as current.
+    if (link === best) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+}
+
+// Every way the address bar can change. `htmx:afterSwap` is deliberately not one
+// of them — it can fire before the URL has been pushed, which would highlight
+// the page being left rather than the one being entered.
+document.body.addEventListener("htmx:pushedIntoHistory", syncNav);
+document.body.addEventListener("htmx:replacedInHistory", syncNav);
+document.body.addEventListener("htmx:historyRestore", syncNav);
+window.addEventListener("popstate", syncNav);
+
+// First paint. This script is deferred, so it runs after the document is parsed
+// and before the user sees anything settle.
+syncNav();
+
+// On a phone the sidebar is a drawer over the page, and `navOpen` was never
+// reset — so tapping a destination left the drawer sitting on top of it. Closing
+// it belongs with navigation rather than with the link, since a server-directed
+// navigation has no link to hang it on.
+document.body.addEventListener("htmx:pushedIntoHistory", () => {
+  const shell = document.querySelector(".app-shell");
+  // `Alpine.$data`, not the v2 `__x` property, which does not exist in v3.
+  if (shell) {
+    const data = Alpine.$data(shell);
+    if (data && "navOpen" in data) data.navOpen = false;
+  }
+});
+
 /**
  * An in-app navigation, as if the user had clicked a boosted link.
  *

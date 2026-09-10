@@ -89,8 +89,27 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     # E.164, so international numbers work without a schema change. Uniqueness
     # is enforced only among *verified* numbers — see Meta.constraints.
-    phone_e164 = models.CharField(_("phone number"), max_length=20, blank=True, db_index=True)
+    #
+    # This is the **WhatsApp channel**, not a general contact number: it is where
+    # the second verification code goes, and `CLAUDE.md` rule 5 makes reaching it
+    # a hard requirement for sign-up. `mobile_e164` below is the number a person
+    # is called on, which is frequently a different one.
+    phone_e164 = models.CharField(_("WhatsApp number"), max_length=20, blank=True, db_index=True)
     phone_verified = models.BooleanField(default=False)
+
+    #: An ordinary contact number. Never used as an authentication channel, so it
+    #: carries no verified flag and no uniqueness constraint — two people at one
+    #: business sharing a landline is normal and must not be an error.
+    mobile_e164 = models.CharField(_("mobile number"), max_length=20, blank=True)
+
+    # Held separately because a list, a salutation and a sort order all need the
+    # halves, and splitting a single string on whitespace gets Indian names wrong
+    # often enough to be insulting. `full_name` remains the canonical display
+    # string and is derived from the two in `save()` — it is what `__str__`,
+    # `audit_label`, `initials` and every notification template already read, and
+    # re-deriving it at each of those call sites would be churn for no gain.
+    first_name = models.CharField(_("first name"), max_length=100, blank=True)
+    last_name = models.CharField(_("last name"), max_length=100, blank=True)
 
     full_name = models.CharField(max_length=200, blank=True)
     display_name = models.CharField(max_length=80, blank=True)
@@ -145,6 +164,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         self.email = self.email.lower().strip()
+
+        # `full_name` follows the halves when they are set, and is left alone
+        # when they are not — a user created before this field existed, or by a
+        # fixture that passes only `full_name`, keeps the name it has.
+        derived = " ".join(part for part in (self.first_name, self.last_name) if part).strip()
+        if derived:
+            self.full_name = derived
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None and (
+                "first_name" in update_fields or "last_name" in update_fields
+            ):
+                kwargs["update_fields"] = [*update_fields, "full_name"]
+
         super().save(*args, **kwargs)
 
     # -- Identity helpers ---------------------------------------------------
@@ -266,6 +298,12 @@ class PendingVerification(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=512, blank=True)
     next_url = models.CharField(max_length=500, blank=True)
+
+    #: The organisation the person named at sign-up, held until both channels are
+    #: proven. Carried here rather than in the session because the tenant is
+    #: created on the strength of *this* row: an abandoned or throttled sign-up
+    #: must leave no organisation behind, and a resend must not lose the name.
+    organisation_name = models.CharField(max_length=200, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(db_index=True)

@@ -20,30 +20,13 @@ from collections.abc import Callable
 import structlog
 from django.contrib.auth import logout
 from django.http import HttpRequest, HttpResponse
-from django.shortcuts import redirect
 from django.urls import reverse
+
+from stacos.core.htmx import navigate as _navigate
 
 logger = structlog.get_logger(__name__)
 
 __all__ = ["SecurityStampMiddleware", "VerificationGateMiddleware"]
-
-
-def _navigate(request: HttpRequest, target: str) -> HttpResponse:
-    """Send the browser to ``target``, whether or not HTMX is driving.
-
-    HTMX follows a 302 itself and swaps the result into the target region, so a
-    plain redirect from here would render the sign-in page inside the shell the
-    user is being ejected from. ``HX-Redirect`` makes the browser navigate.
-
-    This only works because ``HtmxMiddleware`` is listed *above* both gates in
-    ``MIDDLEWARE``; below them, ``request.htmx`` does not exist yet and this
-    quietly degrades to the broken behaviour.
-    """
-    if getattr(request, "htmx", False):
-        response = HttpResponse(status=204)
-        response["HX-Redirect"] = target
-        return response
-    return redirect(target)
 
 
 SESSION_STAMP_KEY = "stacos_security_stamp"

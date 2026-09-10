@@ -233,6 +233,14 @@ class ObligationInstance(TenantScopedModel, SoftDeleteModel):
     #: may apply — confirm". Silently dropping it is the failure mode that gets a
     #: client penalised.
     confirmed = models.BooleanField(default=True)
+    #: Which facts the rule needed and did not have. The engine computes this on
+    #: every evaluation (``Verdict.missing_facts``) and it used to be thrown away
+    #: with the verdict, so the register knew an obligation was unconfirmed but
+    #: not what would confirm it — and the "Confirm" badge was an inert span
+    #: offering an action nothing implemented. Empty for an obligation somebody
+    #: opted into by hand: that one is unconfirmed because a person chose it, and
+    #: there is no question to ask.
+    missing_facts = ArrayField(models.CharField(max_length=64), default=list, blank=True)
     #: The pruned, minimal reason the rule fired. Shown verbatim on the detail
     #: page, so "why is this on my calendar" always has an answer.
     reasons = ArrayField(models.CharField(max_length=250), default=list, blank=True)

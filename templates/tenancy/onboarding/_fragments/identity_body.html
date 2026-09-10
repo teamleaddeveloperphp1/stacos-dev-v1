@@ -7,11 +7,18 @@
 {% include "tenancy/onboarding/_fragments/steps.html" %}
 
 <div class="wizard">
-  <form hx-post="{% url 'onboarding:identity' %}"
-        hx-target="body"
-        hx-swap="outerHTML"
-        method="post"
-        action="{% url 'onboarding:identity' %}">
+  {% comment %}
+    A plain form. It inherits the shell's boost, so it posts into #main and the
+    redirect that follows is rendered as a fragment — which is what the profile
+    step two clicks later has always done.
+
+    It used to carry hx-target="body" hx-swap="outerHTML", which was a
+    workaround for this view having no fragment path: the response was a whole
+    document, so the whole document had to be swapped. That replaced the shell
+    with a copy of itself and took Alpine's state, the sidebar and the modal
+    container with it. Both halves are fixed now; neither should come back.
+  {% endcomment %}
+  <form method="post" action="{% url 'onboarding:identity' %}">
     {% csrf_token %}
 
     <div class="wizard__panel">

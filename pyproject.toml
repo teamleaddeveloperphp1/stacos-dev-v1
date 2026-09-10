@@ -65,7 +65,6 @@ dev = [
     "django-stubs>=5.2.0",
     "djangorestframework-stubs>=3.16.0",
     "types-python-dateutil",
-
     "pytest>=8.3",
     "pytest-django>=4.14.0",
     "pytest-cov>=6.0",
@@ -73,12 +72,11 @@ dev = [
     "factory-boy>=3.3.3",
     "hypothesis>=6.165.3",
     "time-machine>=2.16",
-
     "playwright>=1.62.0",
     "pytest-playwright>=0.7",
-
     "django-debug-toolbar>=7.1.0",
     "flower>=2.0.1",
+    "django-browser-reload>=1.18.0",
 ]
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,30 @@
+{% load i18n %}
+{% comment %}
+  Rendered by `OrganisationGateMiddleware` for a user whose only membership is
+  suspended. Outside the application shell on purpose: the shell's tenant
+  switcher assumes a tenant, and there is not one to switch to.
+
+  This deliberately offers no route into the setup flow. Somebody whose access
+  was revoked must not be able to answer that by creating a fresh organisation
+  and carrying on — that would make a suspension a suggestion.
+{% endcomment %}
+<div class="auth-card">
+  <h1 class="auth-card__title">{% translate "Your access has been suspended" %}</h1>
+  <p class="auth-card__lede">
+    {% blocktranslate %}Your membership is on hold, so there is nothing here for you to open right now. Your organisation's administrator can lift it.{% endblocktranslate %}
+  </p>
+
+  <ul class="hint-list hint-list--facts">
+    {% for membership in memberships %}
+      <li class="hint-list__item">
+        <span>{{ membership.tenant.name }}</span>
+        <span class="hint-list__source">{{ membership.get_status_display }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <form method="post" action="{% url 'accounts:logout' %}" class="mt-4" hx-boost="false">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-secondary w-100">{% translate "Sign out" %}</button>
+  </form>
+</div>
