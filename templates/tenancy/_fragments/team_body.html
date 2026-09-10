@@ -1,0 +1,101 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Who has access to this organisation, and who has been asked.
+
+  Both lists on one screen because they answer one question. An invitation that
+  has not been accepted is somebody who cannot get in yet, and hiding it behind a
+  separate tab is how an administrator concludes the invitation never sent.
+{% endcomment %}
+<c-page-header title="{% translate 'People' %}"
+               subtitle="{% translate 'Everyone who can reach this organisation, and anyone still being asked.' %}">
+</c-page-header>
+
+<div id="team-panel" aria-live="polite" aria-atomic="true">
+
+  <section class="card">
+    <div class="card__header">
+      <h2 class="card__title">{% translate "Invite a colleague" %}</h2>
+    </div>
+
+    <form hx-post="{% url 'app:team_invite' %}"
+          hx-target="#team-panel" hx-swap="outerHTML"
+          method="post" action="{% url 'app:team_invite' %}">
+      {% csrf_token %}
+      {% crispy form %}
+      <button class="btn btn-primary" type="submit">{% translate "Send invitation" %}</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="card__header">
+      <h2 class="card__title">{% translate "Members" %}</h2>
+    </div>
+
+    <div class="data-table__scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate "Name" %}</th>
+            <th scope="col">{% translate "Email" %}</th>
+            <th scope="col">{% translate "Can do" %}</th>
+            <th scope="col">{% translate "Status" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for membership in memberships %}
+            <tr>
+              <td>{{ membership.user.full_name|default:membership.user.email }}</td>
+              <td class="text-muted small">{{ membership.user.email }}</td>
+              <td class="text-muted small">{{ membership.role.name }}</td>
+              <td>
+                <c-status-chip status="{% if membership.status == 'ACTIVE' %}complete{% else %}na{% endif %}"
+                               :label="membership.get_status_display" />
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if invitations %}
+    <section class="card">
+      <div class="card__header">
+        <h2 class="card__title">{% translate "Waiting to be accepted" %}</h2>
+      </div>
+
+      <div class="data-table__scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">{% translate "Email" %}</th>
+              <th scope="col">{% translate "Can do" %}</th>
+              <th scope="col">{% translate "Expires" %}</th>
+              <th scope="col"><span class="visually-hidden">{% translate "Actions" %}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for invitation in invitations %}
+              <tr>
+                <td>{{ invitation.email }}</td>
+                <td class="text-muted small">{{ invitation.role.name }}</td>
+                <td class="text-muted small">{{ invitation.expires_at|date:"j M Y" }}</td>
+                <td class="text-end">
+                  <form hx-post="{% url 'app:team_invite_revoke' invitation.pk %}"
+                        hx-target="#team-panel" hx-swap="outerHTML"
+                        hx-confirm="{% translate 'Withdraw this invitation? The link stops working immediately.' %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">
+                      {% translate "Withdraw" %}
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+
+</div>
