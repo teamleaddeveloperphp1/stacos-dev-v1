@@ -45,6 +45,7 @@ __all__ = [
     "Membership",
     "Role",
     "Tenant",
+    "TenantInvitation",
 ]
 
 
@@ -566,3 +567,81 @@ class Membership(TenantScopedModel):
         from stacos.core.permissions import permission_registry
 
         return permission_registry.expand([*self.role.permissions, *self.extra_permissions])
+
+
+class TenantInvitation(TenantScopedModel):
+    """An invitation to join *this* organisation as a colleague.
+
+    Distinct from ``engagements.EngagementInvitation``, which is a firm and a
+    client agreeing to work together across two tenants. This is the far more
+    ordinary thing: somebody at a business asking a colleague to join the
+    workspace they already own.
+
+    ``Membership`` has carried ``Status.INVITED`` and ``invited_by`` since the
+    beginning, and it was never reachable — nothing in the product created one.
+    It could not: a membership needs a ``user``, and the colleague being invited
+    frequently has no account yet. The invitation holds an email until there is
+    somebody to attach it to, and the membership is created at acceptance.
+
+    Tenant-scoped, unlike the two cross-tenant invitations: the *inviting* tenant
+    exists by definition and owns this row, which is what lets an administrator
+    see and revoke their own outstanding invitations through the ordinary scoped
+    manager.
+
+    The raw token lives only in the emailed link — the same treatment as a
+    trusted-device secret and a responder link.
+    """
+
+    ENTITY_FIELD: ClassVar[str | None] = None
+
+    class Status(models.TextChoices):
+        SENT = "SENT", _("Sent")
+        ACCEPTED = "ACCEPTED", _("Accepted")
+        REVOKED = "REVOKED", _("Revoked")
+
+    email = models.EmailField()
+    role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="invitations")
+    message = models.TextField(blank=True)
+
+    token_hash = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SENT)
+    expires_at = models.DateTimeField()
+
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tenant_invitations_sent",
+    )
+    accepted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tenant_invitations_accepted",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            # One open invitation per address per tenant. Sending a second while
+            # the first is live is how two links end up in one inbox and the
+            # wrong one gets clicked.
+            models.UniqueConstraint(
+                fields=["tenant", "email"],
+                condition=models.Q(status="SENT"),
+                name="tenantinvitation_open_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="tenantinvite_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Invitation for {self.email}"
+
+    @property
+    def is_open(self) -> bool:
+        return self.status == self.Status.SENT and timezone.now() < self.expires_at

@@ -8,7 +8,7 @@ product, and the seam is visible to users within a month.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Column, Layout, Row
@@ -23,7 +23,7 @@ from stacos.jurisdictions.facts import (
     REGISTRY,
     FactType,
 )
-from stacos.tenancy.models import Entity, EntityRegistration
+from stacos.tenancy.models import Entity, EntityRegistration, Role
 
 #: Human labels for the entity types the fact registry knows about. Kept here
 #: rather than on the model so the vocabulary stays data, not a hardcoded enum
@@ -303,3 +303,39 @@ class QuestionForm(forms.Form):
         if getattr(self, "fact", None) is not None and self.fact.type is FactType.BOOL:
             return raw == "yes"
         return raw
+
+
+class InviteColleagueForm(forms.Form):
+    """Ask a colleague by email, and say what they will be able to do.
+
+    The role is chosen at the point of invitation rather than afterwards, so
+    nobody lands in the workspace with whatever the default happened to be and
+    has to be corrected. Only the system roles for this tenant's type are
+    offered — inviting somebody into a practice role at an organisation would
+    produce a membership whose permissions name features that are not there.
+    """
+
+    email = forms.EmailField(label=_("Their work email"))
+    role = forms.ModelChoiceField(label=_("What can they do?"), queryset=Role.objects.none())
+    message = forms.CharField(
+        required=False,
+        label=_("Add a note (optional)"),
+        widget=forms.Textarea(attrs={"rows": 2}),
+        help_text=_("Included in the invitation email."),
+    )
+
+    def __init__(self, *args: Any, tenant: Any = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.tenant = tenant
+        role_field = cast("forms.ModelChoiceField", self.fields["role"])
+        if tenant is not None:
+            role_field.queryset = Role.objects.filter(
+                tenant__isnull=True, tenant_type=tenant.type
+            ).order_by("rank", "name")
+
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout(Row(Column("email"), Column("role")), "message")
+
+    def clean_email(self) -> str:
+        return self.cleaned_data["email"].strip().lower()
