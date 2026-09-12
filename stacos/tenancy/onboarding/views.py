@@ -27,6 +27,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -40,7 +42,12 @@ from stacos.core.typing import current_user
 from stacos.jurisdictions import subdivisions
 from stacos.jurisdictions.decode import IdentityReport, read, sniff
 from stacos.tenancy.onboarding.forms import IdentityForm, ProfileForm, QuestionForm
-from stacos.tenancy.onboarding.services import commit_draft, preview_draft, suggest_packs
+from stacos.tenancy.onboarding.services import (
+    commit_draft,
+    preview_draft,
+    suggest_packs,
+    total_obligation_count,
+)
 from stacos.tenancy.onboarding.state import DraftRegistration, OnboardingDraft
 from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
 
@@ -79,6 +86,17 @@ def _step_context(step: str, draft: OnboardingDraft) -> dict[str, object]:
 @require_http_methods(["GET", "POST"])
 def identity(request: HttpRequest) -> HttpResponse:
     draft = OnboardingDraft.from_session(request.session)
+
+    # "Create a new organisation" starts over deliberately, rather than
+    # resuming whatever draft happens to be sitting in the session — carrying
+    # over a half-finished "add a business" attempt into a "new organisation"
+    # run would mix the two intents together. See `finish` for the other half
+    # of this: it is what stops the new entity being folded into the tenant
+    # the user is already signed into.
+    if request.method == "GET" and request.GET.get("new_org"):
+        draft = OnboardingDraft(new_organisation=True)
+        draft.save(request.session)
+
     form = IdentityForm(request.POST or None, initial=draft.identifiers)
 
     if request.method == "POST" and form.is_valid():
@@ -201,6 +219,7 @@ def answer_question(request: HttpRequest, fact_key: str) -> HttpResponse:
     draft = OnboardingDraft.from_session(request.session)
     form = QuestionForm(request.POST, fact_key=fact_key)
 
+    toast = None
     if form.is_valid():
         answers = dict(draft.answers)
         answer = form.answer()
@@ -210,8 +229,14 @@ def answer_question(request: HttpRequest, fact_key: str) -> HttpResponse:
             answers[fact_key] = answer
         draft = draft.with_(answers=answers)
         draft.save(request.session)
+    else:
+        # An invalid answer used to be discarded in silence — the field just
+        # reverted on the next render with no explanation, which reads as the
+        # page ignoring what was typed rather than as a rejected value.
+        message = next(iter(form.errors.get("answer", ())), _("That answer could not be saved."))
+        toast = Toast(str(message), level="danger")
 
-    return _render_preview_fragments(request, draft, toast=None)
+    return _render_preview_fragments(request, draft, toast=toast)
 
 
 # ---------------------------------------------------------------------------
@@ -226,13 +251,15 @@ def preview(request: HttpRequest) -> HttpResponse:
         return redirect("onboarding:profile")
 
     result = preview_draft(draft)
+    packs = suggest_packs(draft, result)
     return render(
         request,
         _template(request, "tenancy/onboarding/preview.html"),
         {
             **_step_context("preview", draft),
             "preview": result,
-            "packs": suggest_packs(draft, result),
+            "packs": packs,
+            "total_count": total_obligation_count(result, packs),
         },
     )
 
@@ -275,10 +302,12 @@ def _render_preview_fragments(
     level of nesting on every answer.
     """
     result = preview_draft(draft)
+    packs = suggest_packs(draft, result)
     context = {
         "preview": result,
-        "packs": suggest_packs(draft, result),
+        "packs": packs,
         "draft": draft,
+        "total_count": total_obligation_count(result, packs),
     }
     return oob(
         request,
@@ -295,6 +324,11 @@ def _render_preview_fragments(
                 context,
                 oob_target="onboarding-packs",
                 swap="innerHTML",
+            ),
+            Fragment(
+                "tenancy/onboarding/_fragments/finish_button.html",
+                context,
+                oob_target="onboarding-finish-button",
             ),
         ],
         toast=toast,
@@ -316,15 +350,32 @@ def finish(request: HttpRequest) -> HttpResponse:
     if not draft.is_ready_to_commit:
         return redirect("onboarding:profile")
 
-    # An organisation the user already owns is the one this entity belongs in.
-    # Without this, somebody who named their organisation at sign-up gets a
-    # second, empty one the first time they run the wizard.
-    entity = commit_draft(
-        draft,
-        user=current_user(request),
-        as_of=_today(),
-        tenant=getattr(request, "tenant", None),
-    )
+    # An organisation the user already owns is the one this entity belongs in
+    # — unless the wizard was entered through "Create a new organisation",
+    # which sets `draft.new_organisation` precisely so this branch can be
+    # skipped. Without the flag, a signed-in user always has a `request.tenant`
+    # bound, so every second run of the wizard would fold into it silently —
+    # the correct move for "add a business", but not for somebody deliberately
+    # starting a second, separate organisation.
+    tenant = None if draft.new_organisation else getattr(request, "tenant", None)
+    try:
+        entity = commit_draft(
+            draft,
+            user=current_user(request),
+            as_of=_today(),
+            tenant=tenant,
+        )
+    except ValidationError as exc:
+        # A mistyped GSTIN or CIN passes the identity step's own check — which
+        # only confirms the shape — and fails a real rule (a checksum, a
+        # cross-field constraint) only here, at commit. Without this, that
+        # was an unhandled 500 with nothing on screen to say which of the ten
+        # things the user typed was the problem.
+        message = " ".join(exc.messages)
+        if getattr(request, "htmx", False):
+            return oob(request, toast=Toast(message, level="danger"), status=204)
+        messages.error(request, message)
+        return redirect("onboarding:preview")
 
     # Switch the session to the tenant just created, so the next page renders
     # inside it rather than falling back to the no-membership scope.

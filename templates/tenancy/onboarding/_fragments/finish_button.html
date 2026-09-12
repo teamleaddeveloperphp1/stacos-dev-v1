@@ -1,0 +1,20 @@
+{% load i18n %}
+{% comment %}
+  The number here is `preview.applies_count` plus whatever accepted packs add
+  on top (`services.total_obligation_count`) — the count of rows
+  `commit_draft` will actually create, not just the rule-evaluated ones.
+
+  Its own fragment, included from `preview_body.html` and also sent as an
+  out-of-band swap from `_render_preview_fragments`, so answering a question
+  or toggling a pack updates this number the same way it already updates the
+  applies/might-apply columns beside it — before this existed, the button
+  was outside every swapped region and simply never changed.
+{% endcomment %}
+<button type="submit" id="onboarding-finish-button" class="btn btn-primary"
+        hx-post="{% url 'onboarding:finish' %}" hx-disabled-elt="this">
+  {% blocktranslate count counter=total_count %}
+    Create my calendar with {{ counter }} obligation
+  {% plural %}
+    Create my calendar with {{ counter }} obligations
+  {% endblocktranslate %}
+</button>

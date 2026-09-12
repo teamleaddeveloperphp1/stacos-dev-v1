@@ -52,6 +52,13 @@ class OnboardingDraft:
     packs: tuple[str, ...] = ()
     #: Raw identifiers as typed, so the identity step can be re-rendered.
     identifiers: dict[str, str] = field(default_factory=dict)
+    #: Set when the wizard was entered through "Create a new organisation"
+    #: rather than "Add a business here". Without this, ``finish`` cannot tell
+    #: the two apart: a signed-in user always has an active tenant bound to the
+    #: request, and reusing it silently — the correct move for "add a
+    #: business" — is exactly the wrong move for somebody deliberately
+    #: starting a second, separate organisation. See ``views.finish``.
+    new_organisation: bool = False
 
     # -- Session round-tripping ---------------------------------------------
 
@@ -78,6 +85,7 @@ class OnboardingDraft:
             answers=dict(data.get("answers", {})),
             packs=tuple(data.get("packs", [])),
             identifiers=dict(data.get("identifiers", {})),
+            new_organisation=bool(data.get("new_organisation", False)),
         )
 
     def save(self, session: Any) -> None:
@@ -93,6 +101,7 @@ class OnboardingDraft:
             "answers": self.answers,
             "packs": list(self.packs),
             "identifiers": self.identifiers,
+            "new_organisation": self.new_organisation,
         }
         session.modified = True
 

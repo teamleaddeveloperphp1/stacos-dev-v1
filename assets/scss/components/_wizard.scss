@@ -10,8 +10,17 @@
   max-width: 62rem;
   margin: 0 auto;
 
+  // The step rail above this container spans the full width of `#main` and
+  // is never centred, so centring `.wizard` on a wide screen pushes the
+  // content right while the rail stays flush against the sidebar — a gap
+  // that reads as broken layout, not intentional whitespace. The identify
+  // and profile steps are a single narrow form column, where a centred
+  // reading measure still makes sense; the preview step's two-column split
+  // wants the width it can get and should line up with the rail above it,
+  // like every other page in the product.
   &--wide {
     max-width: 84rem;
+    margin: 0;
   }
 }
 

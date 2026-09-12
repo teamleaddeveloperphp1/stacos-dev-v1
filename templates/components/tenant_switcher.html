@@ -50,19 +50,41 @@
       <p class="text-muted small p-2 mb-0">{% translate "You are not a member of any organisation yet." %}</p>
     {% endfor %}
 
-    {% comment %}
-      The way in for a user who has just signed up. Without it they are
-      authenticated, own nothing, and every other route is correctly forbidden —
-      which was the state the product left them in before the wizard existed.
-    {% endcomment %}
-    <a class="palette__item" href="{% url 'onboarding:identity' %}" role="option" aria-selected="false">
-      <span class="avatar"><c-icon name="plus" size="14" /></span>
-      <span class="flex-grow-1 text-start">
-        <span class="d-block">{% translate "Set up an organisation" %}</span>
-        <span class="palette__hint ms-0">
-          {% translate "We read your CIN or PAN and build the calendar" %}
+    {% if memberships %}
+      {% comment %}
+        Only "Create a new organisation" is offered here now — a separate
+        workspace, reached via `?new_org=1`, which is what lets
+        `onboarding.views.finish` tell it apart from a plain run; see there and
+        `state.OnboardingDraft.new_organisation`. The switcher used to also
+        offer "Add a business here" (a plain run, folding into whichever
+        organisation the session already points at) but that action is not
+        exposed from here any more — the plain-run codepath itself still
+        exists and is unchanged.
+      {% endcomment %}
+      <a class="palette__item" href="{% url 'onboarding:identity' %}?new_org=1" role="option" aria-selected="false">
+        <span class="avatar"><c-icon name="briefcase" size="14" /></span>
+        <span class="flex-grow-1 text-start">
+          <span class="d-block">{% translate "Create a new organisation" %}</span>
+          <span class="palette__hint ms-0">
+            {% translate "A separate workspace, with its own team and billing" %}
+          </span>
         </span>
-      </span>
-    </a>
+      </a>
+    {% else %}
+      {% comment %}
+        The way in for a user who has just signed up. Without it they are
+        authenticated, own nothing, and every other route is correctly forbidden —
+        which was the state the product left them in before the wizard existed.
+      {% endcomment %}
+      <a class="palette__item" href="{% url 'onboarding:identity' %}" role="option" aria-selected="false">
+        <span class="avatar"><c-icon name="plus" size="14" /></span>
+        <span class="flex-grow-1 text-start">
+          <span class="d-block">{% translate "Set up an organisation" %}</span>
+          <span class="palette__hint ms-0">
+            {% translate "We read your CIN or PAN and build the calendar" %}
+          </span>
+        </span>
+      </a>
+    {% endif %}
   </div>
 </div>

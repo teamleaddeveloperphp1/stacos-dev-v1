@@ -15,6 +15,9 @@ does not know.
 
 from __future__ import annotations
 
+import json
+from decimal import Decimal
+
 import pytest
 from django.test import Client
 from django.urls import reverse
@@ -127,6 +130,175 @@ def test_nothing_is_written_until_the_user_finishes(signed_in: Client) -> None:
         assert Entity.objects.count() == 0
 
 
+def test_a_decimal_answer_survives_the_session_round_trip(signed_in: Client) -> None:
+    """``aggregate_turnover`` is a ``FactType.DECIMAL`` fact.
+
+    ``forms.DecimalField.clean()`` returns a ``decimal.Decimal``, and the
+    session backend serialises the draft as JSON on every request — a raw
+    ``Decimal`` used to raise ``TypeError: Object of type Decimal is not JSON
+    serializable`` the moment this answer was submitted, a 500 on a real user
+    typing their turnover into the wizard.
+    """
+    signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": GSTIN})
+    signed_in.post(
+        reverse("onboarding:profile"),
+        {"name": "Nimbus Software", "entity_type": "PVT_LTD", "registered_office_state": "IN-KA"},
+    )
+
+    response = signed_in.post(
+        reverse("onboarding:answer", args=["aggregate_turnover"]), {"answer": "1200000.50"}
+    )
+    assert response.status_code == 200
+
+    draft = OnboardingDraft.from_session(signed_in.session)
+    assert draft.answers["aggregate_turnover"] == 1200000.5
+
+    finish = signed_in.post(reverse("onboarding:finish"))
+    assert finish.status_code in {200, 204, 302}
+
+    with platform_scope(reason="test"):
+        profile = EntityProfile.objects.get(entity__tenant__name="Nimbus Software")
+        assert profile.aggregate_turnover == Decimal("1200000.50")
+
+
+def test_accepting_a_pack_moves_the_finish_button_count(signed_in: Client) -> None:
+    """The "Create my calendar with N obligations" button used to read
+    ``preview.applies_count`` alone, so accepting or dropping a pack changed
+    what ``commit_draft`` was about to build without changing the number that
+    promised what it would build.
+    """
+    signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": GSTIN})
+    signed_in.post(
+        reverse("onboarding:profile"),
+        {"name": "Nimbus Software", "entity_type": "PVT_LTD", "registered_office_state": "IN-KA"},
+    )
+
+    before = signed_in.get(reverse("onboarding:preview"))
+    baseline_count = before.context["total_count"]
+
+    toggled = signed_in.post(reverse("onboarding:toggle_pack", args=["IN-PACK-GST"]))
+    assert b'id="onboarding-finish-button"' in toggled.content
+
+    after = signed_in.get(reverse("onboarding:preview"))
+    assert after.context["total_count"] > baseline_count
+
+    # The rendered button text itself must carry the new number, not just the
+    # context variable — this is what a user actually sees on screen.
+    assert str(after.context["total_count"]).encode() in after.content
+
+    signed_in.post(reverse("onboarding:toggle_pack", args=["IN-PACK-GST"]))
+    reverted = signed_in.get(reverse("onboarding:preview"))
+    assert reverted.context["total_count"] == baseline_count
+
+
+def test_a_turnover_too_large_for_the_column_is_rejected_not_crashed(signed_in: Client) -> None:
+    """``EntityProfile.aggregate_turnover`` is ``DecimalField(max_digits=18,
+    decimal_places=2)`` — 16 integer digits. Nothing capped the form field to
+    match, so a value with more digits than that passed form validation clean
+    and died at commit time with ``psycopg.errors.NumericValueOutOfRange``, a
+    500 rather than a rejected field.
+    """
+    signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": GSTIN})
+    signed_in.post(
+        reverse("onboarding:profile"),
+        {"name": "Nimbus Software", "entity_type": "PVT_LTD", "registered_office_state": "IN-KA"},
+    )
+
+    response = signed_in.post(
+        reverse("onboarding:answer", args=["aggregate_turnover"]),
+        {"answer": "999999999999999999"},  # 18 digits — one more than the column allows
+    )
+    assert response.status_code == 200
+    assert "stacos:toast" in response.headers.get("HX-Trigger", "")
+
+    draft = OnboardingDraft.from_session(signed_in.session)
+    assert "aggregate_turnover" not in draft.answers
+
+    finish = signed_in.post(reverse("onboarding:finish"))
+    assert finish.status_code in {200, 204, 302}
+
+
+def test_a_stale_oversized_decimal_already_in_the_session_does_not_crash_finish(
+    signed_in: Client,
+) -> None:
+    """The form-level cap only stops a *new* answer from being this large.
+
+    A draft that already carries one — typed before the cap shipped, or from
+    any other path that writes into ``draft.answers`` without going through
+    ``QuestionForm`` — must not turn ``commit_draft`` into an unhandled
+    ``psycopg.errors.NumericValueOutOfRange``. This reproduces exactly that: a
+    value planted straight into the session, bypassing the form entirely.
+    """
+    signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": GSTIN})
+    signed_in.post(
+        reverse("onboarding:profile"),
+        {"name": "Nimbus Software", "entity_type": "PVT_LTD", "registered_office_state": "IN-KA"},
+    )
+
+    draft = OnboardingDraft.from_session(signed_in.session)
+    draft = draft.with_(answers={**draft.answers, "aggregate_turnover": 5.555555555555555e16})
+    draft.save(signed_in.session)
+    signed_in.session.save()
+
+    finish = signed_in.post(reverse("onboarding:finish"))
+    assert finish.status_code in {200, 204, 302}
+
+    with platform_scope(reason="test"):
+        profile = EntityProfile.objects.get(entity__tenant__name="Nimbus Software")
+        assert profile.aggregate_turnover is None
+
+
+def test_a_bad_gstin_checksum_shows_a_toast_not_a_500(signed_in: Client) -> None:
+    """The identity step's GSTIN field is a plain, unvalidated ``CharField`` —
+    "paste whatever you have" is the whole point of that step — so a typo
+    with a valid shape but the wrong check digit sails through it and only
+    fails ``EntityRegistration.full_clean()``'s real ``validate_gstin`` at
+    commit. That used to be an unhandled ``ValidationError``: a 500 with
+    nothing on screen to say which of the identifiers was the problem.
+    """
+    broken_gstin = GSTIN[:-1] + ("A" if GSTIN[-1] != "A" else "B")
+    signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": broken_gstin})
+    signed_in.post(
+        reverse("onboarding:profile"),
+        {"name": "Nimbus Software", "entity_type": "PVT_LTD", "registered_office_state": "IN-KA"},
+    )
+
+    response = signed_in.post(reverse("onboarding:finish"), headers={"HX-Request": "true"})
+    assert response.status_code == 204
+
+    payload = json.loads(response.headers["HX-Trigger"])
+    assert payload["stacos:toast"]["level"] == "danger"
+    assert "GSTIN" in payload["stacos:toast"]["message"]
+
+    with platform_scope(reason="test"):
+        assert not Tenant.objects.filter(name="Nimbus Software").exists()
+
+
+def test_net_profit_and_women_employees_count_land_in_facts_not_a_missing_column(
+    signed_in: Client,
+) -> None:
+    """Both are registered, askable facts with no matching ``EntityProfile``
+    column — answering either used to raise ``TypeError`` from
+    ``EntityProfile.objects.create(**_profile_columns(...))`` passing a
+    keyword argument the model does not have.
+    """
+    signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": GSTIN})
+    signed_in.post(
+        reverse("onboarding:profile"),
+        {"name": "Nimbus Software", "entity_type": "PVT_LTD", "registered_office_state": "IN-KA"},
+    )
+    signed_in.post(reverse("onboarding:answer", args=["net_profit"]), {"answer": "500000"})
+    signed_in.post(reverse("onboarding:answer", args=["women_employees_count"]), {"answer": "12"})
+
+    finish = signed_in.post(reverse("onboarding:finish"))
+    assert finish.status_code in {200, 204, 302}
+
+    with platform_scope(reason="test"):
+        profile = EntityProfile.objects.get(entity__tenant__name="Nimbus Software")
+        assert profile.facts["net_profit"] == 500000.0
+        assert profile.facts["women_employees_count"] == 12
+
+
 def test_finishing_creates_everything_and_builds_the_calendar(signed_in: Client) -> None:
     signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": GSTIN})
     signed_in.post(
@@ -177,14 +349,18 @@ def test_finishing_creates_everything_and_builds_the_calendar(signed_in: Client)
 
 
 def test_accepting_a_pack_writes_inclusions(signed_in: Client) -> None:
+    # `IN-PACK-PVT-ROC-ANNUAL` was never a real pack — no such code exists in
+    # `catalog/bundles/`, only `IN-PACK-GST` and `IN-PACK-TDS-DEDUCTOR` do —
+    # so `_adopt_packs`'s `CompliancePack.objects.filter(code__in=packs)`
+    # matched nothing and this test failed regardless of the code under test.
     signed_in.post(
         reverse("onboarding:profile"),
         {"name": "Nimbus Software", "entity_type": "PVT_LTD", "registered_office_state": "IN-KA"},
     )
-    signed_in.post(reverse("onboarding:toggle_pack", args=["IN-PACK-PVT-ROC-ANNUAL"]))
+    signed_in.post(reverse("onboarding:toggle_pack", args=["IN-PACK-GST"]))
 
     draft = OnboardingDraft.from_session(signed_in.session)
-    assert "IN-PACK-PVT-ROC-ANNUAL" in draft.packs
+    assert "IN-PACK-GST" in draft.packs
 
     signed_in.post(reverse("onboarding:finish"))
 

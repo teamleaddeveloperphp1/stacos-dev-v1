@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
@@ -53,6 +54,7 @@ __all__ = [
     "commit_draft",
     "preview_draft",
     "suggest_packs",
+    "total_obligation_count",
 ]
 
 #: How many rows to show under a heading before folding the rest away.
@@ -455,6 +457,27 @@ def suggest_packs(draft: OnboardingDraft, preview: DraftPreview) -> list[PackSug
     return suggestions
 
 
+def total_obligation_count(preview: DraftPreview, packs: list[PackSuggestion]) -> int:
+    """What ``commit_draft`` will actually create — rules, plus accepted packs.
+
+    ``preview.applies_count`` alone used to be the number on the "Create my
+    calendar" button, so accepting or dropping a pack changed what the wizard
+    was about to build without changing the number promising what it would
+    build. A union of codes rather than summing each pack's own ``adds``:
+    two accepted packs that both cover the same definition must not be
+    counted twice.
+    """
+    already = {row.code for row in preview.applies}
+    added_by_packs = {
+        code
+        for suggestion in packs
+        if suggestion.accepted
+        for code in suggestion.pack.definition_codes
+        if code not in already
+    }
+    return preview.applies_count + len(added_by_packs)
+
+
 # ---------------------------------------------------------------------------
 # Commit
 # ---------------------------------------------------------------------------
@@ -560,25 +583,49 @@ def commit_draft(
     return entity
 
 
-#: Profile facts that have their own typed column rather than living in the JSONB.
+#: Profile facts that have their own typed column rather than living in the
+#: JSONB. ``women_employees_count`` and ``net_profit`` are registered,
+#: askable facts (``jurisdictions/facts.py``) with no matching column on
+#: ``EntityProfile`` — passing either to ``EntityProfile.objects.create()``
+#: raises ``TypeError`` for an unexpected keyword argument the moment a user
+#: answers that question. Every other caller that builds an ``EntityProfile``
+#: (the ``manufacturer`` test fixture, ``seed_dev``, ``catalog.personas``)
+#: already puts both in ``facts``, never as a column — this brings onboarding
+#: in line with that instead of inventing a third convention.
 _PROFILE_COLUMNS = frozenset(
     {
         "aggregate_turnover",
         "employee_count",
         "contractor_count",
-        "women_employees_count",
         "paid_up_capital",
         "net_worth",
-        "net_profit",
         "nic_code",
         "sector",
         "sub_sector",
     }
 )
 
+#: The three ``DecimalField(max_digits=18, decimal_places=2)`` columns above —
+#: 16 integer digits, so a magnitude of ``10**16`` or more overflows them.
+_DECIMAL_COLUMNS = frozenset({"aggregate_turnover", "paid_up_capital", "net_worth"})
+_DECIMAL_COLUMN_LIMIT = Decimal(10) ** 16
+
 
 def _profile_columns(answers: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in answers.items() if key in _PROFILE_COLUMNS}
+    columns = {key: value for key, value in answers.items() if key in _PROFILE_COLUMNS}
+    for key in _DECIMAL_COLUMNS:
+        value = columns.get(key)
+        # `QuestionForm` (`stacos.tenancy.forms`) now rejects a value this
+        # large at the point of answering, but a draft can carry one from
+        # before that cap existed — the wizard never re-asks a settled
+        # question, so it would otherwise sit in the session and turn every
+        # future "Create my calendar" into `psycopg.errors.NumericValueOutOfRange`.
+        # Dropped rather than clamped: a made-up ceiling value is not a
+        # turnover anyone typed, and the field simply going back to "not
+        # answered" is honest about what we actually know.
+        if value is not None and abs(Decimal(str(value))) >= _DECIMAL_COLUMN_LIMIT:
+            columns.pop(key)
+    return columns
 
 
 def _profile_facts(answers: dict[str, Any]) -> dict[str, Any]:

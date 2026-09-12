@@ -588,17 +588,16 @@ def read(pairs: Iterable[tuple[str, str]]) -> IdentityReport:
         definite = [hint for hint in ranked if hint.is_definite]
         distinct = {hint.value for hint in definite}
         if len(distinct) > 1:
-            sources = " and ".join(sorted({hint.source for hint in definite}))
-            conflicts.append(
-                Conflict(
-                    field=field_name,
-                    explanation=(
-                        f"{sources} disagree about {field_name.replace('_', ' ')}: "
-                        f"{', '.join(str(v) for v in sorted(distinct, key=str))}. "
-                        f"One of the identifiers is probably mistyped."
-                    ),
+            if field_name == "name_initial":
+                explanation = "GSTIN and PAN do not match. Please verify the details."
+            else:
+                sources = " and ".join(sorted({hint.source for hint in definite}))
+                explanation = (
+                    f"{sources} disagree about {field_name.replace('_', ' ')}: "
+                    f"{', '.join(str(v) for v in sorted(distinct, key=str))}. "
+                    f"One of the identifiers is probably mistyped."
                 )
-            )
+            conflicts.append(Conflict(field=field_name, explanation=explanation))
             continue
 
         # A definite reading that contradicts a broader one — a CIN saying LLP

@@ -30,14 +30,7 @@
     </a>
     <form method="post" action="{% url 'onboarding:finish' %}">
       {% csrf_token %}
-      <button type="submit" class="btn btn-primary" hx-post="{% url 'onboarding:finish' %}"
-              hx-disabled-elt="this">
-        {% blocktranslate count counter=preview.applies_count %}
-          Create my calendar with {{ counter }} obligation
-        {% plural %}
-          Create my calendar with {{ counter }} obligations
-        {% endblocktranslate %}
-      </button>
+      {% include "tenancy/onboarding/_fragments/finish_button.html" %}
     </form>
   </div>
 </div>
