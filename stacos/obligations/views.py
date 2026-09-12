@@ -283,7 +283,7 @@ def obligation_detail(request: HttpRequest, pk: str) -> HttpResponse:
         "definition": definition,
         "as_of": as_of,
         "events": obligation.events.select_related("actor")[:50],
-        "actions": available_actions(obligation, permissions=_permissions(request)),
+        **_action_context(obligation, _permissions(request)),
         "form": TransitionForm(),
         "event_form": (
             EntityEventForm(initial={"key": obligation.needs_input})
@@ -298,6 +298,29 @@ def obligation_detail(request: HttpRequest, pk: str) -> HttpResponse:
         else "obligations/detail.html"
     )
     return render(request, template, context)
+
+
+def _action_context(obligation: ObligationInstance, permissions: frozenset[str]) -> dict[str, Any]:
+    """The three shapes the detail panel renders actions as.
+
+    A plain state change is a button; a filing needs its acknowledgement number
+    recorded as evidence, so it gets its own boxed form; a judgement call
+    (deferring, disputing, marking not applicable) needs a reason, so it is a
+    tile that only opens its note field once chosen. Grouped here, once, rather
+    than in the template, so an empty group renders no container at every one
+    of this view's four render sites.
+    """
+    actions = available_actions(obligation, permissions=permissions)
+    return {
+        "actions": actions,
+        "plain_actions": [
+            a for a in actions if not a.requires_note and not a.requires_filing_reference
+        ],
+        "filing_actions": [a for a in actions if a.requires_filing_reference],
+        "note_actions": [
+            a for a in actions if a.requires_note and not a.requires_filing_reference
+        ],
+    }
 
 
 def _get(pk: str, *, as_of: date) -> ObligationInstance:
@@ -366,7 +389,7 @@ def obligation_transition(request: HttpRequest, pk: str) -> HttpResponse:
             {
                 "obligation": refreshed,
                 "as_of": as_of,
-                "actions": available_actions(refreshed, permissions=_permissions(request)),
+                **_action_context(refreshed, _permissions(request)),
                 "form": TransitionForm(),
                 "events": refreshed.events.select_related("actor")[:50],
             },
@@ -400,7 +423,7 @@ def _detail_error(
         {
             "obligation": obligation,
             "as_of": _today(),
-            "actions": available_actions(obligation, permissions=_permissions(request)),
+            **_action_context(obligation, _permissions(request)),
             "form": TransitionForm(),
             "events": obligation.events.select_related("actor")[:50],
             "error": message,
@@ -446,7 +469,7 @@ def record_entity_event(request: HttpRequest, pk: str) -> HttpResponse:
             {
                 "obligation": refreshed,
                 "as_of": as_of,
-                "actions": available_actions(refreshed, permissions=_permissions(request)),
+                **_action_context(refreshed, _permissions(request)),
                 "form": TransitionForm(),
                 "events": refreshed.events.select_related("actor")[:50],
             },

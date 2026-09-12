@@ -141,6 +141,25 @@ class EntityEvent(TenantScopedModel):
 #: the generated migration is stable across machines.
 _OPEN_STATE_VALUES: list[str] = sorted(str(s) for s in OPEN_STATES)
 
+#: The happy path, collapsed to four stages for the detail page's progress
+#: stepper. DEFERRED, DISPUTED and NOT_APPLICABLE are deliberately absent —
+#: see ``ObligationInstance.progress_steps``.
+_PROGRESS_STAGES: tuple[tuple[str, Any, tuple[State, ...]], ...] = (
+    ("not_started", _("Not started"), (State.NOT_STARTED,)),
+    (
+        "in_progress",
+        _("In progress"),
+        (
+            State.INFO_REQUESTED,
+            State.IN_PREPARATION,
+            State.PENDING_REVIEW,
+            State.PENDING_CLIENT_APPROVAL,
+        ),
+    ),
+    ("ready_to_file", _("Ready to file"), (State.READY_TO_FILE,)),
+    ("filed", _("Filed"), (State.FILED, State.CLOSED)),
+)
+
 
 class ObligationInstance(TenantScopedModel, SoftDeleteModel):
     """One filing, for one entity, for one period, at one registration or site."""
@@ -305,6 +324,28 @@ class ObligationInstance(TenantScopedModel, SoftDeleteModel):
     @property
     def is_open(self) -> bool:
         return self.state in OPEN_STATES
+
+    @property
+    def progress_steps(self) -> list[dict[str, Any]] | None:
+        """The four-stage happy path, for the detail page's stepper.
+
+        Returns ``None`` off the happy path (deferred, disputed, not
+        applicable): those are exceptions the status chip and its callout
+        already explain, and forcing them onto four numbered circles would
+        claim a false sense of where the filing stands.
+        """
+        try:
+            current = next(
+                index
+                for index, (_key, _label, states) in enumerate(_PROGRESS_STAGES)
+                if self.state in states
+            )
+        except StopIteration:
+            return None
+        return [
+            {"key": key, "label": label, "done": index < current, "current": index == current}
+            for index, (key, label, _states) in enumerate(_PROGRESS_STAGES)
+        ]
 
     @property
     def is_superseded(self) -> bool:

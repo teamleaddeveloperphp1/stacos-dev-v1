@@ -153,9 +153,14 @@
   border-radius: var(--stacos-radius-md);
 
   &__title {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
     font-size: $stacos-text-sm;
     font-weight: 600;
     margin-bottom: $stacos-space-3;
+
+    svg { color: var(--stacos-text-subtle); }
   }
 
   &__header {
@@ -167,6 +172,85 @@
 
     .card__title { margin-bottom: 0; }
   }
+}
+
+// -----------------------------------------------------------------------------
+// The working-panel progress stepper.
+//
+// Only rendered for the happy path (see `ObligationInstance.progress_steps`) —
+// deferred, disputed and not-applicable filings are exceptions the status chip
+// already names, and a linear "step 2 of 4" would misstate where they stand.
+// -----------------------------------------------------------------------------
+.stepper {
+  display: flex;
+  list-style: none;
+  margin: 0 0 $stacos-space-4;
+  padding: 0;
+}
+
+.stepper__step {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $stacos-space-2;
+  text-align: center;
+  padding: 0 $stacos-space-2;
+
+  &:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 11px;
+    left: calc(50% + 15px);
+    right: calc(-50% + 15px);
+    height: 2px;
+    background: var(--stacos-border);
+  }
+
+  &--done:not(:last-child)::after {
+    background: var(--stacos-status-on-track);
+  }
+}
+
+.stepper__marker {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--stacos-border);
+  background: var(--stacos-surface);
+  font-size: $stacos-text-xs;
+  font-weight: 600;
+  color: var(--stacos-text-muted);
+}
+
+.stepper__step--done .stepper__marker {
+  border-color: var(--stacos-status-on-track);
+  background: var(--stacos-status-on-track);
+  color: #fff;
+}
+
+.stepper__step--current .stepper__marker {
+  border-color: var(--stacos-accent);
+  background: var(--stacos-accent-subtle);
+  color: var(--stacos-accent);
+}
+
+.stepper__label {
+  font-size: $stacos-text-xs;
+  color: var(--stacos-text-muted);
+  max-width: 8rem;
+}
+
+.stepper__step--current .stepper__label {
+  color: var(--stacos-text);
+  font-weight: 600;
 }
 
 // -----------------------------------------------------------------------------
@@ -228,6 +312,135 @@
   &__form {
     display: flex;
     align-items: flex-end;
+    gap: $stacos-space-2;
+  }
+}
+
+// A judgement-call action inside the action bar: the button doubles as the
+// disclosure trigger, and its note field only appears once it is opened —
+// see the comment in detail_panel.html for why.
+.action-bar__disclosure {
+  > summary {
+    list-style: none;
+    cursor: pointer;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  // The summary already reads as a button; a focus ring or marker meant for a
+  // generic disclosure widget would be a second, conflicting affordance.
+  > summary::marker {
+    content: "";
+  }
+
+  &[open] > summary {
+    margin-bottom: $stacos-space-2;
+  }
+}
+
+.action-bar__disclosure-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: $stacos-space-2;
+}
+
+// -----------------------------------------------------------------------------
+// The filing action — recording an acknowledgement number is a distinct act
+// from a plain state change, so it gets its own boxed form rather than folding
+// into the generic action bar.
+// -----------------------------------------------------------------------------
+.filing-card {
+  margin-top: $stacos-space-4;
+  padding: $stacos-space-4;
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  background: var(--stacos-surface-sunken);
+
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    font-size: $stacos-text-sm;
+    font-weight: 600;
+    margin-bottom: $stacos-space-3;
+  }
+
+  &__fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $stacos-space-3;
+    margin-bottom: $stacos-space-3;
+
+    > div { flex: 1 1 12rem; }
+
+    label {
+      display: block;
+      font-size: $stacos-text-xs;
+      color: var(--stacos-text-muted);
+      margin-bottom: $stacos-space-1;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Judgement-call actions (defer, mark not applicable, dispute) as a row of
+// tiles rather than plain buttons — each one is a decision that gets recorded
+// with a reason, not a quick click, and the tile says so before it is opened.
+// -----------------------------------------------------------------------------
+.action-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $stacos-space-3;
+  margin-top: $stacos-space-4;
+  padding-top: $stacos-space-3;
+  border-top: 1px solid var(--stacos-border);
+}
+
+.action-tile {
+  flex: 1 1 12rem;
+
+  > summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    list-style: none;
+    cursor: pointer;
+    padding: $stacos-space-2 $stacos-space-3;
+    border: 1px solid var(--stacos-border);
+    border-radius: var(--stacos-radius-md);
+    transition: border-color 0.12s ease, background 0.12s ease;
+
+    &::-webkit-details-marker { display: none; }
+    &::marker { content: ""; }
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--stacos-border-strong);
+      background: var(--stacos-surface-sunken);
+    }
+  }
+
+  &[open] > summary {
+    margin-bottom: $stacos-space-2;
+    border-color: var(--stacos-border-strong);
+  }
+
+  &__label {
+    font-size: $stacos-text-sm;
+    font-weight: 500;
+  }
+
+  &__hint {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
     gap: $stacos-space-2;
   }
 }

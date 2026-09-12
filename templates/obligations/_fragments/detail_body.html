@@ -20,7 +20,7 @@
       and not the whole decision tree either.
     {% endcomment %}
     <section class="card">
-      <h2 class="card__title">{% translate "Why this applies" %}</h2>
+      <h2 class="card__title"><c-icon name="shield" size="14" /> {% translate "Why this applies" %}</h2>
       {% if obligation.reasons %}
         <ul class="reason-list">
           {% for reason in obligation.reasons %}<li>{{ reason }}</li>{% endfor %}
@@ -38,7 +38,7 @@
 
     {% if definition %}
       <section class="card">
-        <h2 class="card__title">{% translate "What the law says" %}</h2>
+        <h2 class="card__title"><c-icon name="document" size="14" /> {% translate "What the law says" %}</h2>
         {% if definition.plain_language_summary %}
           <p class="small">{{ definition.plain_language_summary }}</p>
         {% endif %}
@@ -92,7 +92,7 @@
     {% endif %}
 
     <section class="card">
-      <h2 class="card__title">{% translate "History" %}</h2>
+      <h2 class="card__title"><c-icon name="history" size="14" /> {% translate "History" %}</h2>
       {% include "obligations/_fragments/timeline.html" %}
     </section>
   </aside>

@@ -32,6 +32,25 @@
     {% endif %}
   </div>
 
+  {% if obligation.progress_steps %}
+    {% comment %}
+      Absent off the happy path — deferred, disputed and not-applicable already
+      have their own answer in the status chip above, and a stepper would claim
+      a place on a line these are not on.
+    {% endcomment %}
+    <ol class="stepper">
+      {% for step in obligation.progress_steps %}
+        <li class="stepper__step{% if step.done %} stepper__step--done{% elif step.current %} stepper__step--current{% endif %}"
+            {% if step.current %}aria-current="step"{% endif %}>
+          <span class="stepper__marker">
+            {% if step.done %}<c-icon name="check" size="12" />{% else %}{{ forloop.counter }}{% endif %}
+          </span>
+          <span class="stepper__label">{{ step.label }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+
   {% if obligation.applied_extension_reference %}
     <p class="callout callout--info small">
       {% blocktranslate with reference=obligation.applied_extension_reference %}
@@ -69,39 +88,98 @@
   </dl>
 
   {% if actions %}
-    <div class="action-bar">
-      {% for action in actions %}
+    {% comment %}
+      Three shapes for three kinds of move — grouped once in the view
+      (`_action_context`) from the same generic `Transition` flags the engine
+      already exposes, so a new definition's transitions render correctly with
+      no template change.
+
+      1. A plain state change (`plain_actions`) — a button, first is primary.
+      2. Filing (`filing_actions`) — the acknowledgement is evidence, so it
+         gets its own boxed form rather than a button-triggered popover.
+      3. A judgement call (`note_actions`) — deferring, disputing, marking not
+         applicable. Collapsed into a tile so the reason field is not sitting
+         open and empty before it is chosen.
+    {% endcomment %}
+    {% if plain_actions %}
+      <div class="action-bar">
+        {% for action in plain_actions %}
+          <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+                hx-target="#obligation-panel"
+                hx-swap="outerHTML"
+                {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
+                class="action-bar__form">
+            {% csrf_token %}
+            <input type="hidden" name="target" value="{{ action.target }}">
+            <button class="btn btn-sm {% if action == actions.0 %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+                    type="submit">{{ action.label }}</button>
+          </form>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% for action in filing_actions %}
+      <section class="filing-card">
+        <h3 class="filing-card__title"><c-icon name="document" size="14" /> {{ action.label }}</h3>
         <form hx-post="{% url 'compliance:transition' obligation.pk %}"
               hx-target="#obligation-panel"
               hx-swap="outerHTML"
-              {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
-              class="action-bar__form">
+              {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}>
           {% csrf_token %}
           <input type="hidden" name="target" value="{{ action.target }}">
+          <div class="filing-card__fields">
+            <div>
+              <label for="filing-ack-{{ forloop.counter }}">{% translate "Acknowledgement number" %}</label>
+              <input class="form-control form-control-sm" id="filing-ack-{{ forloop.counter }}"
+                     name="filing_reference" required
+                     placeholder="{% translate 'Enter acknowledgement number' %}">
+            </div>
+            <div>
+              <label for="filing-date-{{ forloop.counter }}">{% translate "Filing date" %}</label>
+              <input class="form-control form-control-sm" id="filing-date-{{ forloop.counter }}"
+                     type="date" name="filed_on">
+            </div>
+          </div>
 
           {% if action.requires_note %}
-            <label class="visually-hidden" for="note-{{ forloop.counter }}">{% translate "Reason" %}</label>
-            <input class="form-control form-control-sm" id="note-{{ forloop.counter }}"
+            <label class="visually-hidden" for="filing-note-{{ forloop.counter }}">{% translate "Reason" %}</label>
+            <input class="form-control form-control-sm mb-3" id="filing-note-{{ forloop.counter }}"
                    name="note" required
                    placeholder="{% translate 'Why? (recorded)' %}">
           {% endif %}
 
-          {% if action.requires_filing_reference %}
-            <label class="visually-hidden" for="ack-{{ forloop.counter }}">
-              {% translate "Acknowledgement number" %}
-            </label>
-            <input class="form-control form-control-sm" id="ack-{{ forloop.counter }}"
-                   name="filing_reference" required
-                   placeholder="{% translate 'Acknowledgement number' %}">
-            <input class="form-control form-control-sm" type="date" name="filed_on"
-                   aria-label="{% translate 'Filed on' %}">
-          {% endif %}
-
-          <button class="btn btn-sm {% if forloop.first %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-                  type="submit">{{ action.label }}</button>
+          <button class="btn btn-sm btn-primary" type="submit">
+            <c-icon name="check" size="14" /> {{ action.label }}
+          </button>
         </form>
-      {% endfor %}
-    </div>
+      </section>
+    {% endfor %}
+
+    {% if note_actions %}
+      <div class="action-tiles">
+        {% for action in note_actions %}
+          <details class="action-tile">
+            <summary>
+              <span class="action-tile__label">{{ action.label }}</span>
+              <span class="action-tile__hint">{% translate "Provide a reason" %}</span>
+            </summary>
+            <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+                  hx-target="#obligation-panel"
+                  hx-swap="outerHTML"
+                  {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
+                  class="action-tile__form">
+              {% csrf_token %}
+              <input type="hidden" name="target" value="{{ action.target }}">
+              <label class="visually-hidden" for="tile-note-{{ forloop.counter }}">{% translate "Reason" %}</label>
+              <textarea class="form-control form-control-sm" id="tile-note-{{ forloop.counter }}"
+                        name="note" required rows="2"
+                        placeholder="{% translate 'Why? (recorded)' %}"></textarea>
+              <button class="btn btn-sm btn-outline-secondary" type="submit">{{ action.label }}</button>
+            </form>
+          </details>
+        {% endfor %}
+      </div>
+    {% endif %}
   {% else %}
     <p class="text-muted small">
       {% translate "You do not have permission to change this obligation." %}
