@@ -47,12 +47,10 @@ class _CrispyForm(forms.Form):
 
 
 class RegistrationForm(_CrispyForm):
-    """Sign-up. Collects both channels up front, because both must be verified.
+    """Sign-up. Collects the WhatsApp channel up front, because it must be verified.
 
-    Two numbers, not one. ``phone`` is the WhatsApp channel the second
-    verification code goes to and is a hard requirement (``CLAUDE.md`` rule 5);
-    ``mobile`` is the ordinary contact number, which for a great many people is a
-    different number and was previously impossible to record.
+    ``phone`` is the WhatsApp channel the second verification code goes to and
+    is a hard requirement (``CLAUDE.md`` rule 5).
 
     Organisation setup is not collected here — someone signing up with no
     organisation yet is sent through the onboarding wizard afterwards, which asks
@@ -64,11 +62,6 @@ class RegistrationForm(_CrispyForm):
     first_name = forms.CharField(label=_("First name"), max_length=100)
     last_name = forms.CharField(label=_("Last name"), max_length=100)
     email = forms.EmailField(label=_("Work email"))
-    mobile = forms.CharField(
-        label=_("Mobile number"),
-        max_length=20,
-        help_text=_("Include the country code if outside India."),
-    )
     phone = forms.CharField(
         label=_("WhatsApp number"),
         max_length=20,
@@ -92,14 +85,10 @@ class RegistrationForm(_CrispyForm):
             "first_name",
             "last_name",
             "email",
-            "mobile",
             "phone",
             "password",
             "confirm_password",
         )
-
-    def clean_mobile(self) -> str:
-        return normalise_phone(self.cleaned_data["mobile"])
 
     def clean(self) -> dict[str, Any]:
         data = super().clean() or self.cleaned_data

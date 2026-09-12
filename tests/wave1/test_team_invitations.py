@@ -243,7 +243,6 @@ def test_somebody_with_no_account_can_sign_up_and_land_inside(
             "first_name": "Deepa",
             "last_name": "Colleague",
             "email": "colleague@acme.example",
-            "mobile": "9876500011",
             "phone": "9876500012",
             "password": "a-long-enough-password",
             "confirm_password": "a-long-enough-password",

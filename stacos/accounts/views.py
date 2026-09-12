@@ -86,7 +86,6 @@ def register(request: HttpRequest) -> HttpResponse:
             first_name=form.cleaned_data["first_name"],
             last_name=form.cleaned_data["last_name"],
             phone_e164=form.cleaned_data["phone"],
-            mobile_e164=form.cleaned_data["mobile"],
         )
         verification, decision = start_verification(
             purpose=PendingVerification.Purpose.REGISTRATION,

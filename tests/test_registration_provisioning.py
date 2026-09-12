@@ -32,7 +32,6 @@ EXPECTED_FIELD_ORDER = [
     "first_name",
     "last_name",
     "email",
-    "mobile",
     "phone",
     "password",
     "confirm_password",
@@ -44,7 +43,6 @@ def payload(**overrides: str) -> dict[str, str]:
         "first_name": "Asha",
         "last_name": "Founder",
         "email": "asha@example.com",
-        "mobile": "9876500001",
         "phone": "9876500002",
         "password": "a-long-enough-password",
         "confirm_password": "a-long-enough-password",
@@ -111,15 +109,6 @@ def test_a_mismatched_confirmation_creates_nothing(client: Client) -> None:
     assert "do not match" in response.content.decode()
     assert not User.objects.filter(email="asha@example.com").exists()
     assert not mail.outbox, "a verification code went out for a sign-up that failed"
-
-
-def test_the_two_numbers_are_kept_apart(client: Client) -> None:
-    client.post(reverse("accounts:register"), payload())
-
-    user = User.objects.get(email="asha@example.com")
-
-    assert user.phone_e164 == "+919876500002", "the WhatsApp channel"
-    assert user.mobile_e164 == "+919876500001", "the contact number"
 
 
 def test_the_name_halves_are_stored_and_composed(client: Client) -> None:
