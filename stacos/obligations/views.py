@@ -526,7 +526,10 @@ def obligation_assign(request: HttpRequest, pk: str) -> HttpResponse:
             if assignee is not None
             else _("Assignment cleared.")
         ),
-        triggers={"stacos:modal-close": True, "stacos:obligation-changed": {"id": str(refreshed.pk)}},
+        triggers={
+            "stacos:modal-close": True,
+            "stacos:obligation-changed": {"id": str(refreshed.pk)},
+        },
     )
 
 

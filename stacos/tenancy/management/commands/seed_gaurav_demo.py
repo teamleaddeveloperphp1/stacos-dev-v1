@@ -90,7 +90,9 @@ class Command(BaseCommand):
         as_of = timezone.localdate()
         with tenant_context(tenant_ids={org.id}, reason="seed_gaurav_demo:materialise"):
             run = materialise(entity, as_of=as_of, trigger="ONBOARDING", actor=owner)
-        self.stdout.write(self.style.SUCCESS(f"  Calendar built for {entity.name}: {run.summary()}"))
+        self.stdout.write(
+            self.style.SUCCESS(f"  Calendar built for {entity.name}: {run.summary()}")
+        )
 
         self._assign_a_few(entity, colleagues, as_of=as_of, actor=owner)
 
@@ -121,6 +123,7 @@ class Command(BaseCommand):
 
     def _entity(self, org: Tenant) -> Entity:
         with tenant_context(tenant_ids={org.id}, reason="seed_gaurav_demo:entity"):
+            entity: Entity
             entity, created = Entity.objects.get_or_create(
                 tenant=org,
                 short_code="GEPL",
@@ -375,8 +378,9 @@ class Command(BaseCommand):
 
         with tenant_context(tenant_ids={entity.tenant_id}, reason="seed_gaurav_demo:assign"):
             open_rows = list(
-                ObligationInstance.objects.filter(entity=entity, archived_at__isnull=True)
-                .order_by("due_date")[:6]
+                ObligationInstance.objects.filter(entity=entity, archived_at__isnull=True).order_by(
+                    "due_date"
+                )[:6]
             )
             for index, obligation in enumerate(open_rows):
                 assignee = manager if index % 2 == 0 else department_user
