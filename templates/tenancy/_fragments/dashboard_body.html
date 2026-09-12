@@ -1,85 +1,188 @@
 {% load i18n %}
 
 <c-page-header title="{% translate 'Compliance health' %}"
-               subtitle="{% if tenant %}{{ tenant.name }}{% else %}{% translate 'Finish setting up your organisation' %}{% endif %}">
+               subtitle="{% if selected_entity %}{{ selected_entity.name }}{% elif tenant %}{{ tenant.name }}{% else %}{% translate 'Finish setting up your organisation' %}{% endif %}">
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:entity_list' %}" preload>
-    {% translate "All entities" %}
+    {% translate "Manage entities" %}
   </a>
 </c-page-header>
 
 {% if entity_count %}
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-lg-3">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="section-title mb-1">{% translate "Entities" %}</div>
-          <div class="figure-value fs-3 fw-semibold">{{ entity_count|num }}</div>
-        </div>
-      </div>
+  {% if entity_options|length > 1 %}
+    {% comment %}
+      Everything below defaults to every entity combined; picking one here
+      narrows every tile, chart and list to it. `hx-push-url` keeps the
+      selection bookmarkable and restores it on refresh, same as the entity
+      list's own filters.
+    {% endcomment %}
+    <form method="get" class="mb-3"
+          hx-get="{% url 'app:dashboard' %}" hx-target="#main"
+          hx-push-url="true" hx-trigger="change from:find select">
+      <label for="dashboard-entity-filter" class="visually-hidden">
+        {% translate "Filter the dashboard by entity" %}
+      </label>
+      <select id="dashboard-entity-filter" name="entity"
+              class="form-select form-select-sm" style="max-width: 16rem">
+        <option value="">{% translate "All entities" %}</option>
+        {% for entity in entity_options %}
+          <option value="{{ entity.id }}" {% if selected_entity.id == entity.id %}selected{% endif %}>
+            {{ entity.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </form>
+  {% endif %}
+  {% comment %}
+    Every tile links through to the calendar pre-filtered to the rows behind
+    its count — a number with no way to see what it is counting is a dead
+    end. `dashboard_entity_qs` carries the entity filter along so a tile
+    clicked while narrowed to one entity lands on that entity's rows, not
+    every entity's.
+  {% endcomment %}
+  <div class="row row-cols-2 row-cols-lg-5 g-3 mb-4">
+    <div class="col">
+      <c-stat-card icon="document" label="{% translate 'Total compliances' %}" :value="counts.total"
+                   href="{% url 'compliance:calendar' %}?status=all{{ dashboard_entity_qs }}" />
     </div>
-    <div class="col-6 col-lg-3">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="section-title mb-1">{% translate "Overdue" %}</div>
-          <div class="figure-value fs-3 fw-semibold {% if counts.overdue %}status-text--overdue{% endif %}">
-            {{ counts.overdue|default:"0"|num }}
-          </div>
-        </div>
-      </div>
+    <div class="col">
+      <c-stat-card icon="calendar" label="{% translate 'Due soon' %}" :value="counts.due_soon" status="due-soon"
+                   href="{% url 'compliance:calendar' %}?status=due_soon{{ dashboard_entity_qs }}" />
     </div>
-    <div class="col-6 col-lg-3">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="section-title mb-1">{% translate "Due this week" %}</div>
-          <div class="figure-value fs-3 fw-semibold">{{ counts.due_soon|default:"0"|num }}</div>
-        </div>
-      </div>
+    <div class="col">
+      <c-stat-card icon="alert" label="{% translate 'Overdue' %}" :value="counts.overdue" status="overdue"
+                   href="{% url 'compliance:calendar' %}?status=overdue{{ dashboard_entity_qs }}" />
     </div>
-    <div class="col-6 col-lg-3">
-      <div class="card h-100">
-        <div class="card-body">
-          <div class="section-title mb-1">{% translate "Open" %}</div>
-          <div class="figure-value fs-3 fw-semibold">{{ counts.open|default:"0"|num }}</div>
-        </div>
-      </div>
+    <div class="col">
+      <c-stat-card icon="history" label="{% translate 'Pending' %}" :value="pending" status="pending"
+                   href="{% url 'compliance:calendar' %}?status=pending{{ dashboard_entity_qs }}" />
+    </div>
+    <div class="col">
+      <c-stat-card icon="check" label="{% translate 'Completed' %}" :value="counts.completed" status="on-track"
+                   href="{% url 'compliance:calendar' %}?status=completed{{ dashboard_entity_qs }}" />
     </div>
   </div>
 
   {% comment %}
-    Rendered inline rather than lazily fetched.
-
-    It was a lazy `revealed` load at first, and that was the wrong trade twice
-    over: the whole panel costs one aggregate and one limited select, so the
-    second round trip bought nothing — and a swap arriving mid-navigation raced
-    the shell's view transition, which the browser resolves by skipping the
-    transition and rejecting its promise. Cheaper and calmer to just render it.
+    No `align-items-stretch` here on purpose: forcing every card in a row to
+    match its tallest neighbour looked tidy on paper but left a short list
+    floating in a slab of empty space next to a taller chart. Uneven card
+    heights read as normal; a card that is mostly blank reads as broken.
   {% endcomment %}
-  <div class="mb-4">
-    {% include "obligations/_fragments/dashboard_panel.html" %}
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      {% comment %}
+        Rendered inline rather than lazily fetched.
+
+        It was a lazy `revealed` load at first, and that was the wrong trade
+        twice over: the whole panel costs one aggregate and one limited
+        select, so the second round trip bought nothing — and a swap arriving
+        mid-navigation raced the shell's view transition, which the browser
+        resolves by skipping the transition and rejecting its promise.
+        Cheaper and calmer to just render it.
+      {% endcomment %}
+      {% include "obligations/_fragments/dashboard_panel.html" %}
+    </div>
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">
+          <strong class="small">{% translate "Compliance health" %}</strong>
+        </div>
+        <div class="card-body">
+          <c-donut-chart :segments="health_segments" :total="counts.total" />
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-header d-flex align-items-center">
-      <strong class="small">{% translate "Your entities" %}</strong>
-      <a class="ms-auto small" href="{% url 'app:entity_list' %}" preload>{% translate "View all" %}</a>
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header d-flex align-items-center">
+          <strong class="small">{% translate "Your entities" %}</strong>
+          <a class="ms-auto small" href="{% url 'app:entity_list' %}" preload>{% translate "View all" %}</a>
+        </div>
+        <ul class="list-group list-group-flush">
+          {% for entity in entities %}
+            <li class="list-group-item d-flex align-items-center gap-3">
+              <span class="avatar">{{ entity.name|slice:":1"|upper }}</span>
+              <span class="flex-grow-1">
+                <a href="{% url 'app:entity_detail' entity.pk %}" preload class="fw-medium text-decoration-none">
+                  {{ entity.name }}
+                </a>
+                <span class="d-block text-muted" style="font-size:.75rem">
+                  {{ entity.entity_type }}{% if entity.registered_office_state %} · {{ entity.registered_office_state }}{% endif %}
+                </span>
+              </span>
+              {% if entity.overdue_count %}
+                <c-status-chip status="overdue" label="{% blocktranslate count counter=entity.overdue_count %}{{ counter }} overdue{% plural %}{{ counter }} overdue{% endblocktranslate %}" />
+              {% else %}
+                <c-status-chip status="on-track" label="{% translate 'On track' %}" />
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
     </div>
-    <ul class="list-group list-group-flush">
-      {% for entity in entities %}
-        <li class="list-group-item d-flex align-items-center gap-3">
-          <span class="avatar">{{ entity.name|slice:":1"|upper }}</span>
-          <span class="flex-grow-1">
-            <a href="{% url 'app:entity_detail' entity.pk %}" preload class="fw-medium text-decoration-none">
-              {{ entity.name }}
-            </a>
-            <span class="d-block text-muted" style="font-size:.75rem">
-              {{ entity.entity_type }}{% if entity.registered_office_state %} · {{ entity.registered_office_state }}{% endif %}
-            </span>
-          </span>
-          <c-status-chip status="{% if entity.status == 'ACTIVE' %}on-track{% else %}na{% endif %}"
-                         label="{{ entity.get_status_display }}" />
-        </li>
-      {% endfor %}
-    </ul>
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">
+          <strong class="small">{% translate "Compliances by category" %}</strong>
+        </div>
+        <div class="card-body">
+          {% if categories %}
+            <c-bar-list :rows="categories" />
+          {% else %}
+            <c-empty-state title="{% translate 'Nothing open right now' %}"
+                           body="{% translate 'Categories appear here once an obligation is generated.' %}">
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:entity_list' %}" preload>
+                {% translate "Check entities" %}
+              </a>
+            </c-empty-state>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">
+          <strong class="small">{% translate "Upcoming workload" %}</strong>
+        </div>
+        <div class="card-body">
+          {% if weekly_bars %}
+            <c-bar-list :rows="weekly_bars" />
+          {% else %}
+            <c-empty-state title="{% translate 'Nothing on the horizon' %}"
+                           body="{% translate 'Nothing is due in the next few weeks.' %}">
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}" preload>
+                {% translate "Open the calendar" %}
+              </a>
+            </c-empty-state>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">
+          <strong class="small">{% translate "Overdue ageing" %}</strong>
+        </div>
+        <div class="card-body">
+          {% if aging_bars %}
+            <c-bar-list :rows="aging_bars" />
+          {% else %}
+            <c-empty-state title="{% translate 'Nothing overdue' %}"
+                           body="{% translate 'The overdue register is empty right now.' %}">
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}" preload>
+                {% translate "Open the calendar" %}
+              </a>
+            </c-empty-state>
+          {% endif %}
+        </div>
+      </div>
+    </div>
   </div>
 {% else %}
   <c-empty-state title="{% translate 'Add your first entity' %}"

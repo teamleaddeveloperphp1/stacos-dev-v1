@@ -60,6 +60,24 @@ time {
   background: var(--stacos-surface);
 }
 
+// A card that is itself a link — a stat tile you can click through to the
+// rows behind its count, say. Modifier only: it never changes `.card`'s own
+// look, only how it behaves as a link.
+.card--link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color var(--stacos-duration-fast) var(--stacos-ease),
+              box-shadow var(--stacos-duration-fast) var(--stacos-ease);
+  border: 1px solid transparent;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--stacos-accent);
+    box-shadow: var(--stacos-shadow-sm);
+  }
+}
+
 .section-title {
   font-size: $stacos-text-xs;
   font-weight: 600;

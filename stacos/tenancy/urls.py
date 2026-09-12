@@ -16,6 +16,11 @@ urlpatterns = [
         views.registration_create,
         name="registration_create",
     ),
+    path(
+        "entities/<uuid:pk>/premises/new/",
+        views.premises_create,
+        name="premises_create",
+    ),
     path("search/", views.palette_search, name="search"),
     path("switch-tenant/", views.switch_tenant, name="switch_tenant"),
     path("team/", team.team, name="team"),

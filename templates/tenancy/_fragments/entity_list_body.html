@@ -15,6 +15,9 @@
     {% comment %}
       Filters swap only the table body, debounced at 250ms. Typing must never
       cost a page navigation, and it must never fire a request per keystroke.
+
+      The `change` trigger carries no `from:` — see calendar_body.html for why:
+      `from:find select` only ever binds to the first matching select.
     {% endcomment %}
     <form class="d-flex gap-2 flex-grow-1"
           hx-get="{% url 'app:entity_list' %}"
@@ -22,7 +25,7 @@
           hx-select="#entity-rows"
           hx-swap="morph"
           hx-push-url="true"
-          hx-trigger="keyup changed delay:250ms from:find input, change from:find select"
+          hx-trigger="keyup changed delay:250ms from:find input, change"
           hx-indicator="#entity-filter-spinner">
       <input type="search" name="q" value="{{ search }}" class="form-control form-control-sm"
              style="max-width: 20rem"

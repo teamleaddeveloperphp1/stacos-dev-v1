@@ -100,6 +100,28 @@ def gallery_context() -> dict[str, object]:
             email="anita@acme.example",
             is_authenticated=True,
         ),
+        "donut_segments": [
+            {
+                "status": "overdue",
+                "label": "Overdue",
+                "value": 3,
+                "pct": 30.0,
+                "dasharray": "30 70",
+                "offset": 0,
+            },
+            {
+                "status": "on-track",
+                "label": "Pending",
+                "value": 7,
+                "pct": 70.0,
+                "dasharray": "70 30",
+                "offset": -30,
+            },
+        ],
+        "bar_rows": [
+            {"label": "Indirect tax", "count": 12, "pct": 100.0, "color": "category-1"},
+            {"label": "1–7 days late", "count": 3, "pct": 25.0, "color": "status-overdue"},
+        ],
     }
 
 

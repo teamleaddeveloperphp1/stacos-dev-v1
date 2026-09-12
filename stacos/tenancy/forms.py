@@ -19,11 +19,12 @@ from stacos.jurisdictions import subdivisions
 from stacos.jurisdictions.facts import (
     ENTITY_TYPES,
     IN_STATE_CODES,
+    PREMISES_TYPES,
     REGISTRATION_TYPES,
     REGISTRY,
     FactType,
 )
-from stacos.tenancy.models import Entity, EntityRegistration, Role
+from stacos.tenancy.models import Entity, EntityPremises, EntityRegistration, Role
 
 #: Human labels for the entity types the fact registry knows about. Kept here
 #: rather than on the model so the vocabulary stays data, not a hardcoded enum
@@ -252,6 +253,95 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
         )
 
 
+#: Human labels for the premises types the fact registry knows about. Same
+#: reasoning as ``REGISTRATION_TYPE_LABELS``.
+PREMISES_TYPE_LABELS: dict[str, str] = {
+    "REGISTERED_OFFICE": "Registered office",
+    "CORPORATE_OFFICE": "Corporate office",
+    "BRANCH": "Branch",
+    "FACTORY": "Factory",
+    "PLANT": "Plant",
+    "WAREHOUSE": "Warehouse",
+    "RETAIL_STORE": "Retail store",
+    "SITE": "Site",
+}
+
+
+class PremisesForm(forms.ModelForm[EntityPremises]):
+    """Record a physical location an entity operates from.
+
+    A whole family of obligations is per-premises rather than per-entity —
+    factory licence renewals, fire NOCs, pollution consents — so this is a
+    first-class row, not a text field on the entity.
+
+    The entity is not a field here either, for the same reason as
+    ``RegistrationForm``: it comes from the URL and is re-fetched under the
+    caller's scope in the view.
+    """
+
+    class Meta:
+        model = EntityPremises
+        fields = [
+            "name",
+            "type",
+            "jurisdiction",
+            "address",
+            "operational_from",
+            "operational_to",
+        ]
+        labels = {
+            "name": _("Name"),
+            "jurisdiction": _("State"),
+            "address": _("Address"),
+            "operational_from": _("Operational from"),
+            "operational_to": _("Operational to"),
+        }
+        help_texts = {
+            "name": _("What you call this site — “Surat Head Office”, “Plant 2”."),
+            "jurisdiction": _("Determines which state's factory, fire and pollution rules apply."),
+            "operational_to": _("Leave blank while the site is in use. Set it when a site closes."),
+        }
+        widgets = {
+            "address": forms.Textarea(attrs={"rows": 2}),
+            "operational_from": forms.DateInput(attrs={"type": "date"}),
+            "operational_to": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+        type_choices: list[tuple[str, Any]] = [("", _("Select…"))]
+        type_choices += [(code, PREMISES_TYPE_LABELS.get(code, code)) for code in PREMISES_TYPES]
+
+        state_choices: list[tuple[str, Any]] = [("", _("Not state-specific"))]
+        state_choices += sorted(
+            ((code, STATE_LABELS.get(code, code)) for code in IN_STATE_CODES),
+            key=lambda pair: pair[1],
+        )
+
+        self.fields["type"] = forms.ChoiceField(
+            label=_("Type"),
+            choices=type_choices,
+            help_text=_("Some obligations — a factory licence, a fire NOC — apply only to a type."),
+        )
+        self.fields["jurisdiction"] = forms.ChoiceField(
+            label=_("State"), required=False, choices=state_choices
+        )
+        self.fields["address"].required = False
+        self.fields["operational_from"].required = False
+        self.fields["operational_to"].required = False
+
+        self.helper = FormHelper()
+        # The submit button lives in the modal footer, not in the form body.
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(Column("name"), Column("type")),
+            Row(Column("jurisdiction")),
+            "address",
+            Row(Column("operational_from"), Column("operational_to")),
+        )
+
+
 class QuestionForm(forms.Form):
     """One ranked question, rendered according to its fact type.
 
@@ -278,7 +368,14 @@ class QuestionForm(forms.Form):
             case FactType.INT:
                 field = forms.IntegerField(required=False, min_value=0)
             case FactType.DECIMAL:
-                field = forms.DecimalField(required=False, min_value=0, decimal_places=2)
+                # Matches `EntityProfile`'s `DecimalField(max_digits=18, decimal_places=2)`
+                # columns (aggregate_turnover, paid_up_capital, net_worth) — without
+                # `max_digits` here, a value too large for that column reaches the
+                # database as a clean-looking form submission and dies there instead,
+                # as a 500 rather than a field error next to the input.
+                field = forms.DecimalField(
+                    required=False, min_value=0, max_digits=18, decimal_places=2
+                )
             case FactType.ENUM:
                 field = forms.ChoiceField(
                     required=False,
@@ -296,12 +393,26 @@ class QuestionForm(forms.Form):
         self.fields["answer"] = field
 
     def answer(self) -> Any:
-        """The answer in the shape the fact registry expects, or ``None``."""
+        """The answer in the shape the fact registry expects, or ``None``.
+
+        Answers are held in ``OnboardingDraft.answers``, which the session
+        backend serialises as JSON — so nothing here may return a
+        ``decimal.Decimal``, which ``DecimalField.clean()`` produces and which
+        the JSON encoder cannot handle. ``float`` is a safe substitute: the
+        fact registry's own validation already accepts it for
+        ``FactType.DECIMAL`` (``jurisdictions/facts.py``), and
+        ``engine.types.to_decimal`` converts it back via ``Decimal(str(value))``
+        when a rule actually needs to compare it.
+        """
         raw = self.cleaned_data.get("answer")
         if raw in (None, ""):
             return None
-        if getattr(self, "fact", None) is not None and self.fact.type is FactType.BOOL:
+        if getattr(self, "fact", None) is None:
+            return raw
+        if self.fact.type is FactType.BOOL:
             return raw == "yes"
+        if self.fact.type is FactType.DECIMAL:
+            return float(raw)
         return raw
 
 

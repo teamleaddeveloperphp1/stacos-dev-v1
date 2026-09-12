@@ -1,0 +1,74 @@
+<c-vars segments="" total=0 size=152 />
+{% load i18n %}
+{% comment %}
+  A status-coloured donut ring, built from stacked SVG circles.
+
+  There is no charting library in this app, and every other visual encoding
+  here (status_chip, empty_state) is already inline SVG — this follows the
+  same pattern rather than introducing a new dependency for one chart.
+
+  `segments` must already carry `pct`, `dasharray` and `offset` — percentages
+  of a circumference normalised to 100 (a circle of r=15.915), computed once
+  by the view (`stacos.tenancy.views._donut_geometry`), since Django's
+  template language cannot keep a clean running sum for the cumulative
+  offset. Each `status` must be one of the status-chip vocabulary keys, so
+  the ring's colours are always the same ones used everywhere else in the
+  product — never invent a one-off colour here.
+
+  The ring itself is `aria-hidden`: the legend below it repeats every value as
+  real text, the same "colour, icon, word" redundancy `status_chip` uses, so
+  a screen reader or a printed page loses nothing.
+
+  A segment's `href` is optional, same as `c-stat-card` — when given, its
+  legend row is the link target (`hx-get` into `#main`, same as every other
+  in-app link) rather than a number with no way to see the rows behind it.
+
+  Size and position are set inline as well as by class, the same belt-and-
+  suspenders `c-icon` uses with its `width`/`height` attributes: an SVG with
+  no intrinsic size renders however large its container happens to be, and a
+  stylesheet that is momentarily stale (a cache, a slow first load) must not
+  turn a small ring into one that fills the card.
+
+  Usage: <c-donut-chart :segments="health_segments" :total="counts.total" />
+{% endcomment %}
+<div class="donut-chart">
+  <div class="donut-chart__ring-wrap" style="width:{{ size }}px;height:{{ size }}px">
+    <svg viewBox="0 0 42 42" width="{{ size }}" height="{{ size }}"
+         class="donut-chart__ring" aria-hidden="true">
+      <circle cx="21" cy="21" r="15.915" fill="transparent"
+              stroke="var(--stacos-border)" stroke-width="4" />
+      {% for segment in segments %}
+        {% if segment.value %}
+          <circle cx="21" cy="21" r="15.915" fill="transparent"
+                  stroke="var(--stacos-status-{{ segment.status }})" stroke-width="4"
+                  stroke-dasharray="{{ segment.dasharray }}"
+                  stroke-dashoffset="{{ segment.offset }}"
+                  transform="rotate(-90 21 21)" />
+        {% endif %}
+      {% endfor %}
+    </svg>
+    <div class="donut-chart__total" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"
+         aria-hidden="true">
+      <span class="donut-chart__total-value">{{ total|default:"0"|num }}</span>
+      <span class="donut-chart__total-label">{% translate "total" %}</span>
+    </div>
+  </div>
+  <ul class="donut-chart__legend list-unstyled mb-0">
+    {% for segment in segments %}
+      <li>
+        {% if segment.href %}
+          <a class="donut-chart__legend-row d-flex align-items-center gap-2 py-1 text-decoration-none"
+             href="{{ segment.href }}"
+             hx-get="{{ segment.href }}" hx-target="#main" hx-push-url="true">
+        {% else %}
+          <span class="donut-chart__legend-row d-flex align-items-center gap-2 py-1">
+        {% endif %}
+          <span class="donut-chart__swatch status-bar--{{ segment.status }}"
+                style="display:inline-block;width:8px;height:8px;border-radius:50%" aria-hidden="true"></span>
+          <span class="flex-grow-1 small{% if segment.href %} text-body{% endif %}">{{ segment.label }}</span>
+          <span class="small fw-semibold status-text--{{ segment.status }}">{{ segment.value|num }}</span>
+        {% if segment.href %}</a>{% else %}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</div>

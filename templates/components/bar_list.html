@@ -1,0 +1,30 @@
+<c-vars rows="" />
+{% comment %}
+  A horizontal bar list: label, a bar scaled against the busiest row, count.
+
+  Generic on purpose — used for "compliances by category", "upcoming
+  workload by week" and "overdue ageing" alike, so the shape is written once.
+  Each row must already carry, computed by the view:
+    - `label`   — display text
+    - `count`   — the raw number, rendered through the `num` filter
+    - `pct`     — 0-100, this row's count relative to the busiest row (so the
+                  longest bar is always full width — bars are not stacked to
+                  a 100% total)
+    - `color`   — a CSS custom property name *without* the `--stacos-`
+                  prefix, e.g. "category-1" or "status-overdue". Colour comes
+                  from the token itself, so this component never invents one.
+
+  Usage: <c-bar-list :rows="categories" />
+{% endcomment %}
+<div class="bar-list">
+  {% for row in rows %}
+    <div class="bar-list__row">
+      <span class="bar-list__label">{{ row.label }}</span>
+      <span class="bar-list__track">
+        <span class="bar-list__fill"
+              style="width:{{ row.pct }}%;background:var(--stacos-{{ row.color }})"></span>
+      </span>
+      <span class="bar-list__count">{{ row.count|num }}</span>
+    </div>
+  {% endfor %}
+</div>

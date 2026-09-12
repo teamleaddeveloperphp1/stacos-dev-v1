@@ -51,6 +51,7 @@ $stacos-grey-950:  #020617;
 // -----------------------------------------------------------------------------
 $stacos-status-overdue:    #b42318;  // red    — past its statutory date
 $stacos-status-due-soon:   #b54708;  // amber  — inside the warning window
+$stacos-status-pending:    #ca8a04;  // yellow — not due yet, nothing done
 $stacos-status-on-track:   #067647;  // green  — comfortably ahead
 $stacos-status-in-progress:#175cd3;  // blue   — someone is working on it
 $stacos-status-waiting:    #6941c6;  // purple — blocked on someone else
@@ -60,12 +61,28 @@ $stacos-status-disputed:   #c11574;  // pink   — under challenge
 
 $stacos-status-overdue-bg:     #fef3f2;
 $stacos-status-due-soon-bg:    #fffaeb;
+$stacos-status-pending-bg:     #fefce8;
 $stacos-status-on-track-bg:    #ecfdf3;
 $stacos-status-in-progress-bg: #eff8ff;
 $stacos-status-waiting-bg:     #f4f3ff;
 $stacos-status-complete-bg:    #f1f5f9;
 $stacos-status-na-bg:          #f8fafc;
 $stacos-status-disputed-bg:    #fdf2fa;
+
+// -----------------------------------------------------------------------------
+// Category palette — for "compliances by category" charts only. A category
+// says which area of law a filing belongs to, never how healthy it is, so it
+// must never borrow a status hue: reusing status-overdue red for a category
+// would read as "this category is in trouble," which isn't what it means.
+// Six hues, cycled if there are more categories than colours — fine for a bar
+// chart, where neighbours rarely collide, unlike a legend-critical pie.
+// -----------------------------------------------------------------------------
+$stacos-category-1: #0f766e;  // teal
+$stacos-category-2: #4338ca;  // indigo
+$stacos-category-3: #0e7490;  // cyan
+$stacos-category-4: #4d7c0f;  // lime
+$stacos-category-5: #92400e;  // brown
+$stacos-category-6: #334155;  // slate
 
 // -----------------------------------------------------------------------------
 // Typography
@@ -160,6 +177,7 @@ $stacos-row-height: 42px;
 
   --stacos-status-overdue:     #{$stacos-status-overdue};
   --stacos-status-due-soon:    #{$stacos-status-due-soon};
+  --stacos-status-pending:     #{$stacos-status-pending};
   --stacos-status-on-track:    #{$stacos-status-on-track};
   --stacos-status-in-progress: #{$stacos-status-in-progress};
   --stacos-status-waiting:     #{$stacos-status-waiting};
@@ -169,12 +187,20 @@ $stacos-row-height: 42px;
 
   --stacos-status-overdue-bg:     #{$stacos-status-overdue-bg};
   --stacos-status-due-soon-bg:    #{$stacos-status-due-soon-bg};
+  --stacos-status-pending-bg:     #{$stacos-status-pending-bg};
   --stacos-status-on-track-bg:    #{$stacos-status-on-track-bg};
   --stacos-status-in-progress-bg: #{$stacos-status-in-progress-bg};
   --stacos-status-waiting-bg:     #{$stacos-status-waiting-bg};
   --stacos-status-complete-bg:    #{$stacos-status-complete-bg};
   --stacos-status-na-bg:          #{$stacos-status-na-bg};
   --stacos-status-disputed-bg:    #{$stacos-status-disputed-bg};
+
+  --stacos-category-1: #{$stacos-category-1};
+  --stacos-category-2: #{$stacos-category-2};
+  --stacos-category-3: #{$stacos-category-3};
+  --stacos-category-4: #{$stacos-category-4};
+  --stacos-category-5: #{$stacos-category-5};
+  --stacos-category-6: #{$stacos-category-6};
 
   --stacos-radius-sm: #{$stacos-radius-sm};
   --stacos-radius-md: #{$stacos-radius-md};
@@ -213,6 +239,7 @@ $stacos-row-height: 42px;
   // itself — which colour means which state — never changes.
   --stacos-status-overdue:     #fda29b;
   --stacos-status-due-soon:    #fec84b;
+  --stacos-status-pending:     #fde047;
   --stacos-status-on-track:    #75e0a7;
   --stacos-status-in-progress: #84caff;
   --stacos-status-waiting:     #bdb4fe;
@@ -222,10 +249,20 @@ $stacos-row-height: 42px;
 
   --stacos-status-overdue-bg:     #{rgba(#fda29b, 0.12)};
   --stacos-status-due-soon-bg:    #{rgba(#fec84b, 0.12)};
+  --stacos-status-pending-bg:     #{rgba(#fde047, 0.12)};
   --stacos-status-on-track-bg:    #{rgba(#75e0a7, 0.12)};
   --stacos-status-in-progress-bg: #{rgba(#84caff, 0.12)};
   --stacos-status-waiting-bg:     #{rgba(#bdb4fe, 0.12)};
   --stacos-status-complete-bg:    #{rgba(#94a3b8, 0.12)};
   --stacos-status-na-bg:          #{rgba(#64748b, 0.12)};
   --stacos-status-disputed-bg:    #{rgba(#f670c7, 0.12)};
+
+  // Same lighten-for-contrast treatment as the status hues above; the mapping
+  // of colour to category never changes, only its lightness.
+  --stacos-category-1: #5eead4;
+  --stacos-category-2: #a5b4fc;
+  --stacos-category-3: #67e8f9;
+  --stacos-category-4: #bef264;
+  --stacos-category-5: #fdba74;
+  --stacos-category-6: #cbd5e1;
 }

@@ -10,6 +10,7 @@
 $stacos-statuses: (
   "overdue":     (var(--stacos-status-overdue),     var(--stacos-status-overdue-bg)),
   "due-soon":    (var(--stacos-status-due-soon),    var(--stacos-status-due-soon-bg)),
+  "pending":     (var(--stacos-status-pending),     var(--stacos-status-pending-bg)),
   "on-track":    (var(--stacos-status-on-track),    var(--stacos-status-on-track-bg)),
   "in-progress": (var(--stacos-status-in-progress), var(--stacos-status-in-progress-bg)),
   "waiting":     (var(--stacos-status-waiting),     var(--stacos-status-waiting-bg)),

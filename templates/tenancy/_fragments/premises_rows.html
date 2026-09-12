@@ -1,0 +1,34 @@
+{% load i18n %}
+{% comment %}
+  The premises table body.
+
+  Extracted so the detail page and the create response render identical markup,
+  and swapped whole rather than prepended: this table carries an empty state, and
+  a prepended row would leave "No premises recorded" sitting underneath the
+  premises just added.
+{% endcomment %}
+<tbody id="premises-rows">
+  {% for site in premises %}
+    <tr>
+      <td class="fw-medium">{{ site.name }}</td>
+      <td class="text-muted">{{ site.type }}</td>
+      <td class="text-muted">{{ site.jurisdiction|default:"—" }}</td>
+    </tr>
+  {% empty %}
+    <tr>
+      <td colspan="3" class="p-0">
+        <c-empty-state title="{% translate 'No premises recorded' %}"
+                       body="{% translate 'Add each factory, plant, warehouse or office.' %}">
+          {% if "tenancy.premises.manage" in access_scope.permissions %}
+            <button class="btn btn-sm btn-primary"
+                    hx-get="{% url 'app:premises_create' entity.pk %}"
+                    hx-target="#modal-container"
+                    hx-swap="innerHTML">
+              {% translate "Add a premises" %}
+            </button>
+          {% endif %}
+        </c-empty-state>
+      </td>
+    </tr>
+  {% endfor %}
+</tbody>

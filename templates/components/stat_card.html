@@ -1,0 +1,33 @@
+<c-vars icon="" label="" value=0 status="" href="" />
+{% comment %}
+  A single stat tile: icon, number, label.
+
+  `status` is optional and, when given, must be one of the status-chip
+  vocabulary keys (overdue, due-soon, on-track, complete, ...) — it tints the
+  number with that status's colour via the existing `status-text--{name}`
+  utility class. Leave it blank for a neutral figure (a total, say) that
+  doesn't belong to any one status.
+
+  `href` is optional. When given, the whole tile is the link target rather
+  than nothing being clickable at all — a count with no way to see the rows
+  behind it is a dead end, not a summary.
+
+  Usage: <c-stat-card icon="alert" label="Overdue" value=counts.overdue status="overdue"
+                      href="{% url 'compliance:calendar' %}?status=overdue" />
+{% endcomment %}
+{% if href %}
+  <a class="card h-100 card--link" href="{{ href }}"
+     hx-get="{{ href }}" hx-target="#main" hx-push-url="true">
+{% else %}
+  <div class="card h-100">
+{% endif %}
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-2 mb-1">
+      {% if icon %}<c-icon name="{{ icon }}" size="16" class="text-muted" />{% endif %}
+      <span class="section-title">{{ label }}</span>
+    </div>
+    <div class="figure-value fs-3 fw-semibold{% if status %} status-text--{{ status }}{% endif %}">
+      {{ value|default:"0"|num }}
+    </div>
+  </div>
+{% if href %}</a>{% else %}</div>{% endif %}

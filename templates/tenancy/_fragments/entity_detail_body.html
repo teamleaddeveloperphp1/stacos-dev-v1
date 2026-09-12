@@ -54,6 +54,14 @@
         <span class="text-muted ms-auto" style="font-size:.75rem">
           {% translate "Factory, fire and pollution obligations are per site" %}
         </span>
+        {% if "tenancy.premises.manage" in access_scope.permissions %}
+          <button class="btn btn-sm btn-outline-secondary"
+                  hx-get="{% url 'app:premises_create' entity.pk %}"
+                  hx-target="#modal-container"
+                  hx-swap="innerHTML">
+            {% translate "Add" %}
+          </button>
+        {% endif %}
       </div>
       <div class="data-table__scroll">
         <table class="table mb-0">
@@ -64,20 +72,7 @@
               <th>{% translate "Jurisdiction" %}</th>
             </tr>
           </thead>
-          <tbody>
-            {% for site in premises %}
-              <tr>
-                <td class="fw-medium">{{ site.name }}</td>
-                <td class="text-muted">{{ site.type }}</td>
-                <td class="text-muted">{{ site.jurisdiction|default:"—" }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="3" class="p-0">
-                <c-empty-state title="{% translate 'No premises recorded' %}"
-                               body="{% translate 'Add each factory, plant, warehouse or office.' %}" />
-              </td></tr>
-            {% endfor %}
-          </tbody>
+          {% include "tenancy/_fragments/premises_rows.html" %}
         </table>
       </div>
     </div>

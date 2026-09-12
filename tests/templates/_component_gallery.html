@@ -91,3 +91,18 @@
 <section id="shortcuts-help">
   <c-shortcuts-help />
 </section>
+
+<section id="stat-cards">
+  <c-stat-card icon="document" label="Total compliances" value="156" />
+  <c-stat-card icon="alert" label="Overdue" value="3" status="overdue" />
+  {# No icon and no status: the neutral, undecorated case. #}
+  <c-stat-card label="Pending" value="12" />
+</section>
+
+<section id="donut-charts">
+  <c-donut-chart :segments="donut_segments" total="10" />
+</section>
+
+<section id="bar-lists">
+  <c-bar-list :rows="bar_rows" />
+</section>

@@ -1,0 +1,128 @@
+// =============================================================================
+// Dashboard charts — donut ring and category bars.
+//
+// No charting library in this app; both are hand-built from the same status
+// and category colour tokens every other component already uses, so they
+// never invent a competing palette and stay theme-aware for free.
+// =============================================================================
+
+.donut-chart {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-5;
+  flex-wrap: wrap;
+
+  &__ring-wrap {
+    position: relative;
+    width: 9.5rem;
+    height: 9.5rem;
+    flex: none;
+  }
+
+  &__ring {
+    width: 100%;
+    height: 100%;
+
+    circle {
+      transition: stroke-dasharray $stacos-duration-slow $stacos-ease;
+    }
+  }
+
+  &__total {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+  }
+
+  &__total-value {
+    font-size: $stacos-text-2xl;
+    font-weight: 700;
+    color: var(--stacos-text);
+  }
+
+  &__total-label {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  &__legend {
+    flex: 1 1 12rem;
+    min-width: 10rem;
+  }
+
+  &__swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: none;
+  }
+
+  // A legend row with a filtered link through to the calendar behind it —
+  // same hover/focus affordance `.card--link` uses for a stat tile, scaled
+  // down since this is a list row rather than a whole card.
+  &__legend-row {
+    border-radius: $stacos-radius-sm;
+    margin-inline: -#{$stacos-space-2};
+    padding-inline: $stacos-space-2;
+  }
+}
+
+a.donut-chart__legend-row {
+  color: inherit;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--stacos-surface-sunken);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Bar list — scaled to the busiest row, not stacked to 100%. Generic: used
+// for "by category", "by week" and "overdue ageing" alike. Colour comes from
+// an inline `var(--stacos-...)` set by the view/component, never a class
+// here, so this file never needs to know which palette a caller picked.
+// -----------------------------------------------------------------------------
+.bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: $stacos-space-3;
+
+  &__row {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr auto;
+    align-items: center;
+    gap: $stacos-space-3;
+    font-size: $stacos-text-sm;
+  }
+
+  &__label {
+    color: var(--stacos-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__track {
+    background: var(--stacos-surface-sunken);
+    border-radius: $stacos-radius-sm;
+    height: 0.5rem;
+    overflow: hidden;
+  }
+
+  &__fill {
+    display: block;
+    height: 100%;
+    border-radius: $stacos-radius-sm;
+  }
+
+  &__count {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--stacos-text-muted);
+    text-align: right;
+  }
+}
