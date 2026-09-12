@@ -43,6 +43,8 @@ from stacos.tenancy.onboarding.state import OnboardingDraft
 from stacos.tenancy.services import provision_tenant
 
 __all__ = [
+    "CategoryGroup",
+    "CategoryRow",
     "DraftPreview",
     "FamilyGroup",
     "PackSuggestion",
@@ -61,6 +63,11 @@ __all__ = [
 #: several hundred obligations. A screen short enough to read is worth having;
 #: one that is short because it understates the total is not.
 _SHOWN_PER_REASON = 4
+
+#: Same idea, for the merged by-category view. Higher than ``_SHOWN_PER_REASON``
+#: because a category row carries one status pill rather than a repeated reason
+#: sentence, so more of them fit before the list needs folding.
+_SHOWN_PER_CATEGORY = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +150,48 @@ class FamilyGroup:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryRow:
+    """One obligation, its family already resolved, carrying its own verdict.
+
+    The three-column layout answers "what verdict did this row get"; a CA
+    scanning the result asks "what do I owe under GST" first and reads the
+    verdict off each row, not off which column it landed in. This is that row.
+    """
+
+    row: PreviewRow
+    #: A status-chip status: "complete" (applies) or "waiting" (might apply).
+    status: str
+    #: The fact blocking a "waiting" row, in words — empty for "complete".
+    waiting_label: str = ""
+    #: The question that would settle it, when one is on screen right now.
+    question: Question | None = None
+    #: Blocked on something askable, just not in the queue yet.
+    is_askable_later: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class CategoryGroup:
+    family: str
+    rows: tuple[CategoryRow, ...]
+
+    @property
+    def count(self) -> int:
+        return len(self.rows)
+
+    @property
+    def shown(self) -> tuple[CategoryRow, ...]:
+        return self.rows[:_SHOWN_PER_CATEGORY]
+
+    @property
+    def hidden_rows(self) -> tuple[CategoryRow, ...]:
+        return self.rows[_SHOWN_PER_CATEGORY:]
+
+    @property
+    def hidden(self) -> int:
+        return len(self.hidden_rows)
+
+
+@dataclass(frozen=True, slots=True)
 class DraftPreview:
     """Three columns, and the questions that would move rows between them.
 
@@ -199,6 +248,59 @@ class DraftPreview:
             key=lambda row: row.blocked_on,
             questions={question.key: question for question in self.questions},
         )
+
+    def by_category(self) -> list[CategoryGroup]:
+        """Applies and might-apply, merged one family at a time.
+
+        Built from :meth:`applies_by_family` and :meth:`might_by_family` rather
+        than a fresh pass over the rows, so the reason-grouping and the
+        blocked-on/question resolution already covered by
+        ``tests/wave1/test_preview_grouping.py`` stay the single source of truth
+        — this only reshapes their output into one row per obligation with its
+        own status pill, applies first.
+        """
+        combined: dict[str, list[CategoryRow]] = {}
+
+        for family in self.applies_by_family():
+            rows = combined.setdefault(family.family, [])
+            for group in family.groups:
+                rows.extend(CategoryRow(row=row, status="complete") for row in group.rows)
+
+        for family in self.might_by_family():
+            rows = combined.setdefault(family.family, [])
+            for group in family.groups:
+                rows.extend(
+                    CategoryRow(
+                        row=row,
+                        status="waiting",
+                        waiting_label=group.blocked_label,
+                        question=group.question,
+                        is_askable_later=group.is_askable_later,
+                    )
+                    for row in group.rows
+                )
+
+        groups = [
+            CategoryGroup(
+                family=family,
+                rows=tuple(
+                    sorted(rows, key=lambda item: (item.status != "complete", item.row.title))
+                ),
+            )
+            for family, rows in combined.items()
+        ]
+        return sorted(groups, key=lambda group: (-group.count, group.family))
+
+    @property
+    def max_question_unlocks(self) -> int:
+        """The busiest question in the queue, for scaling the "settles" meter.
+
+        A bare count reads fine for the top question and means nothing for the
+        rest, since there is nothing to compare it to. Scaled against the
+        highest ``unlocks`` on screen, the meter shows what the number already
+        says: this question is worth answering *first*.
+        """
+        return max((question.unlocks for question in self.questions), default=0)
 
 
 def _group(

@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from django.utils import timezone
+from drf_spectacular.contrib.rest_framework_simplejwt import SimpleJWTScheme
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken, Token
@@ -63,3 +64,15 @@ class StacosJWTAuthentication(JWTAuthentication):
             raise InvalidToken("This session has been ended. Sign in again.")
 
         return user
+
+
+class StacosJWTScheme(SimpleJWTScheme):
+    """Tells drf-spectacular how to document :class:`StacosJWTAuthentication`.
+
+    ``OpenApiAuthenticationExtension.target_class`` is matched by exact class
+    path, not by inheritance — without this, every view using our subclass
+    gets a schema warning instead of the bearer-token security scheme
+    ``SimpleJWTScheme`` already knows how to describe.
+    """
+
+    target_class = "stacos.api.authentication.StacosJWTAuthentication"

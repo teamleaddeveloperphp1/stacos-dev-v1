@@ -11,22 +11,29 @@
         hx-swap="innerHTML"
         hx-trigger="change">
     {% csrf_token %}
-    <label class="question-card__label" for="q-{{ question.key }}">
-      {{ question.fact.label }}
-    </label>
+    <div class="question-card__head">
+      <label class="question-card__label" for="q-{{ question.key }}">
+        {{ question.fact.label }}
+      </label>
+      <div class="question-card__meter">
+        <span class="question-card__unlocks">
+          {% blocktranslate count counter=question.unlocks %}
+            Settles {{ counter }} rule
+          {% plural %}
+            Settles {{ counter }} rules
+          {% endblocktranslate %}
+        </span>
+        <span class="question-card__progress" aria-hidden="true">
+          <span class="question-card__progress-fill"
+                style="width: {% widthratio question.unlocks preview.max_question_unlocks 100 %}%"></span>
+        </span>
+      </div>
+    </div>
     {% if question.fact.help_text %}
       <p class="question-card__help">{{ question.fact.help_text }}</p>
     {% endif %}
 
     {% include "tenancy/onboarding/_fragments/question_input.html" %}
-
-    <p class="question-card__unlocks">
-      {% blocktranslate count counter=question.unlocks %}
-        Settles {{ counter }} rule
-      {% plural %}
-        Settles {{ counter }} rules
-      {% endblocktranslate %}
-    </p>
   </form>
 {% empty %}
   <c-empty-state title="{% translate 'Nothing left to ask' %}"

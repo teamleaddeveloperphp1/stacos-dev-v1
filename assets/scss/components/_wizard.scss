@@ -1,10 +1,10 @@
-// The onboarding wizard, and the verdict grid at the end of it.
+// The onboarding wizard, and the preview at the end of it.
 //
-// Three columns of a few hundred rows each is a lot to take in, so the layout
-// does two jobs: it keeps the question queue permanently beside the result, so
-// the cause and the effect are visible together, and it makes the three verdicts
-// visually distinct without relying on colour alone — each carries a status chip
-// with its own icon and word, per the universal status vocabulary.
+// A few hundred rows is a lot to take in, so the layout does two jobs: it keeps
+// the question queue permanently beside the result, so the cause and the effect
+// are visible together, and it never encodes a row's verdict by colour alone —
+// every status pill carries its own icon and word, per the universal status
+// vocabulary.
 
 .wizard {
   max-width: 62rem;
@@ -215,6 +215,13 @@
   margin-bottom: 0.75rem;
 }
 
+.question-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .question-card__label {
   display: block;
   font-weight: 600;
@@ -226,6 +233,32 @@
   font-size: 0.8125rem;
   color: var(--stacos-text-muted);
   margin: 0 0 0.5rem;
+}
+
+// The "settles N" meter beside the label. Purple, not a semantic colour of its
+// own — it borrows --stacos-status-waiting because a question in the queue is,
+// by definition, something the engine is waiting on.
+.question-card__meter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  flex: none;
+}
+
+.question-card__progress {
+  width: 4.5rem;
+  height: 4px;
+  border-radius: $stacos-radius-pill;
+  background: var(--stacos-border);
+  overflow: hidden;
+}
+
+.question-card__progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--stacos-status-waiting);
+  border-radius: inherit;
 }
 
 .question-card__choices {
@@ -245,70 +278,145 @@
 .question-card__unlocks {
   font-size: 0.75rem;
   color: var(--stacos-text-muted);
-  margin: 0.5rem 0 0;
+  white-space: nowrap;
 }
 
-// -- The three verdict columns -----------------------------------------------
+// -- The summary stat row -----------------------------------------------------
+//
+// Applies / might apply / doesn't apply, as three counts rather than buried in
+// three column headers. Each card still carries a status chip with its own
+// icon and word — colour is never the only signal, even here.
 
-.verdict-grid {
+.stat-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
 }
 
-.verdict-col {
+.stat-card {
   background: var(--stacos-surface);
   border: 1px solid var(--stacos-border);
   border-radius: var(--stacos-radius-md);
-  padding: 0.875rem;
-  min-width: 0;
-}
-
-// A left rule per verdict, so the three columns are separable at a glance.
-// Colour is the *secondary* signal here and never the only one: each column's
-// header carries a status chip with its own icon and word, per the universal
-// status vocabulary, so the grid still reads correctly in monochrome.
-.verdict-col--yes {
-  border-left: 3px solid var(--stacos-status-complete);
-}
-
-.verdict-col--maybe {
-  border-left: 3px solid var(--stacos-status-waiting);
-}
-
-.verdict-col--no {
-  border-left: 3px solid var(--stacos-status-na);
-}
-
-.verdict-col__head {
+  padding: 1rem 0.875rem;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
 }
 
-.verdict-col__count {
-  font-size: 1.25rem;
+.stat-card__count {
+  font-size: $stacos-text-2xl;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
-.verdict-col__lead,
-.verdict-col__empty {
+.verdict-grid__footnote {
+  font-size: 0.75rem;
+  color: var(--stacos-text-muted);
+  margin: 0.75rem 0 0;
+}
+
+// -- What applies, grouped by category ----------------------------------------
+//
+// One list per family (GST, Labour, Tax Direct...) rather than a column per
+// verdict: a CA scans for "what do I owe under GST" before "what did the
+// engine decide", so the verdict lives on the row, not on which section it is
+// in. See services.DraftPreview.by_category.
+
+.category-groups__title {
+  font-size: 1rem;
+  margin: 1.25rem 0 0.25rem;
+}
+
+.category-groups__lead {
   font-size: 0.8125rem;
   color: var(--stacos-text-muted);
   margin: 0 0 0.75rem;
 }
 
-.verdict-col__family {
+.category-groups {
   display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.category-group {
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  padding: 0.875rem;
+}
+
+.category-group__head {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.category-group__name {
+  font-weight: 600;
+}
+
+.category-group__count {
+  font-weight: 500;
+  font-size: 0.8125rem;
   color: var(--stacos-text-muted);
-  margin: 0.75rem 0 0.25rem;
+}
+
+.category-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.category-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--stacos-border);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.category-list__title {
+  font-size: 0.875rem;
+}
+
+// A row's status pill, styled as a link because it is one: it goes to the
+// control that clears this row.
+.category-list__ask {
+  text-decoration: none;
+
+  &:hover .status-chip,
+  &:focus-visible .status-chip {
+    color: var(--stacos-accent);
+  }
+}
+
+.category-group__more {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+
+  summary {
+    cursor: pointer;
+    color: var(--stacos-text-muted);
+    padding: 0.125rem 0;
+  }
+}
+
+.verdict-col__empty {
+  font-size: 0.8125rem;
+  color: var(--stacos-text-muted);
+  margin: 0;
 }
 
 .verdict-col__details {
@@ -346,69 +454,6 @@
   color: var(--stacos-text-muted);
 }
 
-// -- Rows that share an explanation -------------------------------------------
-//
-// The explanation used to be printed under every row, which made each column
-// several screens of one repeated sentence. Said once for the group it covers,
-// it becomes the thing that distinguishes one block from the next — and the
-// rows included for a different reason are the ones that stand out, which is
-// what somebody checking our working is looking for.
-
-.verdict-group {
-  margin-bottom: $stacos-space-3;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-
-  // A group somebody can clear from this screen, marked so the eye finds the
-  // actionable ones first. The rest are genuinely undecided and genuinely not
-  // this user's next move.
-  &--actionable {
-    border-left: 2px solid var(--stacos-status-waiting);
-    padding-left: $stacos-space-2;
-  }
-}
-
-.verdict-group__why {
-  font-size: 0.75rem;
-  color: var(--stacos-text-muted);
-  margin: 0 0 0.25rem;
-}
-
-// A group that one question on this screen would settle. Styled as a link
-// because it is one: it goes to the control that clears the whole group.
-.verdict-group__ask {
-  display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--stacos-status-waiting);
-  margin: 0 0 0.25rem;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-
-  &:hover,
-  &:focus-visible {
-    color: var(--stacos-accent);
-  }
-}
-
-.verdict-group__more {
-  font-size: 0.75rem;
-
-  summary {
-    cursor: pointer;
-    color: var(--stacos-text-muted);
-    padding: 0.125rem 0;
-  }
-}
-
-.verdict-grid__footnote {
-  font-size: 0.75rem;
-  color: var(--stacos-text-muted);
-  margin: 0.75rem 0 0;
-}
-
 // -- Suggested packs ----------------------------------------------------------
 
 .pack-strip__title {
@@ -438,6 +483,7 @@
   gap: 0.375rem;
 
   &.is-accepted {
+    background: var(--stacos-accent-subtle);
     border-color: var(--stacos-accent);
     box-shadow: inset 0 0 0 1px var(--stacos-accent);
   }

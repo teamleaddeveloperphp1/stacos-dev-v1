@@ -136,6 +136,10 @@ jobs:
       - name: Production settings are sane
         env:
           DJANGO_SETTINGS_MODULE: config.settings.prod
+          # `--deploy` includes security.W009 (secret key strength), and the
+          # job-wide CI secret is a short, low-entropy placeholder that fails
+          # exactly that check — so this step needs its own, deploy-shaped one.
+          DJANGO_SECRET_KEY: ci-deploy-check-only-not-a-real-secret-0123456789abcdef
           DJANGO_ALLOWED_HOSTS: example.com
           EMAIL_HOST: smtp.example.com
           AWS_STORAGE_BUCKET_NAME: ci-bucket

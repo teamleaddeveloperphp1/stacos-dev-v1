@@ -28,6 +28,24 @@ from stacos.core.views import healthz
 from stacos.marketing.sitemaps import SITEMAPS
 from stacos.marketing.views import robots_txt
 
+
+class FaviconRedirectView(RedirectView):
+    """Redirects to the hashed static asset, resolved per request.
+
+    Resolving ``static()`` as a keyword argument to ``as_view()`` would call it
+    at import time — the moment the URLconf loads. Under manifest static
+    storage (production), that means every process boot needs
+    ``collectstatic`` to have already run just to import this module, which
+    turns a missing build step into an import-time crash instead of a 404 on
+    the one request that actually needed it.
+    """
+
+    permanent = True
+
+    def get_redirect_url(self, *_args: object, **_kwargs: object) -> str:
+        return static_url("favicon.svg")
+
+
 urlpatterns = [
     # --- Operations ---
     path("healthz", healthz, name="healthz"),
@@ -36,11 +54,7 @@ urlpatterns = [
     path("robots.txt", robots_txt, name="robots"),
     path("sitemap.xml", sitemap, {"sitemaps": SITEMAPS}, name="sitemap"),
     # Browsers request /favicon.ico regardless of the <link rel="icon"> tag.
-    path(
-        "favicon.ico",
-        RedirectView.as_view(url=static_url("favicon.svg"), permanent=True),
-        name="favicon",
-    ),
+    path("favicon.ico", FaviconRedirectView.as_view(), name="favicon"),
     # --- Authentication ---
     path("auth/", include("stacos.accounts.urls", namespace="accounts")),
     path("accounts/", include("allauth.urls")),
