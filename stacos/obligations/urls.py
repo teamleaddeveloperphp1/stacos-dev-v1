@@ -9,6 +9,7 @@ urlpatterns = [
     path("month/", views.calendar_month, name="month"),
     path("<uuid:pk>/", views.obligation_detail, name="detail"),
     path("<uuid:pk>/transition/", views.obligation_transition, name="transition"),
+    path("<uuid:pk>/assign/", views.obligation_assign, name="assign"),
     path("<uuid:pk>/record-event/", views.record_entity_event, name="record_event"),
     path("<uuid:pk>/confirm/", views.confirm_obligation, name="confirm"),
     path("entities/<uuid:entity_pk>/rebuild/", views.rebuild_calendar, name="rebuild"),

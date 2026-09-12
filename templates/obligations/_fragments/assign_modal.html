@@ -1,0 +1,51 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Who is holding this obligation.
+
+  Same shape as the other action modals: `hx-swap="none"` on the form because
+  the real update travels as out-of-band fragments (the row, and the detail
+  panel if it happens to be open) plus a toast — there is no single "main"
+  target that is guaranteed to exist, since this opens from both the calendar
+  row and the obligation detail page.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="assign-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form hx-post="{% url 'compliance:assign' obligation.pk %}"
+            hx-target="#obligation-rows" hx-swap="none">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="assign-modal-title">{% translate "Assign" %}</h2>
+          <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                  @click="$dispatch('stacos:modal-close')"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small">
+            {% blocktranslate with title=obligation.title %}
+              Who is holding <strong>{{ title }}</strong>?
+            {% endblocktranslate %}
+          </p>
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 small" role="alert">
+              {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+
+          {% crispy form %}
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary"
+                  @click="$dispatch('stacos:modal-close')">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">{% translate "Save" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -15,6 +15,13 @@
     {% comment %}
       Filters swap only the table body, debounced at 250ms — typing must never
       cost a navigation, and must never fire a request per keystroke.
+
+      The `change` trigger carries no `from:` — it listens on the form itself.
+      `from:find select` looked right with one select in the toolbar and broke
+      the moment a second one (category, then entity) was added: htmx's `find`
+      resolves like `querySelector`, matching only the *first* descendant, so
+      every select after it got no listener at all. `change` bubbles, so a
+      listener on the form catches it from any select or input inside.
     {% endcomment %}
     <form class="d-flex gap-2 flex-grow-1 flex-wrap"
           hx-get="{% url 'compliance:calendar' %}"
@@ -22,7 +29,7 @@
           hx-select="#obligation-rows"
           hx-swap="morph"
           hx-push-url="true"
-          hx-trigger="keyup changed delay:250ms from:find input, change from:find select"
+          hx-trigger="keyup changed delay:250ms from:find input, change"
           hx-indicator="#calendar-spinner">
       <input type="search" name="q" value="{{ search }}"
              class="form-control form-control-sm" style="max-width: 18rem"
@@ -43,6 +50,18 @@
           <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
+
+      {% if entities %}
+        <select name="entity" class="form-select form-select-sm" style="max-width: 16rem"
+                aria-label="{% translate 'Filter by entity' %}">
+          <option value="">{% translate "Every entity" %}</option>
+          {% for row in entities %}
+            <option value="{{ row.id }}" {% if entity_id == row.id %}selected{% endif %}>
+              {{ row.name }}
+            </option>
+          {% endfor %}
+        </select>
+      {% endif %}
 
       <span class="htmx-indicator align-self-center" id="calendar-spinner">
         <span class="spinner-inline"></span>
@@ -68,7 +87,7 @@
         {% else %}
           <tr>
             <td colspan="6" class="p-0">
-              {% if search or status or category %}
+              {% if search or status or category or entity %}
                 <c-empty-state title="{% translate 'Nothing matches that filter' %}"
                                body="{% translate 'Try a different search term, or clear the status filter.' %}">
                   <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}"

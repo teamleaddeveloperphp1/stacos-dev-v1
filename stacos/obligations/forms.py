@@ -10,6 +10,7 @@ from django import forms
 from django.utils.functional import Promise
 from django.utils.translation import gettext_lazy as _
 
+from stacos.core.forms import ScopedUserChoiceField
 from stacos.jurisdictions.events import EVENT_TYPES
 from stacos.obligations.models import EntityEvent, ObligationInstance
 
@@ -166,6 +167,28 @@ class RecordEventForm(forms.ModelForm[EntityEvent]):
         return cleaned
 
 
+class AssignForm(forms.Form):
+    """Who is holding this obligation.
+
+    ``assigned_to`` goes through :class:`~stacos.core.forms.ScopedUserChoiceField`
+    rather than a plain ``ModelChoiceField``: ``User`` is not tenant-scoped, so an
+    ordinary picker would list every person on the platform and a forged POST
+    would hand a client's obligation to a stranger at another company.
+    """
+
+    assigned_to = ScopedUserChoiceField(
+        label=_("Assign to"),
+        required=False,
+        empty_label=_("Nobody"),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("assigned_to")
+
+
 def _attribute_field(attribute: Any) -> forms.Field:
     if attribute.type == "ENUM":
         field: forms.Field = forms.ChoiceField(
@@ -197,6 +220,7 @@ STATUS_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
     ("", _("Everything open")),
     ("overdue", _("Overdue")),
     ("due_soon", _("Due in 7 days")),
+    ("pending", _("Pending")),
     ("unconfirmed", _("Needs confirming")),
     ("needs_input", _("Waiting on a date")),
     ("completed", _("Completed")),

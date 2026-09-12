@@ -11,37 +11,35 @@
 <tr id="obligation-{{ obligation.pk }}"
     class="{% if obligation.is_overdue %}row--overdue{% endif %}">
   <td>
-    <a class="link-strong" href="{% url 'compliance:detail' obligation.pk %}"
-       hx-get="{% url 'compliance:detail' obligation.pk %}"
-       hx-target="#main" hx-push-url="true">{{ obligation.title }}</a>
-    {% if obligation.scope_label %}
-      <div class="text-muted small">{{ obligation.scope_label }}</div>
-    {% endif %}
-    {% if not obligation.confirmed %}
-      {% comment %}
-        UNKNOWN applicability. Materialised anyway and flagged, because silently
-        dropping an obligation is what gets a client penalised.
+    <div class="d-flex align-items-center flex-wrap gap-2">
+      <a class="link-strong" href="{% url 'compliance:detail' obligation.pk %}"
+         hx-get="{% url 'compliance:detail' obligation.pk %}"
+         hx-target="#main" hx-push-url="true">{{ obligation.title }}</a>
+      {% if not obligation.confirmed and not obligation.confirmed_by_user %}
+        {% comment %}
+          UNKNOWN applicability, or opted into by hand — materialised anyway
+          and flagged, because silently dropping an obligation is what gets a
+          client penalised. Either way "Confirm" is a real control now: with
+          `missing_facts` it opens the fact-based question; without one (a
+          pack, or a manual add) it opens a plain "does this apply?" yes/no
+          instead of a dead badge — a button that does nothing is worse than
+          no button, so there is no longer an inert state here at all.
 
-        A button only when there is a fact to ask about. An obligation somebody
-        opted into by hand is also unconfirmed — the rule did not decide it, a
-        person did — and it carries no `missing_facts`, so there is no question
-        and it stays a plain badge. Offering an action that opens an empty modal
-        would be worse than the badge that did nothing.
-      {% endcomment %}
-      {% if obligation.missing_facts %}
+          Inline with the title rather than on its own line beneath the
+          scope label: a badge stacked under "GST 27AB...Z5" read as a
+          caption on that line, not as a control attached to the obligation.
+        {% endcomment %}
         <button type="button" class="badge-soft badge-soft--attention badge-soft--action"
                 hx-get="{% url 'compliance:confirm' obligation.pk %}"
                 hx-target="#modal-container"
                 hx-swap="innerHTML"
-                title="{% translate 'We think this may apply. Answer one question and we will be sure.' %}">
+                title="{% if obligation.missing_facts %}{% translate 'We think this may apply. Answer one question and we will be sure.' %}{% else %}{% translate 'Added by hand — say whether it actually applies.' %}{% endif %}">
           {% translate "Confirm" %}
         </button>
-      {% else %}
-        <span class="badge-soft badge-soft--attention"
-              title="{% translate 'Added by hand, so we did not decide this one.' %}">
-          {% translate "Confirm" %}
-        </span>
       {% endif %}
+    </div>
+    {% if obligation.scope_label %}
+      <div class="text-muted small">{{ obligation.scope_label }}</div>
     {% endif %}
   </td>
   <td class="text-muted small">{{ obligation.entity.name }}</td>
@@ -70,6 +68,16 @@
                    :label="obligation.get_state_display" />
   </td>
   <td class="text-muted small">
-    {% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}—{% endif %}
+    {% comment %}
+      Opens the same assign modal the detail panel uses. The view re-checks the
+      permission on every request, so this control is offered unconditionally —
+      the same convention the "Confirm" badge above follows — and a caller
+      without ``compliance.obligation.assign`` simply gets a 403 on the POST.
+    {% endcomment %}
+    <button type="button" class="btn btn-sm btn-link p-0"
+            hx-get="{% url 'compliance:assign' obligation.pk %}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+      {% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}{% translate "Assign" %}{% endif %}
+    </button>
   </td>
 </tr>

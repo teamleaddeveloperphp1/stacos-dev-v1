@@ -7,7 +7,7 @@
 {% endcomment %}
 <section class="card" id="dashboard-obligations" aria-live="polite" aria-atomic="false">
   <div class="card__header">
-    <h2 class="card__title">{% translate "What is due next" %}</h2>
+    <h2 class="card__title">{% translate "Needs your attention" %}</h2>
     <a class="small" href="{% url 'compliance:calendar' %}"
        hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
       {% translate "Open the calendar" %}

@@ -63,8 +63,8 @@
           {% endif %}
           {% if "catalog.view" in access_scope.permissions %}
             <a class="btn btn-sm btn-outline-secondary"
-               href="{% url 'compliance:definition' obligation.definition_code %}"
-               hx-get="{% url 'compliance:definition' obligation.definition_code %}"
+               href="{% url 'compliance:definition' obligation.definition_code %}?from={{ obligation.pk }}"
+               hx-get="{% url 'compliance:definition' obligation.definition_code %}?from={{ obligation.pk }}"
                hx-target="#main" hx-push-url="true">
               {% translate "Full definition" %}
             </a>

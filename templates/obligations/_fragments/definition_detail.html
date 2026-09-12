@@ -1,13 +1,21 @@
 {% load i18n %}
 {% comment %}
-  What the law says, behind one obligation. Loaded into a modal from the detail
-  page. A client asking "why do I have to file this" gets the statutory
-  reference and a dated review, not an assertion.
+  What the law says, behind one obligation. Reached from an obligation's "Full
+  definition" link — which is also a direct, bookmarkable URL, so this carries
+  its own header and back link rather than assuming it landed inside another
+  page's shell. `back_url` returns to the obligation that linked here when the
+  view could confirm it (see `definition_detail`), and to the calendar
+  otherwise — a client asking "why do I have to file this" gets the statutory
+  reference and a dated review, not an assertion, and always a way back.
 {% endcomment %}
-<div class="modal-body">
-  <h2 class="modal-title">{{ version.title }}</h2>
-  <p class="text-muted small">{{ definition.code }} · v{{ version.version }}</p>
+<c-page-header title="{{ version.title }}" subtitle="{{ definition.code }} · v{{ version.version }}">
+  <a class="btn btn-sm btn-outline-secondary" href="{{ back_url }}"
+     hx-get="{{ back_url }}" hx-target="#main" hx-push-url="true">
+    {% translate "Back" %}
+  </a>
+</c-page-header>
 
+<section class="card">
   {% if version.plain_language_summary %}
     <p>{{ version.plain_language_summary }}</p>
   {% endif %}
@@ -35,4 +43,4 @@
       {% translate "This summary has not been reviewed against the statute within the last twelve months. Treat it as a guide and check the reference." %}
     </p>
   {% endif %}
-</div>
+</section>

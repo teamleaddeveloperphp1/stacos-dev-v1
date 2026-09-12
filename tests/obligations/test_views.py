@@ -112,6 +112,8 @@ def test_the_calendar_list_has_a_bounded_query_count(
     ``select_related`` on entity and assignee is what keeps this flat. An upper
     bound rather than an exact count: adding a legitimate query should not fail
     the build, but an N+1 turns ten into sixty and blows straight through it.
+    (The entity filter's own dropdown options are one more query, hence 15
+    rather than 14.)
     """
     with platform_scope(reason="test"):
         assert ObligationInstance.objects.filter(entity=materialised).count() > 50
@@ -120,7 +122,7 @@ def test_the_calendar_list_has_a_bounded_query_count(
     # view rather than the sign-in.
     signed_in.get(reverse("compliance:calendar"))
 
-    with django_assert_max_num_queries(14):  # type: ignore[operator]
+    with django_assert_max_num_queries(15):  # type: ignore[operator]
         response = signed_in.get(reverse("compliance:calendar"))
     assert response.status_code == 200
 
@@ -167,6 +169,116 @@ def test_filters_narrow_the_list(signed_in: Client, materialised: Entity) -> Non
             ObligationInstance.objects.filter(pk__in=shown).values_list("category", flat=True)
         )
     assert categories == {"CORPORATE_SECRETARIAL"}, f"filter leaked other categories: {categories}"
+
+
+def test_pending_and_completed_filters_agree_with_status_counts(
+    signed_in: Client, materialised: Entity
+) -> None:
+    """The dashboard's "Pending" and "Completed" tiles link straight into
+    these two filters — the count promised on the tile must equal the rows
+    the filter actually returns, or the click lands on a list that disagrees
+    with the number that sent the user there.
+    """
+    from django.utils import timezone
+
+    from stacos.obligations.queries import status_counts
+
+    with platform_scope(reason="test"):
+        expected = status_counts(as_of=timezone.localdate())
+    expected_pending = expected["open"] - expected["overdue"] - expected["due_soon"]
+
+    for status, expected_count, disallowed_states in (
+        ("pending", expected_pending, {"FILED", "CLOSED", "NOT_APPLICABLE"}),
+        ("completed", expected["completed"], set(State) - {"FILED", "CLOSED", "NOT_APPLICABLE"}),
+    ):
+        shown = _collect_all_rows(signed_in, status)
+        assert len(shown) == expected_count, f"status={status!r}"
+
+        with platform_scope(reason="test"):
+            states = set(
+                ObligationInstance.objects.filter(pk__in=shown).values_list("state", flat=True)
+            )
+        assert states.isdisjoint(disallowed_states), f"status={status!r} leaked {states}"
+
+
+def _collect_all_rows(client: Client, status: str) -> list[str]:
+    """Every row id behind a status filter, walking the keyset cursor.
+
+    A page is 50 rows and the fixture materialises well over that, so reading
+    only the first page would silently under-count a broad bucket like
+    "pending".
+    """
+    ids: list[str] = []
+    cursor = ""
+    while True:
+        params = {"status": status}
+        if cursor:
+            params["cursor"] = cursor
+        response = client.get(
+            reverse("compliance:calendar"), params, headers={"HX-Request": "true"}
+        )
+        assert response.status_code == 200
+        ids.extend(_row_ids(response.content.decode()))
+        page = response.context["page"]
+        if not page.has_more:
+            return ids
+        cursor = page.next_cursor
+
+
+def test_the_entity_filter_narrows_the_list(
+    signed_in: Client, materialised: Entity, org: Tenant
+) -> None:
+    """Picking one entity from the toolbar dropdown must not leak another
+    entity's rows — the same ``?entity=`` param the onboarding "finish" step
+    already links to, now exposed as a filter a user can actually reach.
+    """
+    from stacos.obligations.services import materialise
+    from stacos.tenancy.models import EntityRegistration
+
+    with platform_scope(reason="test"):
+        other = Entity.objects.create(
+            tenant=org,
+            name="Second Co",
+            entity_type="PVT_LTD",
+            country="IN",
+            registered_office_state="IN-KA",
+        )
+        EntityRegistration.objects.create(tenant=org, entity=other, type="PAN", value="AAACS1234C")
+        materialise(other, as_of=AS_OF, trigger="ONBOARDING")
+
+    response = signed_in.get(
+        reverse("compliance:calendar"),
+        {"entity": str(materialised.id), "status": "all"},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+
+    shown = _row_ids(response.content.decode())
+    assert shown, "the entity filter returned nothing at all"
+
+    with platform_scope(reason="test"):
+        entities_shown = set(
+            ObligationInstance.objects.filter(pk__in=shown).values_list("entity_id", flat=True)
+        )
+    assert entities_shown == {materialised.id}
+
+
+def test_the_entity_dropdown_lists_every_entity(signed_in: Client, materialised: Entity) -> None:
+    page = signed_in.get(reverse("compliance:calendar"))
+    assert page.status_code == 200
+    assert b'aria-label="Filter by entity"' in page.content
+    assert materialised.name.encode() in page.content
+
+
+def test_a_bad_entity_id_is_ignored_rather_than_erroring(
+    signed_in: Client, materialised: Entity
+) -> None:
+    """Filtering a UUID field with a non-UUID string raises ``ValidationError``
+    — a stale bookmark or a hand-edited URL must fall back to "every entity"
+    instead of a 500, the same fix already made on the dashboard.
+    """
+    response = signed_in.get(reverse("compliance:calendar"), {"entity": "not-a-uuid-at-all"})
+    assert response.status_code == 200
 
 
 def _row_ids(body: str) -> list[str]:
@@ -236,6 +348,101 @@ def test_a_transition_missing_its_guard_re_renders_with_the_reason(
     with platform_scope(reason="test"):
         an_obligation.refresh_from_db()
     assert an_obligation.state == State.NOT_STARTED
+
+
+def test_assign_modal_lists_only_this_tenants_active_members(
+    signed_in: Client, an_obligation: ObligationInstance, org: Tenant, rival_owner: User
+) -> None:
+    """The picker is narrowed to the caller's own tenant.
+
+    ``rival_owner`` belongs to a completely different organisation — the fixture
+    built for exactly this question elsewhere in the suite — and must not appear
+    in a list an owner uses to hand out their own team's work.
+    """
+    from tests.conftest import _make_member
+
+    colleague = _make_member(
+        org, "ramesh@acme.example", "Ramesh Patel", "+919800000099", "org-compliance-manager"
+    )
+
+    response = signed_in.get(
+        reverse("compliance:assign", args=[an_obligation.pk]), headers={"HX-Request": "true"}
+    )
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert colleague.full_name in body
+    assert rival_owner.full_name not in body
+
+
+def test_assigning_hands_the_obligation_to_a_colleague(
+    signed_in: Client, an_obligation: ObligationInstance, org: Tenant
+) -> None:
+    """One request updates the row, the detail panel, and the record itself."""
+    from tests.conftest import _make_member
+
+    colleague = _make_member(
+        org, "ramesh@acme.example", "Ramesh Patel", "+919800000099", "org-compliance-manager"
+    )
+
+    response = signed_in.post(
+        reverse("compliance:assign", args=[an_obligation.pk]),
+        {"assigned_to": colleague.pk},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    assert f"obligation-{an_obligation.pk}".encode() in response.content
+    assert b"obligation-panel" in response.content
+    assert "HX-Trigger" in response.headers
+    assert "stacos:modal-close" in response.headers["HX-Trigger"]
+
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+        assert an_obligation.assigned_to_id == colleague.id
+        assert an_obligation.events.filter(kind="ASSIGNED").exists()
+
+
+def test_assigning_to_someone_outside_the_tenant_is_rejected(
+    signed_in: Client, an_obligation: ObligationInstance, rival_owner: User
+) -> None:
+    """A forged assignee id is re-checked against the caller's own scope.
+
+    ``rival_owner`` never resolves in ``org_owner``'s picker, so the field's own
+    ``clean()`` — not a bespoke check in the view — is what stops this.
+    """
+    response = signed_in.post(
+        reverse("compliance:assign", args=[an_obligation.pk]),
+        {"assigned_to": rival_owner.pk},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 422
+
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+    assert an_obligation.assigned_to_id is None
+
+
+def test_clearing_an_assignment(
+    signed_in: Client, an_obligation: ObligationInstance, org_owner: User
+) -> None:
+    """Assigning nobody is a real choice, not an error."""
+    from stacos.obligations.transitions import assign as assign_transition
+
+    with platform_scope(reason="test"):
+        assign_transition(an_obligation, assignee=org_owner, actor=org_owner)
+
+    response = signed_in.post(
+        reverse("compliance:assign", args=[an_obligation.pk]),
+        {"assigned_to": ""},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+    assert an_obligation.assigned_to_id is None
 
 
 def test_recording_an_event_schedules_and_rebuilds(signed_in: Client, materialised: Entity) -> None:

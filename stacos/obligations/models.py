@@ -260,6 +260,15 @@ class ObligationInstance(TenantScopedModel, SoftDeleteModel):
     #: opted into by hand: that one is unconfirmed because a person chose it, and
     #: there is no question to ask.
     missing_facts = ArrayField(models.CharField(max_length=64), default=list, blank=True)
+    #: A human's own "yes, this applies" for an obligation the rule never
+    #: confirmed — one opted into by hand, where ``missing_facts`` is empty
+    #: because there was never a fact to ask about. Deliberately not folded
+    #: into ``confirmed`` itself: the planner recomputes ``confirmed`` from
+    #: scratch on every materialisation run (``verdict.result is TRUE and not
+    #: forced``), and an opt-in's ``forced`` never stops being true, so
+    #: anything written there would be silently overwritten by the next
+    #: rebuild. This field is never touched by the planner, so it survives.
+    confirmed_by_user = models.BooleanField(default=False)
     #: The pruned, minimal reason the rule fired. Shown verbatim on the detail
     #: page, so "why is this on my calendar" always has an answer.
     reasons = ArrayField(models.CharField(max_length=250), default=list, blank=True)

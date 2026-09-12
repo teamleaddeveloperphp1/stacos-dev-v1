@@ -84,7 +84,14 @@
       <dd>{{ obligation.filing_reference|default:"—" }}</dd>
     {% endif %}
     <dt>{% translate "Assigned to" %}</dt>
-    <dd>{% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}{% translate "Nobody yet" %}{% endif %}</dd>
+    <dd>
+      {% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}{% translate "Nobody yet" %}{% endif %}
+      <button type="button" class="btn btn-sm btn-link p-0 ms-1"
+              hx-get="{% url 'compliance:assign' obligation.pk %}"
+              hx-target="#modal-container" hx-swap="innerHTML">
+        {% translate "Change" %}
+      </button>
+    </dd>
   </dl>
 
   {% if actions %}

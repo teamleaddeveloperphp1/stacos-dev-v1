@@ -1,0 +1,59 @@
+{% load i18n %}
+{% comment %}
+  Confirming an obligation nobody's rule ever decided.
+
+  Added by hand — a pack, or one at a time — so there is no missing fact
+  behind it and no question to rank. The only thing left to ask is the
+  plainest form of the same question the fact-based flow asks: does this
+  actually apply? "Yes" is recorded on the instance itself
+  (`ObligationInstance.confirmed_by_user`) and survives the next
+  materialisation run untouched; "No" goes through the same "mark not
+  applicable" transition the detail page's action menu already offers, so it
+  is remembered the same way any other dismissal is.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="confirm-opt-in-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="confirm-opt-in-title">
+          {% translate "Does this apply to you?" %}
+        </h2>
+        <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                @click="$dispatch('stacos:modal-close')"></button>
+      </div>
+
+      <div class="modal-body">
+        <p class="text-muted small mb-0">
+          {% blocktranslate with title=obligation.title %}
+            <strong>{{ title }}</strong> was added by hand rather than
+            worked out from a rule, so nobody has confirmed it either way yet.
+          {% endblocktranslate %}
+        </p>
+      </div>
+
+      <div class="modal-footer">
+        <form method="post" action="{% url 'compliance:confirm' obligation.pk %}"
+              hx-post="{% url 'compliance:confirm' obligation.pk %}"
+              hx-target="#obligation-rows" hx-swap="none">
+          {% csrf_token %}
+          <input type="hidden" name="decision" value="no">
+          <button type="submit" class="btn btn-outline-secondary">
+            {% translate "No, doesn't apply" %}
+          </button>
+        </form>
+        <form method="post" action="{% url 'compliance:confirm' obligation.pk %}"
+              hx-post="{% url 'compliance:confirm' obligation.pk %}"
+              hx-target="#obligation-rows" hx-swap="none">
+          {% csrf_token %}
+          <input type="hidden" name="decision" value="yes">
+          <button type="submit" class="btn btn-primary">
+            {% translate "Yes, this applies" %}
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>

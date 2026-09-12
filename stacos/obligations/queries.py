@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date, timedelta
+from typing import TypedDict
 from uuid import UUID
 
 from django.db.models import (
@@ -37,6 +38,7 @@ from django.db.models import (
     Value,
     When,
 )
+from django.utils.functional import Promise
 
 from stacos.core.pagination import KeysetPage
 from stacos.core.pagination import keyset_page as core_keyset_page
@@ -49,13 +51,22 @@ from stacos.engine.lifecycle import (
 )
 from stacos.obligations.models import ObligationInstance
 
+#: A translated string is a ``Promise`` until something renders it, which is
+#: what lets one process serve a user in English and another in Hindi.
+StrOrPromise = str | Promise
+
 __all__ = [
+    "CategoryCount",
     "KeysetPage",
+    "WeeklyWorkload",
     "annotate_status",
+    "category_counts",
     "keyset_page",
     "live",
+    "overdue_aging",
     "status_counts",
     "upcoming",
+    "weekly_workload",
 ]
 
 _OPEN = sorted(str(s) for s in OPEN_STATES)
@@ -204,8 +215,93 @@ def status_counts(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> d
             & Q(due_date__lte=as_of + timedelta(days=DUE_SOON_DAYS)),
         ),
         completed=Count("id", filter=Q(state__in=_CLOSED)),
-        unconfirmed=Count("id", filter=open_q & Q(confirmed=False)),
+        # A human's own "yes, this applies" (`confirmed_by_user`) settles an
+        # opted-in row the rule itself will never confirm — it must stop
+        # counting as "needs confirming" once someone has actually looked.
+        unconfirmed=Count("id", filter=open_q & Q(confirmed=False) & Q(confirmed_by_user=False)),
         needs_input=Count("id", filter=open_q & ~Q(needs_input="")),
+    )
+    return {key: int(value or 0) for key, value in row.items()}
+
+
+class CategoryCount(TypedDict):
+    code: str
+    label: StrOrPromise
+    count: int
+
+
+def category_counts(*, entity_ids: Sequence[UUID] | None = None) -> list[CategoryCount]:
+    """Open obligations grouped by compliance category, busiest first.
+
+    Open-only, deliberately: a lifetime count would only ever grow and stop
+    telling anyone what their current workload looks like.
+    """
+    from stacos.tenancy.models import ComplianceCategory
+
+    queryset = live().filter(state__in=_OPEN)
+    if entity_ids is not None:
+        queryset = queryset.filter(entity_id__in=list(entity_ids))
+
+    rows = queryset.values("category").annotate(count=Count("id")).order_by("-count")
+    return [
+        {
+            "code": row["category"],
+            "label": ComplianceCategory(row["category"]).label,
+            "count": row["count"],
+        }
+        for row in rows
+    ]
+
+
+class WeeklyWorkload(TypedDict):
+    overdue: int
+    weeks: list[int]
+
+
+def weekly_workload(
+    *, as_of: date, weeks: int = 6, entity_ids: Sequence[UUID] | None = None
+) -> WeeklyWorkload:
+    """Open obligations due in each of the next few weeks, one aggregate query.
+
+    Overdue is folded in as its own figure rather than a negative week, so a
+    caller does not have to special-case "week -1" — a backlog is a different
+    kind of number from "due in nine days."
+    """
+    queryset = live().filter(state__in=_OPEN, due_date__isnull=False)
+    if entity_ids is not None:
+        queryset = queryset.filter(entity_id__in=list(entity_ids))
+
+    aggregates = {"overdue": Count("id", filter=Q(due_date__lt=as_of))}
+    for week in range(weeks):
+        start = as_of + timedelta(days=week * 7)
+        end = start + timedelta(days=7)
+        aggregates[f"week_{week}"] = Count("id", filter=Q(due_date__gte=start, due_date__lt=end))
+
+    row = queryset.aggregate(**aggregates)
+    return {
+        "overdue": int(row["overdue"] or 0),
+        "weeks": [int(row[f"week_{week}"] or 0) for week in range(weeks)],
+    }
+
+
+def overdue_aging(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> dict[str, int]:
+    """How late the overdue register is, bucketed rather than one flat number.
+
+    A filing two days late and one six weeks late are not the same problem —
+    a single "overdue" count on the dashboard tiles conflates them.
+    """
+    queryset = live().filter(state__in=_OPEN, due_date__isnull=False, due_date__lt=as_of)
+    if entity_ids is not None:
+        queryset = queryset.filter(entity_id__in=list(entity_ids))
+
+    row = queryset.aggregate(
+        recent=Count("id", filter=Q(due_date__gte=as_of - timedelta(days=7))),
+        stale=Count(
+            "id",
+            filter=Q(due_date__lt=as_of - timedelta(days=7))
+            & Q(due_date__gte=as_of - timedelta(days=30)),
+        ),
+        old=Count("id", filter=Q(due_date__lt=as_of - timedelta(days=30))),
     )
     return {key: int(value or 0) for key, value in row.items()}
 

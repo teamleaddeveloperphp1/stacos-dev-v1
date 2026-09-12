@@ -8,8 +8,8 @@
   component appears on every list, card and detail page in the product, so the
   vocabulary has to be identical everywhere.
 
-  Valid statuses: overdue, due-soon, on-track, in-progress, waiting, complete,
-  na, disputed.
+  Valid statuses: overdue, due-soon, pending, on-track, in-progress, waiting,
+  complete, na, disputed.
 
   Usage:  <c-status-chip status="overdue" />
           <c-status-chip status="due-soon" label="Due in 3 days" />
@@ -24,6 +24,9 @@
     {% elif status == "due-soon" %}
       <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
       <path d="M8 4.5V8l2.5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    {% elif status == "pending" %}
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
+      <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
     {% elif status == "on-track" or status == "complete" %}
       <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
       <path d="M4.75 8.25l2.25 2.25L11.25 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
