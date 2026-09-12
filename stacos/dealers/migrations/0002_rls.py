@@ -1,7 +1,6 @@
 """Row-Level Security on the channel programme.
 
-A dealer sees their own ledger and nobody else's — including no other dealer's.
-"""
+A dealer sees their own ledger and nobody else's — including no other dealer's."""
 
 from django.db import migrations
 

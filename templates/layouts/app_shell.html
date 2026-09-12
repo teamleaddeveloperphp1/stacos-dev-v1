@@ -93,11 +93,6 @@
           </a>
         </div>
 
-        {% comment %}
-          The requests, notices and vault sections arrive with their own
-          milestones. They are listed here, visibly disabled, because an empty
-          navigation tells a new user nothing about what the product does.
-        {% endcomment %}
         <div class="app-nav__group">
           <div class="app-nav__label">{% translate "Compliance" %}</div>
           <a class="app-nav__link" href="{% url 'compliance:calendar' %}" preload data-nav-match="/app/compliance/">
@@ -107,32 +102,6 @@
               {{ overdue_count|default:"" }}
             </span>
           </a>
-          <a class="app-nav__link" href="{% url 'rfi:list' %}" preload data-nav-match="/app/requests/">
-            <c-icon name="inbox" />
-            <span>{% translate "Information requests" %}</span>
-          </a>
-          <a class="app-nav__link" href="{% url 'notices:list' %}" preload data-nav-match="/app/notices/">
-            <c-icon name="alert" />
-            <span>{% translate "Notices" %}</span>
-          </a>
-          <a class="app-nav__link" href="{% url 'vault:list' %}" preload data-nav-match="/app/documents/">
-            <c-icon name="folder" />
-            <span>{% translate "Documents" %}</span>
-          </a>
-          <a class="app-nav__link" href="{% url 'returns:list' %}" preload data-nav-match="/app/returns/">
-            <c-icon name="document" />
-            <span>{% translate "Returns" %}</span>
-          </a>
-          <a class="app-nav__link" href="{% url 'secretarial:meetings' %}" preload data-nav-match="/app/secretarial/meetings/">
-            <c-icon name="briefcase" />
-            <span>{% translate "Secretarial" %}</span>
-          </a>
-          {% if "secretarial.resolution.manage" in access_scope.permissions %}
-            <a class="app-nav__link" href="{% url 'secretarial:resolutions' %}" preload data-nav-match="/app/secretarial/resolutions/">
-              <c-icon name="document" />
-              <span>{% translate "Resolutions" %}</span>
-            </a>
-          {% endif %}
         </div>
 
         {% comment %}

@@ -1,5 +1,4 @@
-"""
-Row-Level Security on the register.
+"""Row-Level Security on the register.
 
 The scoped manager is the first line of defence and it is the one that catches
 mistakes during development. This is what catches everything the ORM cannot see:
@@ -9,8 +8,7 @@ New tenant-scoped models are **not** picked up automatically — ``manage.py
 ensure_rls`` runs in CI and fails the build for anything missing, which is the
 safety net that makes a static list in a migration acceptable. A migration has to
 describe a fixed historical state, so introspecting the model registry here would
-mean this file changed meaning every time a model was added.
-"""
+mean this file changed meaning every time a model was added."""
 
 from django.db import migrations
 
@@ -20,6 +18,7 @@ RLS_TABLES = (
     "obligations_obligationinstance",
     "obligations_obligationevent",
     "obligations_obligationsuppression",
+    "obligations_obligationinclusion",
     "obligations_entityevent",
     "obligations_materialisationrun",
 )

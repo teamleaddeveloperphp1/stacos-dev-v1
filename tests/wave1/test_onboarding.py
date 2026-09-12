@@ -85,8 +85,9 @@ def test_a_user_with_no_membership_still_cannot_reach_anything_else(
 
 
 def test_identity_decoding_prefills_and_explains(signed_in: Client) -> None:
+    """CIN has no dedicated field, so a pasted one is how it reaches the decoder."""
     response = signed_in.post(
-        reverse("onboarding:identity_decode"), {"cin": CIN, "pan": PAN, "gstin": GSTIN}
+        reverse("onboarding:identity_decode"), {"pasted": CIN, "pan": PAN, "gstin": GSTIN}
     )
     body = response.content.decode()
 
@@ -98,7 +99,7 @@ def test_identity_decoding_prefills_and_explains(signed_in: Client) -> None:
 
 
 def test_the_identity_step_carries_what_it_read_into_the_draft(signed_in: Client) -> None:
-    signed_in.post(reverse("onboarding:identity"), {"cin": CIN, "pan": PAN, "gstin": GSTIN})
+    signed_in.post(reverse("onboarding:identity"), {"pasted": CIN, "pan": PAN, "gstin": GSTIN})
 
     draft = OnboardingDraft.from_session(signed_in.session)
     assert draft.entity_type == "PVT_LTD"

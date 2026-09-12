@@ -193,9 +193,6 @@ PALETTE_DESTINATIONS: tuple[tuple[str, str, str, str], ...] = (
     ("Dashboard", "app:dashboard", "home", "g o"),
     ("Entities", "app:entity_list", "building", "g e"),
     ("Compliance calendar", "compliance:calendar", "calendar", "g c"),
-    ("Information requests", "rfi:list", "inbox", "g r"),
-    ("Notices", "notices:list", "alert", "g n"),
-    ("Documents", "vault:list", "folder", "g d"),
     ("Security and devices", "accounts:security", "shield", ""),
 )
 

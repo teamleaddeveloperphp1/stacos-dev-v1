@@ -2,8 +2,7 @@
 
 `billing.Plan` is deliberately absent: it is the published price list and is the
 same for every customer. Everything that names an amount a specific customer owes
-is covered.
-"""
+is covered."""
 
 from django.db import migrations
 

@@ -183,6 +183,7 @@ PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 CIN_RE = re.compile(r"^([LU])([0-9]{5})([A-Z]{2})([0-9]{4})([A-Z]{3})([0-9]{6})$")
 LLPIN_RE = re.compile(r"^[A-Z]{3}-?[0-9]{4}$")
 GSTIN_RE = re.compile(r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$")
+TAN_RE = re.compile(r"^[A-Z]{4}[0-9]{5}[A-Z]$")
 
 
 #: The GSTIN character set, in the order that gives each character its value.
@@ -401,6 +402,24 @@ def decode_llpin(value: str) -> Reading:
     )
 
 
+def decode_tan(value: str) -> Reading:
+    """Read a TAN: format-checked only, and deliberately nothing more.
+
+    The first four characters look like a jurisdiction code, the same way a
+    CIN's does, but they identify the assessing officer's ward — not a state or
+    an entity type — so there is no fact here worth surfacing as a hint.
+    """
+    tan = normalise(value)
+    if not TAN_RE.match(tan):
+        return Reading(
+            "TAN",
+            tan,
+            valid=False,
+            error="A TAN is ten characters: four letters, five digits, then a letter.",
+        )
+    return Reading("TAN", tan, valid=True)
+
+
 def decode_gstin(value: str) -> Reading:
     """Read a GSTIN: a state, plus the PAN embedded in the middle of it."""
     gstin = normalise(value)
@@ -498,6 +517,7 @@ _DECODERS = {
     "CIN": decode_cin,
     "LLPIN": decode_llpin,
     "GST": decode_gstin,
+    "TAN": decode_tan,
 }
 
 _CONFIDENCE_ORDER = {Confidence.CERTAIN: 0, Confidence.LIKELY: 1, Confidence.POSSIBLE: 2}
@@ -509,7 +529,9 @@ def sniff(text: str) -> list[tuple[str, str]]:
     So a user can paste whatever they have — a signature block, a letterhead
     footer, three identifiers on three lines — instead of being asked which box
     each one goes in. Shapes do not overlap: a GSTIN is fifteen characters
-    starting with two digits, a CIN twenty-one starting with L or U.
+    starting with two digits, a CIN twenty-one starting with L or U, and a PAN
+    and a TAN are both ten characters but split their letters and digits
+    differently (five-then-four versus four-then-five).
     """
     found: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -522,6 +544,7 @@ def sniff(text: str) -> list[tuple[str, str]]:
             ("GST", GSTIN_RE),
             ("LLPIN", LLPIN_RE),
             ("PAN", PAN_RE),
+            ("TAN", TAN_RE),
         ):
             if pattern.match(candidate):
                 found.append((kind, candidate))

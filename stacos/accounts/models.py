@@ -299,10 +299,9 @@ class PendingVerification(models.Model):
     user_agent = models.CharField(max_length=512, blank=True)
     next_url = models.CharField(max_length=500, blank=True)
 
-    #: The organisation the person named at sign-up, held until both channels are
-    #: proven. Carried here rather than in the session because the tenant is
-    #: created on the strength of *this* row: an abandoned or throttled sign-up
-    #: must leave no organisation behind, and a resend must not lose the name.
+    #: Unused — sign-up no longer collects an organisation name; that happens in
+    #: the onboarding wizard afterwards instead. Left in place rather than
+    #: migrated away in the same change that stopped writing to it.
     organisation_name = models.CharField(max_length=200, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

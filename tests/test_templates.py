@@ -235,12 +235,6 @@ UNLINKED_ROUTES: dict[str, str] = {
         "Same for `billing.invoice.void`, which is why the void control in the "
         "invoice panel stays hidden."
     ),
-    "vault:attachments": (
-        "An attachment strip meant to be embedded by whichever module owns the "
-        "record — see the view's docstring. It is reached by `hx-get` from the "
-        "owning module's panel when that module adopts it, not by a link of its "
-        "own."
-    ),
 }
 
 
@@ -478,41 +472,6 @@ def test_every_declared_nav_prefix_is_a_real_url() -> None:
     assert not unresolvable, (
         f"These data-nav-match prefixes resolve to no view: {unresolvable}. "
         f"A prefix nothing serves can never match the address bar."
-    )
-
-
-# ===========================================================================
-# 8. Downloads
-# ===========================================================================
-
-
-def test_every_download_link_opts_out_of_boosting() -> None:
-    """A boosted download is not a download.
-
-    The shell boosts every link inside it, so HTMX fetches the URL with an XHR.
-    Browsers honour `Content-Disposition` only on real navigations, so the
-    response is not saved — it is swapped into `#main`, and the user sees the
-    raw contents of their PDF as text. The view is correct; the link is what
-    decides.
-
-    Three separate templates offer a download and all three had the same bug, so
-    this is checked rather than remembered.
-    """
-    offenders: list[str] = []
-    for path in _template_paths():
-        source = (TEMPLATES_DIR / path).read_text(encoding="utf-8")
-        for tag in re.finditer(r"<a\b[^<>]*>", source, re.DOTALL):
-            markup = tag.group(0)
-            if "vault:download" not in markup:
-                continue
-            if 'hx-boost="false"' in markup:
-                continue
-            line = source.count("\n", 0, tag.start()) + 1
-            offenders.append(f"{path}:{line}")
-
-    assert not offenders, (
-        f"These download links are boosted and will render the file as text "
-        f'instead of saving it: {offenders}. Add hx-boost="false".'
     )
 
 

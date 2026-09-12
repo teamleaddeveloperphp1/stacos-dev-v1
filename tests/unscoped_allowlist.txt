@@ -12,5 +12,4 @@
 stacos/tenancy/scope_resolver.py:2  # Bootstrap. These ARE the queries that establish the scope, so nothing is bound yet to filter by. Both are anchored on a tenant the user is already an active member of.
 stacos/tenancy/views.py:1           # Tenant switcher. Filtered by `user`, so a forged tenant id cannot reach a tenant the user is not in. Inside `rls_bootstrap`, because the target tenant is by definition outside the currently published RLS set.
 stacos/api/views.py:1               # Mobile /me/ endpoint listing the caller's own memberships, filtered by `user`.
-stacos/accounts/views.py:1          # Post-verification provisioning asks whether this user already belongs anywhere, before any scope exists. Filtered by `user`, inside `rls_bootstrap`.
 stacos/tenancy/invitations.py:1     # Resolving an invitation link, for somebody who is by definition not yet a member of the tenant. Anchored on the token hash, inside `rls_bootstrap`.

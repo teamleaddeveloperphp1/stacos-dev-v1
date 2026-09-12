@@ -295,9 +295,6 @@ const SHORTCUTS = {
   o: "/app/",
   e: "/app/entities/",
   c: "/app/compliance/",
-  r: "/app/requests/",
-  n: "/app/notices/",
-  d: "/app/documents/",
 };
 
 //: Rendered by the shortcuts help dialog. Kept beside the map it documents so
@@ -309,9 +306,6 @@ const SHORTCUT_HELP = [
       { keys: ["g", "o"], label: "Dashboard" },
       { keys: ["g", "e"], label: "Entities" },
       { keys: ["g", "c"], label: "Compliance calendar" },
-      { keys: ["g", "r"], label: "Information requests" },
-      { keys: ["g", "n"], label: "Notices" },
-      { keys: ["g", "d"], label: "Documents" },
     ],
   },
   {

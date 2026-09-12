@@ -3,21 +3,18 @@ Demo *work* for development: the state the modules are actually about.
 
 `seed_dev` builds the world — tenants, entities, registrations, premises, an
 engagement. This builds what has happened in it: a materialised compliance
-calendar, documents in the vault, a half-answered information request, an open
-notice with a fortnight to run, a return waiting for a second pair of eyes, a
-work board, an overdue invoice and a full notification inbox.
+calendar, a work board, an overdue invoice and a full notification inbox.
 
-It lives here rather than in `seed_dev` because it imports nine modules, and a
+It lives here rather than in `seed_dev` because it imports several modules, and a
 command in `tenancy` reaching into `billing` and `practice` inverts the
 dependency the app list is careful about. `seed_dev` calls it at the end, so
 ``tasks.ps1 seed`` still does everything in one step.
 
-**Everything is deliberately messy.** A demo where every obligation is on track,
-every request answered and every invoice paid demonstrates nothing: the screens
-that matter are the ones showing an overdue filing, a client who has gone quiet
-and a document that failed its scan, and those states have to exist to be looked
-at. Anyone reviewing this product is going to open the dashboard first, and a
-tidy dashboard is an empty one.
+**Everything is deliberately messy.** A demo where every obligation is on track
+and every invoice paid demonstrates nothing: the screens that matter are the
+ones showing an overdue filing and a client who has gone quiet, and those states
+have to exist to be looked at. Anyone reviewing this product is going to open
+the dashboard first, and a tidy dashboard is an empty one.
 """
 
 from __future__ import annotations
@@ -26,7 +23,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
@@ -67,10 +63,6 @@ class Command(BaseCommand):
             people = {u.email: u for u in User.objects.filter(email__endswith=".example")}
 
         self._calendar(org, textile, as_of)
-        self._vault(org, textile, people)
-        self._requests(org, textile, people, as_of)
-        self._notices(org, textile, people, as_of)
-        self._returns(org, textile, people, as_of)
         self._practice(practice, org, people, as_of)
         self._billing(org, as_of)
         self._notifications(org, textile, people, as_of)
@@ -137,246 +129,6 @@ class Command(BaseCommand):
 
             self.stdout.write(
                 f"  Calendar: {run.summary()}; {moved} moved on, {overdue.count()} left overdue"
-            )
-
-    # -- Vault ---------------------------------------------------------------
-
-    def _vault(self, org: Tenant, entity: Entity, people: dict[str, User]) -> None:
-        """Three documents, one of which failed its scan.
-
-        The quarantined one is the point. Every demo vault is full of clean
-        files, and then nobody ever sees what the product does when a client
-        uploads something infected — which is the one behaviour worth showing.
-
-        That last row is written as a *verdict* rather than produced by scanning
-        real EICAR bytes, and the reason is practical: EICAR is designed to be
-        detected, so writing it to a developer's disk means Windows Defender (or
-        any desktop antivirus) removes the file from under Django and the seed
-        dies on a file handle that was valid a millisecond earlier. The test
-        suite does use real EICAR — through in-memory storage, where nothing
-        touches the filesystem. Here the screen state is what matters.
-        """
-        from stacos.vault.models import Document, DocumentKind, ScanState
-        from stacos.vault.services import store
-        from stacos.vault.tasks import scan_document
-
-        actor = next(iter(people.values()), None)
-
-        with tenant_context(tenant_ids=org.pk, reason="seed_work:vault"):
-            specs = [
-                ("GSTR-3B July 2026 acknowledgement.pdf", DocumentKind.RETURN, b"%PDF-1.4 ack"),
-                ("TDS challan Q1.pdf", DocumentKind.CHALLAN, b"%PDF-1.4 challan"),
-                ("Bank statement July.pdf", DocumentKind.FINANCIAL, b"%PDF-1.4 statement"),
-                ("Unknown attachment.pdf", DocumentKind.CORRESPONDENCE, b"%PDF-1.4 unknown"),
-            ]
-
-            for name, kind, content in specs:
-                document, created = store(
-                    tenant=org,
-                    entity=entity,
-                    upload=SimpleUploadedFile(name, content, content_type="application/pdf"),
-                    kind=kind,
-                    actor=actor,
-                )
-                if not created:
-                    continue
-
-                if name.startswith("Unknown"):
-                    Document.objects.filter(pk=document.pk).update(
-                        scan_state=ScanState.INFECTED,
-                        scan_result="clamav:Pdf.Exploit.CVE_2023_26369",
-                        scanned_at=timezone.now(),
-                    )
-                    continue
-
-                # The scan normally runs on a worker. Running it inline keeps the
-                # seed self-contained — with no broker, the queued message would
-                # never be picked up and every file would sit at PENDING.
-                scan_document(tenant_id=str(org.pk), document_id=str(document.pk))
-
-            clean = Document.objects.filter(scan_state=ScanState.CLEAN).count()
-            held = Document.objects.filter(scan_state=ScanState.INFECTED).count()
-            self.stdout.write(f"  Vault: {clean} scanned clean, {held} quarantined")
-
-    # -- Information requests ------------------------------------------------
-
-    def _requests(self, org: Tenant, entity: Entity, people: dict[str, User], as_of: date) -> None:
-        """One request, half answered, already overdue.
-
-        Half-answered because "six documents asked for, five returned" is the
-        state the whole module exists to represent, and a request that is either
-        empty or complete never exercises it.
-        """
-        from stacos.requests.models import InformationRequest, RequestItem, RequestState
-        from stacos.requests.services import record_response, send_request
-
-        owner = people.get("priya@vaibhav-textiles.example")
-        manager = people.get("ramesh@vaibhav-textiles.example")
-
-        with tenant_context(tenant_ids=org.pk, reason="seed_work:requests"):
-            request, created = InformationRequest.objects.get_or_create(
-                entity=entity,
-                title="August closing — supporting documents",
-                defaults={
-                    "tenant": org,
-                    "message": (
-                        "Please send these before the 15th so we can file GSTR-3B on time."
-                    ),
-                    "due_on": as_of - timedelta(days=2),
-                    "requested_by": manager,
-                    "assigned_to": owner,
-                    "state": RequestState.DRAFT,
-                },
-            )
-            if not created:
-                self.stdout.write("  Requests: already present")
-                return
-
-            items = [
-                ("Bank statement — August", RequestItem.Kind.DOCUMENT),
-                ("Purchase register", RequestItem.Kind.DOCUMENT),
-                ("Closing stock value", RequestItem.Kind.DATA),
-                ("Confirm no exports this month", RequestItem.Kind.CONFIRMATION),
-            ]
-            created_items = [
-                RequestItem.objects.create(
-                    tenant=org,
-                    entity=entity,
-                    request=request,
-                    label=label,
-                    kind=kind,
-                    ordinal=index,
-                )
-                for index, (label, kind) in enumerate(items, start=1)
-            ]
-
-            send_request(request, actor=manager)
-
-            record_response(created_items[2], value="₹41,20,000", actor=owner)
-            record_response(created_items[3], value="Confirmed — no exports", actor=owner)
-
-            request.refresh_from_db()
-            outstanding = sum(1 for item in request.items.all() if not item.is_answered)
-            self.stdout.write(
-                f"  Requests: 1 sent, {outstanding} of {len(items)} still outstanding, "
-                f"2 days overdue"
-            )
-
-    # -- Notices -------------------------------------------------------------
-
-    def _notices(self, org: Tenant, entity: Entity, people: dict[str, User], as_of: date) -> None:
-        """A live scrutiny notice with a fortnight left, and a closed one behind it."""
-        from stacos.jurisdictions.models import Authority
-        from stacos.notices.models import Notice, NoticeState, NoticeType
-
-        manager = people.get("ramesh@vaibhav-textiles.example")
-
-        with platform_scope(reason="seed_work:authority"):
-            authority = Authority.objects.filter(code__icontains="IT").first()
-            if authority is None:
-                authority = Authority.objects.first()
-        if authority is None:
-            self.stdout.write(self.style.WARNING("  Notices: no authorities loaded — skipped"))
-            return
-
-        with tenant_context(tenant_ids=org.pk, reason="seed_work:notices"):
-            Notice.objects.get_or_create(
-                entity=entity,
-                authority=authority,
-                reference_number="ITBA/AST/S/143(2)/2026-27/1052841",
-                defaults={
-                    "tenant": org,
-                    "notice_type": NoticeType.SCRUTINY,
-                    "statutory_reference": "Section 143(2), Income-tax Act 1961",
-                    "subject": "Limited scrutiny — mismatch in turnover reported in GSTR-9 and ITR",
-                    "summary": (
-                        "Explain the difference between turnover per GSTR-9 (₹18.4 crore) "
-                        "and per the return of income (₹17.9 crore) for AY 2025-26."
-                    ),
-                    "financial_years": "2024-25",
-                    "issued_on": as_of - timedelta(days=6),
-                    "received_on": as_of - timedelta(days=4),
-                    # Read off the notice. Fifteen days, not the thirty a rule
-                    # would have assumed — which is why this field is not computed.
-                    "respond_by": as_of + timedelta(days=11),
-                    "demand_amount": None,
-                    "state": NoticeState.UNDER_REVIEW,
-                    "risk": Notice.Risk.HIGH,
-                    "assigned_to": manager,
-                },
-            )
-
-            Notice.objects.get_or_create(
-                entity=entity,
-                authority=authority,
-                reference_number="GST/ASMT-10/2025-26/00417",
-                defaults={
-                    "tenant": org,
-                    "notice_type": NoticeType.MISMATCH,
-                    "statutory_reference": "Rule 99, CGST Rules 2017",
-                    "subject": "Scrutiny of returns — ITC mismatch with GSTR-2B",
-                    "issued_on": as_of - timedelta(days=95),
-                    "received_on": as_of - timedelta(days=92),
-                    "respond_by": as_of - timedelta(days=62),
-                    "demand_amount": Decimal("284500.00"),
-                    "accepted_amount": Decimal("41200.00"),
-                    "state": NoticeState.CLOSED,
-                    "risk": Notice.Risk.MEDIUM,
-                    "assigned_to": manager,
-                },
-            )
-            self.stdout.write("  Notices: 1 open (11 days to respond), 1 closed")
-
-    # -- Returns -------------------------------------------------------------
-
-    def _returns(self, org: Tenant, entity: Entity, people: dict[str, User], as_of: date) -> None:
-        """A return prepared by one person and waiting for another.
-
-        Maker-checker is enforced by a database constraint, so the demo has to
-        use two different people — which is also the only way to see the review
-        queue with anything in it.
-        """
-        from stacos.engine.lifecycle import State
-        from stacos.obligations.models import ObligationInstance
-        from stacos.returns.models import PreparationState, ReturnPreparation
-
-        preparer = people.get("ramesh@vaibhav-textiles.example")
-        with tenant_context(tenant_ids=org.pk, reason="seed_work:returns"):
-            # A preparation is the working papers *for an obligation* — the
-            # one-to-one is what stops two sets of figures existing for the same
-            # filing. So the demo attaches to a real calendar entry rather than
-            # inventing a free-floating return.
-            obligation = (
-                ObligationInstance.objects.filter(
-                    entity=entity,
-                    state=State.PENDING_REVIEW,
-                    preparation__isnull=True,
-                )
-                .order_by("due_date")
-                .first()
-            )
-            if obligation is None:
-                self.stdout.write("  Returns: no obligation awaiting review — skipped")
-                return
-
-            _, created = ReturnPreparation.objects.get_or_create(
-                obligation=obligation,
-                defaults={
-                    "entity": entity,
-                    "form_type": obligation.title[:40],
-                    "period_key": obligation.period_key,
-                    "tenant": org,
-                    # PREPARED, not REVIEWED: the maker has finished and the
-                    # checker has not looked. That is the state the review queue
-                    # is built to show, and a database constraint stops the same
-                    # person occupying both roles.
-                    "state": PreparationState.PREPARED,
-                    "prepared_by": preparer,
-                    "prepared_at": timezone.now() - timedelta(days=1),
-                },
-            )
-            self.stdout.write(
-                f"  Returns: {'1 waiting for review' if created else 'already present'}"
             )
 
     # -- Practice ------------------------------------------------------------
@@ -468,8 +220,6 @@ class Command(BaseCommand):
                     "included_users": 25,
                     "features": [
                         "Compliance calendar for up to 10 entities",
-                        "Document vault with virus scanning",
-                        "Notices and information requests",
                         "WhatsApp and email reminders",
                     ],
                     "is_active": True,
@@ -522,19 +272,9 @@ class Command(BaseCommand):
         exactly what the product would have produced, ladder and all.
         """
         from stacos.notifications.models import Notification
-        from stacos.notifications.tasks import (
-            sweep_billing,
-            sweep_notice_deadlines,
-            sweep_obligation_reminders,
-            sweep_request_reminders,
-        )
+        from stacos.notifications.tasks import sweep_billing, sweep_obligation_reminders
 
-        for sweep in (
-            sweep_obligation_reminders,
-            sweep_request_reminders,
-            sweep_notice_deadlines,
-            sweep_billing,
-        ):
+        for sweep in (sweep_obligation_reminders, sweep_billing):
             sweep(tenant_id=str(org.pk), as_of=as_of.isoformat())
 
         with tenant_context(tenant_ids=org.pk, reason="seed_work:notifications"):

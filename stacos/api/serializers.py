@@ -20,17 +20,11 @@ from rest_framework import serializers
 from stacos.engine.lifecycle import derive_display_status
 from stacos.notifications.models import Notification
 from stacos.obligations.models import ObligationInstance
-from stacos.requests.models import InformationRequest, RequestItem
-from stacos.vault.models import Document
 
 __all__ = [
-    "DocumentSerializer",
     "NotificationSerializer",
     "ObligationDetailSerializer",
     "ObligationSerializer",
-    "RequestDetailSerializer",
-    "RequestItemSerializer",
-    "RequestSerializer",
 ]
 
 
@@ -81,41 +75,7 @@ class ObligationSerializer(serializers.ModelSerializer[ObligationInstance]):
         return (obligation.due_date - self.context["as_of"]).days
 
 
-class DocumentSerializer(serializers.ModelSerializer[Document]):
-    """Evidence, as the client needs to see it.
-
-    ``download_url`` is a route on this API, not a storage URL. A signed storage
-    link would outlive the permission that produced it and leave the platform
-    unable to say whether the bytes were ever fetched.
-    """
-
-    download_url = serializers.SerializerMethodField()
-    downloadable = serializers.BooleanField(source="is_downloadable", read_only=True)
-
-    class Meta:
-        model = Document
-        fields = [
-            "id",
-            "title",
-            "kind",
-            "original_filename",
-            "content_type",
-            "size_bytes",
-            "scan_state",
-            "downloadable",
-            "download_url",
-            "created_at",
-        ]
-        read_only_fields = fields
-
-    def get_download_url(self, document: Document) -> str | None:
-        if not document.is_downloadable:
-            return None
-        return f"/app/documents/{document.pk}/download/"
-
-
 class ObligationDetailSerializer(ObligationSerializer):
-    documents = DocumentSerializer(many=True, read_only=True)
     allowed_transitions = serializers.SerializerMethodField()
 
     class Meta(ObligationSerializer.Meta):
@@ -123,7 +83,6 @@ class ObligationDetailSerializer(ObligationSerializer):
             *ObligationSerializer.Meta.fields,
             "filing_reference",
             "filed_on",
-            "documents",
             "allowed_transitions",
         ]
         read_only_fields = fields
@@ -151,56 +110,6 @@ class ObligationDetailSerializer(ObligationSerializer):
         ]
 
 
-class RequestItemSerializer(serializers.ModelSerializer[RequestItem]):
-    answered = serializers.BooleanField(source="is_answered", read_only=True)
-
-    class Meta:
-        model = RequestItem
-        fields = [
-            "id",
-            "label",
-            "help_text",
-            "kind",
-            "is_mandatory",
-            "answered",
-            "response_value",
-            "document_count",
-        ]
-        read_only_fields = fields
-
-
-class RequestSerializer(serializers.ModelSerializer[InformationRequest]):
-    entity_name = serializers.CharField(source="entity.name", read_only=True)
-    outstanding = serializers.SerializerMethodField()
-
-    class Meta:
-        model = InformationRequest
-        fields = [
-            "id",
-            "title",
-            "entity",
-            "entity_name",
-            "state",
-            "due_on",
-            "outstanding",
-            "created_at",
-        ]
-        read_only_fields = fields
-
-    def get_outstanding(self, request: InformationRequest) -> int:
-        # `items.all()` rather than a `.count()` query: the view prefetches, and a
-        # count per row is the N+1 that makes a list feel slow on a phone.
-        return sum(1 for item in request.items.all() if not item.is_answered)
-
-
-class RequestDetailSerializer(RequestSerializer):
-    items = RequestItemSerializer(many=True, read_only=True)
-
-    class Meta(RequestSerializer.Meta):
-        fields = [*RequestSerializer.Meta.fields, "message", "items"]
-        read_only_fields = fields
-
-
 class NotificationSerializer(serializers.ModelSerializer[Notification]):
     read = serializers.BooleanField(source="is_read", read_only=True)
 
@@ -221,32 +130,7 @@ class NotificationSerializer(serializers.ModelSerializer[Notification]):
         read_only_fields = fields
 
 
-class EvidenceUploadSerializer(serializers.Serializer[Any]):
-    """A photograph of a challan, taken on the spot.
-
-    ``file`` rather than a base64 blob: a 4 MB photograph becomes 5.4 MB of JSON
-    that has to be held in memory whole, and multipart streams to disk.
-    """
-
-    file = serializers.FileField()
-    title = serializers.CharField(max_length=250, required=False, allow_blank=True)
-    kind = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    note = serializers.CharField(required=False, allow_blank=True)
-
-
 class TransitionSerializer(serializers.Serializer[Any]):
     to_state = serializers.CharField(max_length=28)
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True)
     note = serializers.CharField(required=False, allow_blank=True)
-
-
-class ItemResponseSerializer(serializers.Serializer[Any]):
-    value = serializers.CharField(required=False, allow_blank=True)
-    file = serializers.FileField(required=False)
-
-    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        if not attrs.get("value") and not attrs.get("file"):
-            raise serializers.ValidationError(
-                "Send a value, a file, or both — an empty response is not an answer."
-            )
-        return attrs

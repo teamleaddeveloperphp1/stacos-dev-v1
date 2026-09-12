@@ -1,15 +1,11 @@
 """
 What the mobile client can do.
 
-The app is not a small copy of the web application. It is for the four things
-people genuinely do away from a desk, and building only those is what keeps it
-worth maintaining:
+The app is not a small copy of the web application. It is for the things people
+genuinely do away from a desk, and building only those is what keeps it worth
+maintaining:
 
 * **See what is due.** The calendar, filtered to what is urgent.
-* **Photograph evidence.** A challan stamped at a bank counter, captured before
-  it is lost. This is the single feature that justifies the app existing.
-* **Answer a request.** A client on a phone responding to "send us the August
-  bank statement".
 * **Move something on.** Marking a filing done, with its acknowledgement number.
 
 Every mutation calls the same service function the web view calls. There is no
@@ -28,26 +24,19 @@ from datetime import date, timedelta
 from typing import Any
 from uuid import UUID
 
-import structlog
 from django.http import Http404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
-from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from stacos.api.permissions import is_sensitive, requires
 from stacos.api.scoping import ScopedAPIView
 from stacos.api.serializers import (
-    DocumentSerializer,
-    EvidenceUploadSerializer,
-    ItemResponseSerializer,
     NotificationSerializer,
     ObligationDetailSerializer,
     ObligationSerializer,
-    RequestDetailSerializer,
-    RequestSerializer,
     TransitionSerializer,
 )
 from stacos.core.typing import current_user
@@ -56,12 +45,6 @@ from stacos.notifications.models import Notification
 from stacos.obligations.models import ObligationInstance
 from stacos.obligations.queries import live
 from stacos.obligations.transitions import TransitionError, apply_transition
-from stacos.requests.models import InformationRequest, RequestItem
-from stacos.requests.services import RequestError, record_response
-from stacos.vault.models import DocumentKind, LinkTarget
-from stacos.vault.services import attach, documents_for, store
-
-logger = structlog.get_logger(__name__)
 
 #: A phone screen shows a handful of rows. Fifty is a generous page and a bound
 #: on what a client on a train has to download over a patchy connection.
@@ -183,9 +166,6 @@ class ObligationDetailView(ScopedAPIView):
     @extend_schema(responses={200: ObligationDetailSerializer})
     def get(self, request: Request, pk: UUID) -> Response:
         obligation = _obligation(pk)
-        obligation.documents = documents_for(  # type: ignore[attr-defined]
-            target_type=LinkTarget.OBLIGATION, target_id=obligation.pk
-        )
         return Response(
             ObligationDetailSerializer(
                 obligation,
@@ -270,167 +250,12 @@ class ObligationTransitionView(ScopedAPIView):
             )
 
         obligation = result.obligation
-        obligation.documents = documents_for(  # type: ignore[attr-defined]
-            target_type=LinkTarget.OBLIGATION, target_id=obligation.pk
-        )
         return Response(
             ObligationDetailSerializer(
                 obligation,
                 context={"as_of": _as_of(request), "permissions": _permissions(request)},
             ).data
         )
-
-
-class ObligationEvidenceView(ScopedAPIView):
-    """Photograph a challan and attach it, in one request.
-
-    The reason the app exists. Somebody standing at a bank counter with a stamped
-    receipt has about thirty seconds of intent; anything that asks them to upload
-    it later gets a receipt that is never uploaded.
-
-    The response deliberately reports `scan_state`, because the file is *not*
-    downloadable yet — the scanner has to pass it first — and a client that
-    assumed otherwise would show a broken link.
-    """
-
-    permission_classes = [requires("vault.document.upload")]
-    parser_classes = [MultiPartParser, FormParser]
-
-    @extend_schema(
-        request=EvidenceUploadSerializer,
-        responses={201: DocumentSerializer},
-    )
-    def post(self, request: Request, pk: UUID) -> Response:
-        serializer = EvidenceUploadSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        obligation = _obligation(pk)
-
-        document, created = store(
-            tenant=obligation.tenant,
-            entity=obligation.entity,
-            upload=serializer.validated_data["file"],
-            title=serializer.validated_data.get("title", ""),
-            kind=serializer.validated_data.get("kind") or DocumentKind.EVIDENCE,
-            period_key=obligation.period_key,
-            note=serializer.validated_data.get("note", ""),
-            actor=current_user(request),
-        )
-        attach(
-            document,
-            target_type=LinkTarget.OBLIGATION,
-            target_id=obligation.pk,
-            actor=current_user(request),
-        )
-
-        logger.info(
-            "api.evidence_uploaded",
-            obligation_id=str(obligation.pk),
-            document_id=str(document.pk),
-            deduplicated=not created,
-        )
-        return Response(
-            DocumentSerializer(document).data,
-            # 201 even when the bytes were already there: from the client's point
-            # of view the attachment it asked for now exists, and reporting 200
-            # would invite it to retry.
-            status=status.HTTP_201_CREATED,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Information requests
-# ---------------------------------------------------------------------------
-
-
-class RequestListView(ScopedAPIView):
-    permission_classes = [requires("rfi.request.view")]
-
-    @extend_schema(responses={200: RequestSerializer(many=True)})
-    def get(self, request: Request) -> Response:
-        queryset = (
-            InformationRequest.objects.filter(archived_at__isnull=True)
-            .select_related("entity")
-            .prefetch_related("items")
-            .order_by("due_on", "-created_at")
-        )
-        if request.query_params.get("mine"):
-            queryset = queryset.filter(assigned_to=current_user(request))
-
-        rows, page = _paginate(queryset, request)
-        return Response({"results": RequestSerializer(rows, many=True).data, **page})
-
-
-class RequestDetailView(ScopedAPIView):
-    permission_classes = [requires("rfi.request.view")]
-
-    @extend_schema(responses={200: RequestDetailSerializer})
-    def get(self, request: Request, pk: UUID) -> Response:  # noqa: ARG002 - DRF handler signature
-        information_request = (
-            InformationRequest.objects.filter(pk=pk, archived_at__isnull=True)
-            .select_related("entity")
-            .prefetch_related("items")
-            .first()
-        )
-        if information_request is None:
-            raise Http404
-        return Response(RequestDetailSerializer(information_request).data)
-
-
-class RequestItemRespondView(ScopedAPIView):
-    """Answer one item — a value, a file, or both."""
-
-    permission_classes = [requires("rfi.request.respond")]
-    parser_classes = [MultiPartParser, FormParser]
-
-    @extend_schema(
-        request=ItemResponseSerializer,
-        responses={200: RequestDetailSerializer, 422: OpenApiResponse(description="Refused.")},
-    )
-    def post(self, request: Request, pk: UUID) -> Response:
-        serializer = ItemResponseSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        item = (
-            RequestItem.objects.filter(pk=pk).select_related("request", "request__entity").first()
-        )
-        if item is None:
-            raise Http404
-
-        upload = serializer.validated_data.get("file")
-        if upload is not None:
-            document, _created = store(
-                tenant=item.tenant,
-                entity=item.request.entity,
-                upload=upload,
-                title=item.label,
-                kind=DocumentKind.EVIDENCE,
-                actor=current_user(request),
-            )
-            attach(
-                document,
-                target_type=LinkTarget.REQUEST_ITEM,
-                target_id=item.pk,
-                evidence_key=item.label[:60],
-                actor=current_user(request),
-            )
-            item.refresh_from_db()
-
-        try:
-            record_response(
-                item,
-                value=serializer.validated_data.get("value", ""),
-                actor=current_user(request),
-            )
-        except RequestError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-
-        parent = (
-            InformationRequest.objects.filter(pk=item.request_id)
-            .select_related("entity")
-            .prefetch_related("items")
-            .first()
-        )
-        return Response(RequestDetailSerializer(parent).data)
 
 
 # ---------------------------------------------------------------------------

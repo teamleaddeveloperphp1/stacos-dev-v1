@@ -53,16 +53,12 @@ __all__ = [
     "deliver_notification",
     "send_digests",
     "sweep_billing",
-    "sweep_notice_deadlines",
     "sweep_obligation_reminders",
-    "sweep_request_reminders",
     "sweep_tenants",
 ]
 
 _TASK_PERMISSIONS = (
     "compliance.obligation.view",
-    "notices.notice.view",
-    "rfi.request.view",
     "billing.view",
 )
 
@@ -114,8 +110,6 @@ def sweep_tenants(as_of: str | None = None) -> dict[str, int]:
     for tenant_id in tenant_ids:
         for task in (
             sweep_obligation_reminders,
-            sweep_request_reminders,
-            sweep_notice_deadlines,
             sweep_billing,
         ):
             task.apply_async(kwargs={"tenant_id": str(tenant_id), "as_of": day})
@@ -224,141 +218,6 @@ def _obligation_body(obligation: Any, days_left: int) -> str:
         f"{obligation.entity.name} — {obligation.period_label or obligation.period_key}. "
         f"Due in {days_left} day(s)."
     )
-
-
-# ---------------------------------------------------------------------------
-# Information requests
-# ---------------------------------------------------------------------------
-
-
-@shared_task(
-    base=TenantTask,
-    name="stacos.notifications.sweep_request_reminders",
-    task_permissions=_TASK_PERMISSIONS,
-)
-def sweep_request_reminders(*, tenant_id: str, as_of: str | None = None) -> dict[str, int]:
-    """Chase the outstanding items on open information requests.
-
-    The escalation lives in `requests.services.due_for_reminder`, which already
-    knows the ladder for this module and, crucially, records that a reminder went
-    out. This task is the delivery half that was missing.
-    """
-    from stacos.requests.services import due_for_reminder, mark_reminded
-
-    day = date.fromisoformat(as_of) if as_of else timezone.localdate()
-    raised = 0
-
-    for request in due_for_reminder(as_of=day):
-        outstanding = [item for item in request.items.all() if not item.is_answered]
-        if not outstanding:
-            continue
-
-        audience = recipients.for_entity(
-            tenant_id=tenant_id,
-            entity=request.entity,
-            permission="rfi.request.view",
-            assignee=request.assigned_to,
-        )
-        days_left = (request.due_on - day).days if request.due_on else 0
-
-        for user in audience:
-            result = raise_notification(
-                tenant_id=tenant_id,
-                recipient=user,
-                kind=NotificationKind.REQUEST_REMINDER,
-                severity=Severity.URGENT if days_left < 0 else Severity.ATTENTION,
-                entity=request.entity,
-                title=f"{len(outstanding)} item(s) still outstanding — {request.title}",
-                body="\n".join(f"• {item.label}" for item in outstanding[:10]),
-                url=f"/app/requests/{request.pk}/",
-                subject_type=SubjectType.REQUEST,
-                subject_id=request.pk,
-                dedupe_key=f"request:{request.pk}:reminder:{day.isoformat()}",
-                context={
-                    "entity": request.entity.name if request.entity else "",
-                    "count": str(len(outstanding)),
-                    "date": f"{request.due_on:%d %b %Y}" if request.due_on else "",
-                },
-            )
-            raised += int(bool(result))
-
-        mark_reminded(request, on=day)
-
-    return {"raised": raised}
-
-
-# ---------------------------------------------------------------------------
-# Notices
-# ---------------------------------------------------------------------------
-
-
-@shared_task(
-    base=TenantTask,
-    name="stacos.notifications.sweep_notice_deadlines",
-    task_permissions=_TASK_PERMISSIONS,
-)
-def sweep_notice_deadlines(*, tenant_id: str, as_of: str | None = None) -> dict[str, int]:
-    """Notices carry the shortest deadlines in the product, so they start earlier.
-
-    Every rung is URGENT. A missed statutory response window is not recoverable
-    by working harder afterwards, and nobody has ever wished this one had been
-    quieter.
-    """
-    from stacos.notices.models import OPEN_NOTICE_STATES, Notice
-
-    day = date.fromisoformat(as_of) if as_of else timezone.localdate()
-    rows = (
-        Notice.objects.filter(
-            state__in=OPEN_NOTICE_STATES,
-            archived_at__isnull=True,
-            respond_by__isnull=False,
-            respond_by__gte=day - timedelta(days=60),
-            respond_by__lte=day + timedelta(days=max(LADDER)),
-        )
-        .select_related("entity", "assigned_to")
-        .order_by("respond_by")
-    )
-
-    raised = 0
-    for notice in rows:
-        days_left = (notice.respond_by - day).days
-        rung = _rung(days_left)
-        if rung is None:
-            continue
-
-        audience = recipients.for_entity(
-            tenant_id=tenant_id,
-            entity=notice.entity,
-            permission="notices.notice.view",
-            assignee=notice.assigned_to,
-        )
-
-        for user in audience:
-            result = raise_notification(
-                tenant_id=tenant_id,
-                recipient=user,
-                kind=NotificationKind.NOTICE_DEADLINE,
-                severity=Severity.URGENT,
-                entity=notice.entity,
-                title=(
-                    f"Response to {notice.reference_number} was due {notice.respond_by:%d %b}"
-                    if days_left < 0
-                    else f"Response to {notice.reference_number} due {notice.respond_by:%d %b}"
-                ),
-                body=notice.subject[:500],
-                url=f"/app/notices/{notice.pk}/",
-                subject_type=SubjectType.NOTICE,
-                subject_id=notice.pk,
-                dedupe_key=f"notice:{notice.pk}:{rung}",
-                context={
-                    "entity": notice.entity.name if notice.entity else "",
-                    "reference": notice.reference_number,
-                    "date": f"{notice.respond_by:%d %b %Y}",
-                },
-            )
-            raised += int(bool(result))
-
-    return {"raised": raised}
 
 
 # ---------------------------------------------------------------------------

@@ -25,38 +25,39 @@ __all__ = ["IdentityForm", "ProfileForm", "QuestionForm"]
 class IdentityForm(forms.Form):
     """Paste whatever identifiers you have.
 
-    Every field is optional. Somebody who has just incorporated has a CIN and
-    nothing else; somebody registering an existing business has all four. Making
-    any of them required would block the case the wizard exists for.
+    Every field is optional. Making any of them required would block the case
+    the wizard exists for — somebody registering an existing business who only
+    has one identifier to hand.
+
+    CIN and LLPIN have no field here: neither is required for anything this
+    product currently tracks, and a pasted letterhead or signature block still
+    gets one recognised — see ``sniff()`` in ``stacos.jurisdictions.decode`` —
+    so nothing is lost, just no dedicated box for typing one in by hand.
     """
 
     pasted = forms.CharField(
         required=False,
         label=_("Paste anything you have"),
         help_text=_("A letterhead footer, a signature block, or the identifiers one per line."),
-        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "CIN, PAN, GSTIN, LLPIN…"}),
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "PAN, TAN, GSTIN…"}),
     )
-    cin = forms.CharField(required=False, label=_("CIN"), max_length=21)
     pan = forms.CharField(required=False, label=_("PAN"), max_length=10)
+    tan = forms.CharField(required=False, label=_("TAN"), max_length=10)
     gstin = forms.CharField(required=False, label=_("GSTIN"), max_length=15)
-    llpin = forms.CharField(required=False, label=_("LLPIN"), max_length=8)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.helper = FormHelper()
         self.helper.form_tag = False
-        self.helper.layout = Layout(
-            "pasted", Row(Column("cin"), Column("pan")), Row(Column("gstin"), Column("llpin"))
-        )
+        self.helper.layout = Layout("pasted", Row(Column("pan"), Column("tan"), Column("gstin")))
 
     def identifiers(self) -> list[tuple[str, str]]:
         """``(registration_type, value)`` pairs, from the typed fields."""
         data = self.cleaned_data
         pairs = [
-            ("CIN", data.get("cin", "")),
             ("PAN", data.get("pan", "")),
+            ("TAN", data.get("tan", "")),
             ("GST", data.get("gstin", "")),
-            ("LLPIN", data.get("llpin", "")),
         ]
         return [(kind, value.strip()) for kind, value in pairs if value and value.strip()]
 

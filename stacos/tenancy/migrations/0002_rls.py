@@ -1,19 +1,22 @@
-"""Row-Level Security on return working papers."""
+"""Row-Level Security on colleague invitations.
+
+Separate from the `CreateModel` migration because `makemigrations` cannot know
+about it: the policy is raw SQL, and a tenant-scoped table without one is
+protected only by the ORM manager. `manage.py ensure_rls` is the gate that
+notices, and it runs in CI."""
 
 from django.db import migrations
 
 from stacos.core.rls import disable_rls_statements, enable_rls_statements
 
 RLS_TABLES = (
-    "returns_returnpreparation",
-    "returns_reconciliation",
-    "returns_reconciliationdifference",
+    "tenancy_tenantinvitation",
 )
 
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("returns", "0001_initial"),
+        ("tenancy", "0001_initial"),
         ("core", "0002_rls_and_audit_guard"),
     ]
 

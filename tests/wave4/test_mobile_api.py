@@ -3,9 +3,8 @@ The mobile API.
 
 Two things are being tested and they are not the same thing.
 
-The first is that the endpoints work — the calendar returns what is due, a
-photograph of a challan lands on the right obligation, an answer to a request is
-recorded.
+The first is that the endpoints work — the calendar returns what is due, and an
+obligation moves through its lifecycle correctly.
 
 The second, and the reason this file is worth its length, is that the API is
 **not a second implementation**. Every rule the web application enforces has to
@@ -20,7 +19,6 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -31,8 +29,6 @@ from stacos.core.scope import tenant_context
 from stacos.engine.lifecycle import State
 from stacos.obligations.models import ObligationInstance
 from stacos.tenancy.models import Entity, Tenant
-from stacos.vault.models import Document, LinkTarget, ScanState
-from stacos.vault.services import documents_for
 
 pytestmark = pytest.mark.django_db
 
@@ -60,10 +56,6 @@ def obligation(org: Tenant, entity_a: Entity) -> ObligationInstance:
             due_date=timezone.localdate() + timedelta(days=5),
             state=State.NOT_STARTED,
         )
-
-
-def _photo(name: str = "challan.jpg", content: bytes = b"stamped receipt") -> SimpleUploadedFile:
-    return SimpleUploadedFile(name, content, content_type="image/jpeg")
 
 
 # ===========================================================================
@@ -256,148 +248,6 @@ def test_a_sensitive_move_is_refused_rather_than_waved_through(
 
 
 # ===========================================================================
-# Evidence — the reason the app exists
-# ===========================================================================
-
-
-def test_a_photograph_is_stored_and_attached(
-    api: APIClient, org: Tenant, obligation: ObligationInstance
-) -> None:
-    response = api.post(
-        reverse("api:obligation_evidence", args=[obligation.pk]),
-        {"file": _photo(), "title": "Challan"},
-        format="multipart",
-    )
-
-    assert response.status_code == 201
-    assert response.json()["title"] == "Challan"
-
-    with tenant_context(tenant_ids={org.pk}, reason="test"):
-        attached = documents_for(target_type=LinkTarget.OBLIGATION, target_id=obligation.pk)
-    assert [document.title for document in attached] == ["Challan"]
-
-
-def test_uploaded_evidence_is_not_immediately_downloadable(
-    api: APIClient, obligation: ObligationInstance
-) -> None:
-    """The scanner stands between an upload and a download here as everywhere.
-
-    An API that handed back a working link would be a way to route round the one
-    control that stops this product distributing malware between a practice and
-    its clients.
-    """
-    body = api.post(
-        reverse("api:obligation_evidence", args=[obligation.pk]),
-        {"file": _photo()},
-        format="multipart",
-    ).json()
-
-    assert body["scan_state"] == ScanState.PENDING
-    assert body["downloadable"] is False
-    assert body["download_url"] is None
-
-
-def test_the_same_photograph_twice_is_stored_once(
-    api: APIClient, org: Tenant, obligation: ObligationInstance
-) -> None:
-    """A flaky connection means the app retries. That must not double the vault."""
-    for _ in range(2):
-        response = api.post(
-            reverse("api:obligation_evidence", args=[obligation.pk]),
-            {"file": _photo()},
-            format="multipart",
-        )
-        # 201 both times: from the client's point of view the attachment exists.
-        assert response.status_code == 201
-
-    with tenant_context(tenant_ids={org.pk}, reason="test"):
-        assert Document.objects.count() == 1
-
-
-# ===========================================================================
-# Information requests
-# ===========================================================================
-
-
-@pytest.fixture
-def information_request(org: Tenant, entity_a: Entity, org_owner: User):
-    from stacos.requests.models import InformationRequest, RequestItem
-
-    with tenant_context(tenant_ids={org.pk}, reason="test"):
-        parent = InformationRequest.objects.create(
-            tenant=org,
-            entity=entity_a,
-            title="August closing",
-            assigned_to=org_owner,
-            due_on=timezone.localdate() + timedelta(days=3),
-        )
-        RequestItem.objects.create(
-            tenant=org,
-            entity=entity_a,
-            request=parent,
-            label="Bank statement",
-            kind=RequestItem.Kind.DOCUMENT,
-            ordinal=1,
-        )
-        RequestItem.objects.create(
-            tenant=org,
-            entity=entity_a,
-            request=parent,
-            label="Closing stock value",
-            kind=RequestItem.Kind.DATA,
-            ordinal=2,
-        )
-    return parent
-
-
-def test_the_request_list_counts_what_is_outstanding(api: APIClient, information_request) -> None:
-    body = api.get(reverse("api:requests")).json()
-
-    assert body["results"][0]["title"] == "August closing"
-    assert body["results"][0]["outstanding"] == 2
-
-
-def test_answering_with_a_value(api: APIClient, org: Tenant, information_request) -> None:
-    with tenant_context(tenant_ids={org.pk}, reason="test"):
-        item = next(i for i in information_request.items.all() if i.kind == "DATA")
-
-    response = api.post(
-        reverse("api:request_item_respond", args=[item.pk]),
-        {"value": "₹41,20,000"},
-        format="multipart",
-    )
-
-    assert response.status_code == 200
-    answered = {i["label"]: i["answered"] for i in response.json()["items"]}
-    assert answered["Closing stock value"] is True
-    assert answered["Bank statement"] is False
-
-
-def test_answering_with_a_file(api: APIClient, org: Tenant, information_request) -> None:
-    with tenant_context(tenant_ids={org.pk}, reason="test"):
-        item = next(i for i in information_request.items.all() if i.kind == "DOCUMENT")
-
-    response = api.post(
-        reverse("api:request_item_respond", args=[item.pk]),
-        {"file": _photo("statement.pdf")},
-        format="multipart",
-    )
-
-    assert response.status_code == 200
-    answered = {i["label"]: i["answered"] for i in response.json()["items"]}
-    assert answered["Bank statement"] is True
-
-
-def test_an_empty_answer_is_refused(api: APIClient, org: Tenant, information_request) -> None:
-    with tenant_context(tenant_ids={org.pk}, reason="test"):
-        item = information_request.items.first()
-
-    response = api.post(reverse("api:request_item_respond", args=[item.pk]), {}, format="multipart")
-
-    assert response.status_code == 400
-
-
-# ===========================================================================
 # Notifications
 # ===========================================================================
 
@@ -468,14 +318,6 @@ def test_another_tenants_obligation_is_a_404(
             reverse("api:obligation_transition", args=[theirs.pk]),
             {"to_state": State.IN_PREPARATION},
             format="json",
-        ).status_code
-        == 404
-    )
-    assert (
-        api.post(
-            reverse("api:obligation_evidence", args=[theirs.pk]),
-            {"file": _photo()},
-            format="multipart",
         ).status_code
         == 404
     )

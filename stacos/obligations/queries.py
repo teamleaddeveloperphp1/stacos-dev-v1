@@ -79,14 +79,23 @@ class DateDiffDays(Func):
 
 
 def live(queryset: QuerySet[ObligationInstance] | None = None) -> QuerySet[ObligationInstance]:
-    """The working calendar: not archived, not superseded.
+    """The working calendar: not archived, not superseded, not on an archived entity.
 
     Superseded rows are deliberately excluded here rather than deleted. They stay
     reachable from the audit trail and from the entity's history, and they stop
     cluttering the list somebody works from every morning.
+
+    ``entity__archived_at`` matters just as much: archiving an entity stops new
+    obligations being generated for it (see ``materialise_entity``), but the rows
+    already on its calendar are untouched by that — without this filter they would
+    keep showing up in every list, count and month grid forever.
     """
     base = queryset if queryset is not None else ObligationInstance.objects.all()
-    return base.filter(archived_at__isnull=True, superseded_at__isnull=True)
+    return base.filter(
+        archived_at__isnull=True,
+        superseded_at__isnull=True,
+        entity__archived_at__isnull=True,
+    )
 
 
 def annotate_status(

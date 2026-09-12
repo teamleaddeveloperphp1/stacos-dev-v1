@@ -25,8 +25,9 @@ from django.db import migrations
 
 from stacos.core.rls import disable_rls_statements, enable_rls_statements
 
-#: Every table under tenant isolation. Kept explicit rather than introspected,
-#: because a migration must describe a fixed historical state.
+#: Tenancy and engagement tables. Every other app's own tenant-scoped tables get
+#: RLS from that app's own migration (see e.g. ``billing.0002_rls``), which keeps
+#: each app owning the list for the tables it created.
 RLS_TABLES = (
     "tenancy_entity",
     "tenancy_entityprofile",

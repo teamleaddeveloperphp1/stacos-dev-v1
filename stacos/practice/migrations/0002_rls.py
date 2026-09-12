@@ -1,8 +1,7 @@
 """Row-Level Security on the practice's own records.
 
 Scoped to the practice tenant, which is what keeps a client from ever seeing the
-firm's estimate, its assignment or its margin on that client's own work.
-"""
+firm's estimate, its assignment or its margin on that client's own work."""
 
 from django.db import migrations
 

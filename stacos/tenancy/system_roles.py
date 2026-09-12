@@ -35,20 +35,6 @@ class RoleSpec:
 
 # --- Shared bundles, so the same capability is spelled the same way twice -----
 
-#: Reading the things a compliance user reads. Bundled with the view basics
-#: because a calendar you cannot attach a document to, or whose notices you
-#: cannot see, is not a compliance product.
-_DOCUMENT_AND_TRACKER_BASICS = frozenset(
-    {
-        "vault.document.view",
-        "vault.document.download",
-        "rfi.request.view",
-        "notices.notice.view",
-        "returns.preparation.view",
-        "secretarial.view",
-    }
-)
-
 _VIEW_BASICS = frozenset(
     {
         "core.search",
@@ -70,7 +56,6 @@ _VIEW_BASICS = frozenset(
         "notifications.view",
         "notifications.preferences.manage",
     }
-    | _DOCUMENT_AND_TRACKER_BASICS
 )
 
 _ENTITY_STEWARD = _VIEW_BASICS | {
@@ -90,19 +75,6 @@ _COMPLIANCE_PREPARER = frozenset(
         "compliance.obligation.assign",
         "compliance.event.record",
         "compliance.calendar.rebuild",
-        "vault.document.upload",
-        "rfi.request.create",
-        "rfi.request.send",
-        "rfi.request.review",
-        "rfi.request.close",
-        "notices.notice.create",
-        "notices.notice.edit",
-        "notices.notice.assign",
-        "returns.preparation.prepare",
-        "returns.reconciliation.run",
-        "secretarial.meeting.manage",
-        "secretarial.resolution.manage",
-        "secretarial.register.manage",
     }
 )
 
@@ -116,16 +88,6 @@ _COMPLIANCE_APPROVER = _COMPLIANCE_PREPARER | {
     "compliance.obligation.defer",
     "compliance.obligation.dismiss",
     "compliance.obligation.dispute",
-    "notices.notice.respond",
-    "notices.notice.close",
-    "vault.document.delete",
-    # The checker half of maker-checker. Deliberately NOT in the preparer bundle:
-    # a preparer holding both would satisfy the permission check and still be
-    # refused by the service and the database, which is the right answer but a
-    # confusing way to discover the rule.
-    "returns.preparation.review",
-    "returns.preparation.file",
-    "secretarial.minutes.sign",
 }
 
 
@@ -139,7 +101,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         tenant_type=Tenant.Type.ORGANISATION,
         rank=10,
         description=(
-            "Full authority over the organisation: approves returns and "
+            "Full authority over the organisation: approves filings and "
             "engagements, manages users and billing."
         ),
         permissions=_ENTITY_STEWARD
@@ -169,14 +131,6 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             # to whoever is answerable for the filing, which is the owner.
             "compliance.obligation.approve",
             "compliance.obligation.reopen",
-            # The client answers requests. A practice user never holds this:
-            # nobody should be able to satisfy their own outstanding item.
-            "rfi.request.respond",
-            "vault.document.export",
-            "returns.preparation.approve",
-            # Who owns what is the owner's business, and nobody else's by default.
-            "secretarial.captable.view",
-            "secretarial.captable.manage",
             "billing.view",
             "billing.subscription.manage",
         },
@@ -187,9 +141,8 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         tenant_type=Tenant.Type.ORGANISATION,
         rank=20,
         description=(
-            "Works the checklist day to day: uploads evidence, answers "
-            "information requests, chases internal departments. Cannot approve "
-            "returns or change who has access."
+            "Works the checklist day to day: prepares filings, chases internal "
+            "departments. Cannot approve a filing or change who has access."
         ),
         permissions=_ENTITY_STEWARD
         | {
@@ -202,7 +155,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         # Prepares and chases, but does not approve — that is the whole point of
         # the role, and the reason `_COMPLIANCE_APPROVER` is not used here.
         | _COMPLIANCE_PREPARER
-        | {"compliance.obligation.close", "rfi.request.respond"},
+        | {"compliance.obligation.close"},
     ),
     RoleSpec(
         code="org-department-user",
@@ -218,7 +171,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         permissions=_VIEW_BASICS
         | {"tenancy.premises.manage"}
         | _COMPLIANCE_PREPARER
-        | {"compliance.obligation.close", "rfi.request.respond"},
+        | {"compliance.obligation.close"},
         default_categories=("SAFETY_FIRE", "LABOUR", "ENVIRONMENT", "LICENSING"),
     ),
     RoleSpec(
@@ -275,7 +228,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         rank=20,
         description=(
             "Owns a set of clients, assigns work to staff, reviews preparer "
-            "work and pushes returns for client approval."
+            "work and pushes filings for client approval."
         ),
         permissions=_ENTITY_STEWARD
         | {
@@ -296,9 +249,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         name="Staff / Article",
         tenant_type=Tenant.Type.PRACTICE,
         rank=40,
-        description=(
-            "Executes assigned work, prepares returns, logs time and raises information requests."
-        ),
+        description=("Executes assigned work, prepares filings and logs time against it."),
         permissions=_VIEW_BASICS
         | {"tenancy.profile.edit", "tenancy.registration.view"}
         | _COMPLIANCE_PREPARER

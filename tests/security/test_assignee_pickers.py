@@ -21,9 +21,7 @@ from typing import Any
 import pytest
 
 from stacos.core.scope import tenant_context
-from stacos.notices.forms import NoticeForm
 from stacos.practice.forms import WorkItemForm
-from stacos.requests.forms import RequestForm
 
 pytestmark = [pytest.mark.django_db, pytest.mark.isolation]
 
@@ -35,12 +33,10 @@ def _rendered(form: Any, field: str) -> str:
 @pytest.mark.parametrize(
     ("factory", "field"),
     [
-        (RequestForm, "assigned_to"),
-        (NoticeForm, "assigned_to"),
         (WorkItemForm, "assigned_to"),
         (WorkItemForm, "reviewer"),
     ],
-    ids=["request-assigned", "notice-assigned", "work-assigned", "work-reviewer"],
+    ids=["work-assigned", "work-reviewer"],
 )
 def test_the_picker_names_nobody_from_another_tenant(
     factory: Any, field: str, org: Any, org_owner: Any, other_org: Any, rival_owner: Any
@@ -58,12 +54,10 @@ def test_the_picker_names_nobody_from_another_tenant(
 @pytest.mark.parametrize(
     ("factory", "field"),
     [
-        (RequestForm, "assigned_to"),
-        (NoticeForm, "assigned_to"),
         (WorkItemForm, "assigned_to"),
         (WorkItemForm, "reviewer"),
     ],
-    ids=["request-assigned", "notice-assigned", "work-assigned", "work-reviewer"],
+    ids=["work-assigned", "work-reviewer"],
 )
 def test_a_forged_user_id_is_refused(
     factory: Any, field: str, org: Any, other_org: Any, rival_owner: Any
@@ -89,8 +83,6 @@ def test_the_pickers_still_offer_the_callers_own_people(org: Any, org_owner: Any
     """
     with tenant_context(tenant_ids=org.id, reason="test"):
         for factory, field in (
-            (RequestForm, "assigned_to"),
-            (NoticeForm, "assigned_to"),
             (WorkItemForm, "assigned_to"),
             (WorkItemForm, "reviewer"),
         ):

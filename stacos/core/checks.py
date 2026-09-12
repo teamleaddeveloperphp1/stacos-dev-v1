@@ -85,13 +85,6 @@ GLOBAL_MODEL_ALLOWLIST: dict[str, str] = {
     "engagements.EngagementInvitation": (
         "Cross-tenant by nature; the receiving tenant often does not exist yet."
     ),
-    # The holder is by definition not a member of the tenant — a bookkeeper at a
-    # client who will never have an account — so they have no scope for a tenant
-    # column to be filtered by. Reach is bounded by a single hashed token that
-    # names one request, an expiry, and `requests.services.responder_scope`.
-    "rfi.ResponderToken": (
-        "Held by somebody outside the tenant; bounded by a hashed single-request token."
-    ),
 }
 
 

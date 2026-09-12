@@ -91,31 +91,6 @@
       </section>
     {% endif %}
 
-    {% comment %}
-      Information requests raised against this obligation, fetched on load. Kept
-      out of the detail view's own query set because most obligations have none
-      and the join is not worth paying for on every open.
-
-      `hx-target="this"` is load-bearing. `hx-target` is inherited, and the app
-      shell sets it to `#main` for navigation — so without one of its own this
-      card resolves to `#main` and, with `outerHTML`, replaces the entire main
-      region with itself the moment it loads. `#main` carries `hx-history-elt`
-      and is what every later navigation targets, so destroying it kills the
-      sidebar, the calendar link and the keyboard shortcuts until a manual
-      reload. `this` rather than `#obligation-requests`: the placeholder swaps
-      itself out, so it must not also claim the id its replacement carries.
-    {% endcomment %}
-    {% if "rfi.request.view" in access_scope.permissions %}
-      <div hx-get="{% url 'rfi:for_obligation' obligation.pk %}"
-           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
-           class="card" aria-busy="true">
-        <div class="card-body text-muted small">
-          <span class="spinner-inline"></span>
-          <span class="ms-2">{% translate "Loading…" %}</span>
-        </div>
-      </div>
-    {% endif %}
-
     <section class="card">
       <h2 class="card__title">{% translate "History" %}</h2>
       {% include "obligations/_fragments/timeline.html" %}

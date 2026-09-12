@@ -36,10 +36,8 @@ def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
     ("route", "marker"),
     [
         ("compliance:entity_summary", b"Rebuild calendar"),
-        ("secretarial:entity_summary", b"Secretarial"),
-        ("notices:for_entity", b"notices"),
     ],
-    ids=["compliance summary", "secretarial summary", "entity notices"],
+    ids=["compliance summary"],
 )
 def test_the_entity_panels_answer(
     route: str, marker: bytes, signed_in: Client, entity_a: Entity
@@ -50,12 +48,13 @@ def test_the_entity_panels_answer(
     assert marker.lower() in response.content.lower()
 
 
-def test_the_entity_page_asks_for_all_three_panels(signed_in: Client, entity_a: Entity) -> None:
-    """Without these, the rebuild button has no home and cannot be pressed."""
+def test_the_entity_page_asks_for_the_compliance_panel(signed_in: Client, entity_a: Entity) -> None:
+    """Without this, the rebuild button has no home and cannot be pressed."""
     body = signed_in.get(reverse("app:entity_detail", args=[entity_a.pk])).content.decode()
 
-    for route in ("compliance:entity_summary", "secretarial:entity_summary", "notices:for_entity"):
-        assert reverse(route, args=[entity_a.pk]) in body, f"{route} is not loaded by the page"
+    assert reverse("compliance:entity_summary", args=[entity_a.pk]) in body, (
+        "compliance:entity_summary is not loaded by the page"
+    )
 
 
 def test_the_rebuild_calendar_control_is_reachable(signed_in: Client, entity_a: Entity) -> None:
@@ -118,17 +117,6 @@ def test_the_rebuild_control_swaps_rather_than_discarding(
 def test_the_plans_page_renders_both_ways(signed_in: Client) -> None:
     page = signed_in.get(reverse("billing:plans"))
     fragment = signed_in.get(reverse("billing:plans"), headers=HTMX)
-
-    assert page.status_code == 200
-    assert fragment.status_code == 200
-    assert b"<!doctype html>" in page.content.lower()
-    assert b"<!doctype html>" not in fragment.content.lower()
-
-
-def test_the_resolutions_page_renders_both_ways(signed_in: Client) -> None:
-    """It was fragment-only, so a deep link or a refresh returned a bare fragment."""
-    page = signed_in.get(reverse("secretarial:resolutions"))
-    fragment = signed_in.get(reverse("secretarial:resolutions"), headers=HTMX)
 
     assert page.status_code == 200
     assert fragment.status_code == 200

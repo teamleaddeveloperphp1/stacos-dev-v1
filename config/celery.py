@@ -2,8 +2,8 @@
 Celery topology.
 
 Queues are named and separated so that nothing starves the user-facing path.
-Browser automation (`portal`) and OCR are slow and flaky by nature; reminders are
-latency-sensitive; billing must never be dropped. Each gets its own worker.
+Reminders are latency-sensitive; billing must never be dropped. Each gets its
+own worker.
 
 Two rules that apply to every task in this project:
 
@@ -28,9 +28,6 @@ QUEUES = (
     "default",
     "reminders",
     "materialise",
-    "portal",
-    "ocr",
-    "returns",
     "billing",
     "exports",
 )
@@ -50,15 +47,11 @@ app.conf.update(
     task_routes={
         "stacos.notifications.*": {"queue": "reminders"},
         "stacos.obligations.materialise*": {"queue": "materialise"},
-        "stacos.portals.*": {"queue": "portal"},
-        "stacos.vault.ocr*": {"queue": "ocr"},
-        "stacos.returns.*": {"queue": "returns"},
         "stacos.billing.*": {"queue": "billing"},
         "stacos.core.export*": {"queue": "exports"},
     },
     task_annotations={
         "*": {"time_limit": 900, "soft_time_limit": 840},
-        "stacos.portals.*": {"time_limit": 1800, "soft_time_limit": 1740},
     },
 )
 
@@ -97,15 +90,6 @@ app.conf.beat_schedule = {
     "notification-digests": {
         "task": "stacos.notifications.send_digests",
         "schedule": crontab(minute=0),
-    },
-    # Documents whose scan or text extraction never ran. The broker guarantees
-    # at-least-once *delivery*, which does nothing about a message that was never
-    # published — a crash between commit and publish leaves a file permanently
-    # undownloadable, and it looks exactly like a slow queue. Every ten minutes,
-    # because the symptom is a user unable to open a file they just uploaded.
-    "sweep-unscanned-documents": {
-        "task": "stacos.vault.sweep_pending",
-        "schedule": crontab(minute="*/10"),
     },
 }
 

@@ -7,8 +7,7 @@ schema to read across a tenant boundary.
 
 The delivery table is covered for the same reason and is easier to overlook: it
 holds the recipient's email address and phone number alongside the notification
-it belongs to.
-"""
+it belongs to."""
 
 from django.db import migrations
 

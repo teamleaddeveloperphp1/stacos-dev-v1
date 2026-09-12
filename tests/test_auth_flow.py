@@ -93,7 +93,7 @@ def test_htmx_requests_get_a_redirect_header_not_a_302(client: Client) -> None:
 def _registration_payload(**overrides: str) -> dict[str, str]:
     """A complete, valid sign-up.
 
-    Written once because sign-up now has eight fields and a confirmation, and a
+    Written once because sign-up now has seven fields and a confirmation, and a
     test that omits one gets a 200 with form errors rather than the redirect it
     asserts — a failure that reads as "verification broke".
     """
@@ -102,7 +102,6 @@ def _registration_payload(**overrides: str) -> dict[str, str]:
         "last_name": "Vaibhav",
         "email": "priya@example.com",
         "mobile": "9876500000",
-        "organisation_name": "",
         "phone": "9876543210",
         "password": "a-long-enough-password",
         "confirm_password": "a-long-enough-password",

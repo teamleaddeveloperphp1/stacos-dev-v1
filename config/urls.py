@@ -27,7 +27,6 @@ from django.views.generic.base import RedirectView
 from stacos.core.views import healthz
 from stacos.marketing.sitemaps import SITEMAPS
 from stacos.marketing.views import robots_txt
-from stacos.requests.urls import responder_urlpatterns
 
 urlpatterns = [
     # --- Operations ---
@@ -53,20 +52,11 @@ urlpatterns = [
         include("stacos.tenancy.onboarding.urls", namespace="onboarding"),
     ),
     path("app/compliance/", include("stacos.obligations.urls", namespace="compliance")),
-    path("app/requests/", include("stacos.requests.urls", namespace="rfi")),
-    path("app/notices/", include("stacos.notices.urls", namespace="notices")),
-    path("app/documents/", include("stacos.vault.urls", namespace="vault")),
     path("app/notifications/", include("stacos.notifications.urls", namespace="notifications")),
-    path("app/returns/", include("stacos.returns.urls", namespace="returns")),
-    path("app/secretarial/", include("stacos.secretarial.urls", namespace="secretarial")),
     path("app/practice/", include("stacos.practice.urls", namespace="practice")),
     path("app/billing/", include("stacos.billing.urls", namespace="billing")),
     path("app/channel/", include("stacos.dealers.urls", namespace="dealers")),
     path("app/", include("stacos.tenancy.urls", namespace="app")),
-    # --- Answering a request from outside the tenant ---
-    # Not under `app/`: everything there assumes a session and a membership, and
-    # the holder of a responder link has neither. See `stacos.requests.responder`.
-    path("", include((responder_urlpatterns, "rfi"), namespace="respond")),
     # --- API (mobile and webhooks only) ---
     path("api/v1/", include("stacos.api.urls", namespace="api")),
     # --- Marketing, last so it never shadows an application route ---

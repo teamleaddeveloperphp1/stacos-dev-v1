@@ -372,12 +372,11 @@ def commit_draft(
     scope can be opened, and the scope has to be open before anything
     tenant-scoped is written.
 
-    ``tenant`` names an organisation that already exists — which is the ordinary
-    case now that sign-up provisions one from the Organisation Name. Running the
-    wizard then adds an entity to the workspace the user already owns; creating a
-    second organisation for their first entity is the bug that argument exists to
-    prevent. Left ``None``, one is provisioned here, which is the path for
-    somebody adding a second organisation from the tenant switcher.
+    ``tenant`` names an organisation that already exists, so the wizard adds an
+    entity to a workspace the user already owns instead of minting a second
+    organisation for their first entity — the path for somebody adding an entity
+    from the tenant switcher. Left ``None`` — the ordinary case, since sign-up no
+    longer provisions a tenant itself — one is provisioned here.
 
     Materialisation runs synchronously at the end rather than being queued. The
     user has just spent five minutes answering questions; showing them the answer

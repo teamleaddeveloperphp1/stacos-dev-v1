@@ -20,7 +20,6 @@ from urllib.parse import quote
 import structlog
 from django.contrib import messages
 from django.contrib.auth import login, logout
-from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -97,10 +96,6 @@ def register(request: HttpRequest) -> HttpResponse:
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.headers.get("User-Agent", ""),
             next_url=_safe_next(request),
-            # Carried, not acted on. The organisation is created once both
-            # channels are proven — see `_complete_verification` — so a sign-up
-            # that is abandoned on the OTP screen leaves nothing behind.
-            organisation_name=form.cleaned_data["organisation_name"],
         )
         if verification is None:
             form.add_error(None, decision.reason)
@@ -297,8 +292,6 @@ def _complete_verification(
     request.session[SESSION_VERIFIED_KEY] = True
     request.session.pop(SESSION_PENDING_KEY, None)
 
-    _provision_named_organisation(request, verification, user)
-
     target = verification.next_url or SAFE_REDIRECT_DEFAULT
     response = redirect(target)
 
@@ -309,47 +302,6 @@ def _complete_verification(
         mark_step_up_complete(request)
 
     return response
-
-
-def _provision_named_organisation(
-    request: HttpRequest,
-    verification: PendingVerification,
-    user: User,
-) -> None:
-    """Create the organisation the user named at sign-up, now that they are real.
-
-    Deferred to here rather than done in `register` because an unverified sign-up
-    must leave no tenant behind — the row would be indistinguishable from a real
-    customer's, and nothing would ever clean it up.
-
-    Silent when there is no name: that is the ordinary case for somebody joining
-    an organisation somebody else set up, and they are sent to the setup flow by
-    ``OrganisationGateMiddleware`` instead. Also silent when they already belong
-    somewhere, so replaying a stale verification cannot mint a second workspace.
-    """
-    name = (verification.organisation_name or "").strip()
-    if not name or verification.purpose != PendingVerification.Purpose.REGISTRATION:
-        return
-
-    from stacos.core.rls import rls_bootstrap
-    from stacos.tenancy.models import Membership
-    from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
-    from stacos.tenancy.services import provision_tenant
-
-    with transaction.atomic():
-        # Memberships are RLS-protected and nothing is bound this early. Anchored
-        # on the authenticated user, so it can only see rows about them — the
-        # same bootstrap read the scope resolver performs.
-        with rls_bootstrap():
-            already_a_member = Membership.objects_unscoped.filter(user=user).exists()
-        if already_a_member:
-            return
-
-        tenant = provision_tenant(name, owner=user, reason="registration")
-
-    request.session[SESSION_TENANT_KEY] = str(tenant.id)
-    request.session.modified = True
-    logger.info("auth.registered_with_organisation", user_id=str(user.pk), tenant_id=str(tenant.id))
 
 
 @public_view

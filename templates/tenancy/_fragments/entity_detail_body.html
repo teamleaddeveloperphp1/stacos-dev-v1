@@ -87,9 +87,8 @@
       rendered inline.
 
       Loading them lazily keeps the entity page itself one cheap query: the
-      compliance panel aggregates the whole register for the entity, and the
-      secretarial one computes board-meeting gaps from every meeting held. A
-      user who only wanted to check a GSTIN should not pay for either.
+      compliance panel aggregates the whole register for the entity. A user who
+      only wanted to check a GSTIN should not pay for it.
 
       Each panel is permission-gated here as well as in its own view, so a user
       without the permission sees nothing rather than an empty card that 403s in
@@ -141,27 +140,6 @@
       </div>
     {% endif %}
 
-    {% if "notices.notice.view" in access_scope.permissions %}
-      <div hx-get="{% url 'notices:for_entity' entity.pk %}"
-           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
-           class="card mb-4" aria-busy="true">
-        <div class="card-body text-muted small">
-          <span class="spinner-inline"></span>
-          <span class="ms-2">{% translate "Loading…" %}</span>
-        </div>
-      </div>
-    {% endif %}
-
-    {% if "secretarial.view" in access_scope.permissions %}
-      <div hx-get="{% url 'secretarial:entity_summary' entity.pk %}"
-           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
-           class="card mb-4" aria-busy="true">
-        <div class="card-body text-muted small">
-          <span class="spinner-inline"></span>
-          <span class="ms-2">{% translate "Loading…" %}</span>
-        </div>
-      </div>
-    {% endif %}
   </div>
 
   {# --------------------------------------------------------------- #}

@@ -39,20 +39,6 @@ urlpatterns = [
         mobile.ObligationTransitionView.as_view(),
         name="obligation_transition",
     ),
-    # The reason the app exists: a stamped challan photographed at the counter.
-    path(
-        "obligations/<uuid:pk>/evidence/",
-        mobile.ObligationEvidenceView.as_view(),
-        name="obligation_evidence",
-    ),
-    # --- Information requests ---
-    path("requests/", mobile.RequestListView.as_view(), name="requests"),
-    path("requests/<uuid:pk>/", mobile.RequestDetailView.as_view(), name="request"),
-    path(
-        "requests/items/<uuid:pk>/respond/",
-        mobile.RequestItemRespondView.as_view(),
-        name="request_item_respond",
-    ),
     # --- Notifications ---
     path("notifications/", mobile.NotificationListView.as_view(), name="notifications"),
     path(

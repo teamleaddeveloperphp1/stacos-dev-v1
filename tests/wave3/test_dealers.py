@@ -232,9 +232,7 @@ def test_a_dealer_cannot_reach_a_clients_compliance_data(
     time-boxed, client-approved engagement — and without one, the scoped manager
     returns nothing.
     """
-    from stacos.notices.models import Notice
     from stacos.obligations.models import ObligationInstance
-    from stacos.vault.models import Document
 
     with platform_scope(reason="test"):
         issue_invoice(sold_subscription, issued_on=TODAY)
@@ -247,8 +245,6 @@ def test_a_dealer_cannot_reach_a_clients_compliance_data(
 
         # The client's actual data: nothing.
         assert ObligationInstance.objects.count() == 0
-        assert Document.objects.count() == 0
-        assert Notice.objects.count() == 0
 
 
 @pytest.mark.isolation

@@ -54,10 +54,9 @@ class RegistrationForm(_CrispyForm):
     ``mobile`` is the ordinary contact number, which for a great many people is a
     different number and was previously impossible to record.
 
-    ``organisation_name`` is optional and is what turns a bare personal login
-    into a working workspace. It is deliberately *not* acted on here — the tenant
-    is created once both channels are proven, so an abandoned sign-up leaves no
-    organisation behind. See ``accounts.views._complete_verification``.
+    Organisation setup is not collected here — someone signing up with no
+    organisation yet is sent through the onboarding wizard afterwards, which asks
+    for the name there instead.
     """
 
     submit_label = _("Create account")
@@ -69,15 +68,6 @@ class RegistrationForm(_CrispyForm):
         label=_("Mobile number"),
         max_length=20,
         help_text=_("Include the country code if outside India."),
-    )
-    organisation_name = forms.CharField(
-        label=_("Organisation name"),
-        max_length=200,
-        required=False,
-        help_text=_(
-            "Optional. Give it and we create your organisation and make you its "
-            "owner. Leave it blank if you are joining one somebody else set up."
-        ),
     )
     phone = forms.CharField(
         label=_("WhatsApp number"),
@@ -96,15 +86,13 @@ class RegistrationForm(_CrispyForm):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        # Declaration order already matches, but stating the layout pins it: the
-        # WhatsApp number sits immediately below the organisation name, and a
+        # Declaration order already matches, but stating the layout pins it: a
         # field added later cannot silently land in the middle of the sequence.
         self.helper.layout = Layout(
             "first_name",
             "last_name",
             "email",
             "mobile",
-            "organisation_name",
             "phone",
             "password",
             "confirm_password",
@@ -112,9 +100,6 @@ class RegistrationForm(_CrispyForm):
 
     def clean_mobile(self) -> str:
         return normalise_phone(self.cleaned_data["mobile"])
-
-    def clean_organisation_name(self) -> str:
-        return self.cleaned_data["organisation_name"].strip()
 
     def clean(self) -> dict[str, Any]:
         data = super().clean() or self.cleaned_data
