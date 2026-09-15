@@ -36,7 +36,7 @@ due:
 evidence:
   - { key: ack, label: ITR-V acknowledgement, kind: DOC, mandatory_for_close: true }
   - { key: computation, label: Computation of total income, kind: DOC, mandatory_for_close: true }
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: "₹1,000–₹5,000 under Section 234F depending on total income, plus interest under 234A."
 effective_from: 2021-04-01
 reviewed_by: Skorydov compliance desk

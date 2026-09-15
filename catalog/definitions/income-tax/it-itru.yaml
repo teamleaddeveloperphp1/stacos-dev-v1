@@ -33,7 +33,7 @@ evidence:
 - key: ack
   label: ITR-U acknowledgement
   kind: DOC
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: Additional income-tax is payable at the prescribed rate; eligibility restrictions apply.
 effective_from: '2022-04-01'
 reviewed_by: Skorydov compliance desk

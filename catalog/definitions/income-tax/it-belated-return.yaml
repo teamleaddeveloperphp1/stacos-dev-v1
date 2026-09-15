@@ -34,7 +34,7 @@ evidence:
 - key: ack
   label: ITR-V acknowledgement
   kind: DOC
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: Late filing fee, interest and restrictions on carry-forward of certain losses may apply.
 effective_from: '1962-04-01'
 reviewed_by: Skorydov compliance desk

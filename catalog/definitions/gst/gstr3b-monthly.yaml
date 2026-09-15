@@ -37,8 +37,16 @@ evidence:
   - { key: ack, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
   - { key: challan, label: Tax payment challan, kind: DOC, mandatory_for_close: true }
   - { key: itc_recon, label: ITC reconciliation against GSTR-2B, kind: DOC }
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: "₹50 per day (₹20 nil), capped at ₹5,000, plus interest at 18% a year on unpaid tax."
+penalty_rules:
+  - kind: PER_DAY_CAPPED
+    rate_minor: 5000
+    cap_minor: 500000
+    statutory_reference: "Section 47 CGST Act, 2017"
+    # The ₹20/day nil-return rate and the separate interest-on-unpaid-tax
+    # component aren't modeled — both depend on facts (nil-return status,
+    # tax actually outstanding) this catalog doesn't track per obligation.
 effective_from: 2017-07-01
 reviewed_by: Skorydov compliance desk
 reviewed_at: 2026-06-01

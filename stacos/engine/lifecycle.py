@@ -38,6 +38,7 @@ __all__ = [
     "State",
     "Transition",
     "allowed_transitions",
+    "days_late",
     "derive_display_status",
     "filed_late",
     "is_overdue",
@@ -158,6 +159,32 @@ _WORKFLOW_STATES: tuple[State, ...] = (
 )
 
 
+def _recordable() -> tuple[Transition, ...]:
+    """Recording the filing is reachable from every open state, not only from
+    ``READY_TO_FILE``.
+
+    The detail page asks one question — "is this done?" — and a "yes" has to be
+    recordable wherever the obligation happens to be sitting. Walking it through
+    prepare/review/approve first would write four timeline entries for work
+    nobody did, and inventing a separate "mark complete" path outside this table
+    would put a second, unguarded way to set ``filed_on`` into the product.
+
+    Every one of them carries the same guard as the original: an acknowledgement
+    number is the evidence the filing happened, and a register that cannot be
+    audited is not worth keeping.
+    """
+    return tuple(
+        Transition(
+            source,
+            State.FILED,
+            "Record filing",
+            "compliance.obligation.file",
+            requires_filing_reference=True,
+        )
+        for source in _WORKFLOW_STATES
+    )
+
+
 def _abandonable() -> tuple[Transition, ...]:
     """Deferring, dismissing and disputing are reachable from any open state.
 
@@ -263,13 +290,6 @@ TRANSITIONS: tuple[Transition, ...] = (
         requires_note=True,
     ),
     Transition(
-        State.READY_TO_FILE,
-        State.FILED,
-        "Record filing",
-        "compliance.obligation.file",
-        requires_filing_reference=True,
-    ),
-    Transition(
         State.FILED,
         State.CLOSED,
         "Close",
@@ -317,6 +337,7 @@ TRANSITIONS: tuple[Transition, ...] = (
         "compliance.obligation.dismiss",
         requires_note=True,
     ),
+    *_recordable(),
     *_abandonable(),
 )
 
@@ -478,6 +499,21 @@ def days_to_due(*, due_date: date | None, as_of: date) -> int | None:
     if due_date is None:
         return None
     return (due_date - as_of).days
+
+
+def days_late(*, due_date: date | None, filed_on: date | None, as_of: date) -> int:
+    """How many days a penalty has had to accrue, floored at zero.
+
+    Not the same question as :func:`days_to_due`. A penalty that runs per day
+    late stops accruing the day the filing actually goes in — pricing it
+    against ``as_of`` for something already filed would keep charging for
+    every day since, including days after the filing existed. Unfiled, it
+    accrues against ``as_of`` the same way :func:`is_overdue` does.
+    """
+    if due_date is None:
+        return 0
+    end = filed_on or as_of
+    return max(0, (end - due_date).days)
 
 
 # ---------------------------------------------------------------------------

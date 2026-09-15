@@ -20,6 +20,7 @@ from stacos.engine.lifecycle import (
     DisplayStatus,
     State,
     allowed_transitions,
+    days_late,
     days_to_due,
     derive_display_status,
     describe_states,
@@ -231,3 +232,22 @@ def test_days_to_due_is_signed_and_null_safe() -> None:
     assert days_to_due(due_date=TODAY - timedelta(days=5), as_of=TODAY) == -5
     assert days_to_due(due_date=TODAY, as_of=TODAY) == 0
     assert days_to_due(due_date=None, as_of=TODAY) is None
+
+
+def test_days_late_floors_at_zero_and_needs_no_clock() -> None:
+    assert days_late(due_date=None, filed_on=None, as_of=TODAY) == 0
+    # Not yet due — floored, not negative.
+    assert days_late(due_date=TODAY + timedelta(days=5), filed_on=None, as_of=TODAY) == 0
+    # Overdue and unfiled: accrues against `as_of`.
+    assert days_late(due_date=TODAY - timedelta(days=5), filed_on=None, as_of=TODAY) == 5
+    # Filed on time: nothing accrued, regardless of how long ago `as_of` is.
+    assert days_late(due_date=TODAY, filed_on=TODAY, as_of=TODAY + timedelta(days=30)) == 0
+    # Filed late: frozen at the filing date, not still growing against `as_of`.
+    assert (
+        days_late(
+            due_date=TODAY - timedelta(days=10),
+            filed_on=TODAY - timedelta(days=3),
+            as_of=TODAY + timedelta(days=30),
+        )
+        == 7
+    )

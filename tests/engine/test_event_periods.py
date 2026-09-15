@@ -325,9 +325,10 @@ def test_an_opt_in_materialises_a_definition_the_rule_refuses() -> None:
     )
     assert len(forced.to_create) == 1
     instance = forced.to_create[0]
-    # Never "confirmed": the rule did not decide this, a person did, and the row
-    # has to say which.
-    assert instance.confirmed is False
+    # Confirmed: the rule did not decide this, a person did, and a person
+    # deciding is a firmer answer than an undecided rule. Which of the two it
+    # was is carried by `reasons`, below, not by a badge asking them again.
+    assert instance.confirmed is True
     assert instance.reasons[0] == "you added this to your calendar"
 
 

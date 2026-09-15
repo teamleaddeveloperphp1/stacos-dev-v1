@@ -273,11 +273,27 @@ class DefinitionVersion(TimeStampedModel):
 
     # -- What closing it requires -------------------------------------------
     evidence_requirements = models.JSONField(default=list, blank=True)
+    #: ``[{key, label, role, default_owner_role?, days_before_due?,
+    #: requires_evidence?}, ...]`` — the named checklist a firm actually works
+    #: through, in order. ``role`` is one of PREPARE/REVIEW/APPROVE/SIGN, mapped
+    #: to the matching ``compliance.obligation.*`` permission rather than
+    #: carrying its own. Empty for most definitions, which fall back to the
+    #: generic four-stage lifecycle stepper — this is opt-in detail, not a
+    #: replacement for the lifecycle itself.
+    workflow_steps = models.JSONField(default=list, blank=True)
     default_owner_role = models.CharField(max_length=60, blank=True)
     #: Free-text description of what happens if it is missed. Shown on the detail
     #: page, because "₹200 per day, capped at ₹5,000" is what actually motivates
     #: a client to answer an information request.
     penalty_summary = models.CharField(max_length=250, blank=True)
+    #: ``[{kind: "PER_DAY_CAPPED"|"FIXED_RANGE", statutory_reference, ...}]`` —
+    #: a structured, computable form of the same fact ``penalty_summary``
+    #: describes in prose. Deliberately partial: a rate capped at an amount
+    #: STACOS does not track anywhere (e.g. "the TDS amount") is still valid
+    #: data, just not one this can total up — see
+    #: ``stacos.engine.penalty.compute_penalties``, which renders the rate and
+    #: reference alone in that case rather than inventing a total.
+    penalty_rules = models.JSONField(default=list, blank=True)
 
     # -- Statutory validity -------------------------------------------------
     effective_from = models.DateField()

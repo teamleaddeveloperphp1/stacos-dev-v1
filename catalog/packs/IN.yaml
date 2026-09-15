@@ -77,28 +77,65 @@ entity_types:
   - { code: COOPERATIVE, name: Co-operative society }
   - { code: HUF, name: Hindu undivided family }
 
+# `catalog` is the flat identifier vocabulary (unchanged in spirit from before);
+# `by_entity_type` is the Add/Edit Entity screen's mapping of "which identifiers
+# does this entity type see, in what order, at what requirement level" — M
+# (mandatory), C (conditional), "M/C" (mandatory-or-conditional, preserved
+# verbatim because the exact trigger rule is not decided yet), or unmarked
+# (present, optional). A code with no entry for a given entity type does not
+# apply to it at all. Order here is the order fields render in, except CIN,
+# which the Add/Edit Entity screen always pins first (PAN immediately after)
+# regardless of where it sits in this list — that override is UI layout policy
+# implemented in `stacos.jurisdictions.registration_requirements`, not a fact
+# about India, so it lives in code rather than being repeated in every row here.
 registration_types:
-  - { code: PAN, name: Permanent Account Number }
-  - { code: TAN, name: Tax Deduction Account Number }
-  - { code: GST, name: GST identification number, per_jurisdiction: true }
-  - { code: CIN, name: Corporate Identity Number }
-  - { code: LLPIN, name: LLP Identification Number }
-  - { code: PF, name: EPFO establishment code }
-  - { code: ESIC, name: ESIC employer code }
-  - { code: PT_EC, name: Professional tax — enrolment certificate, per_jurisdiction: true }
-  - { code: PT_RC, name: Professional tax — registration certificate, per_jurisdiction: true }
-  - { code: IEC, name: Importer Exporter Code }
-  - { code: UDYAM, name: Udyam registration }
-  - { code: FACTORY_LICENCE, name: Factory licence, per_jurisdiction: true }
-  - { code: SHOPS_ESTAB, name: Shops and establishments registration, per_jurisdiction: true }
-  - { code: PCB_CONSENT, name: Pollution control board consent, per_jurisdiction: true }
-  - { code: DRUG_LICENCE, name: Drug licence, per_jurisdiction: true }
-  - { code: FSSAI, name: FSSAI licence }
-  - { code: LEGAL_METROLOGY, name: Legal metrology registration, per_jurisdiction: true }
-  - { code: BIS, name: BIS certification }
-  - { code: TRADE_LICENCE, name: Municipal trade licence, per_jurisdiction: true }
-  - { code: FIRE_NOC, name: Fire safety no-objection certificate, per_jurisdiction: true }
-  - { code: CONTRACT_LABOUR, name: Contract labour registration, per_jurisdiction: true }
+  catalog:
+    - { code: PAN, name: Permanent Account Number }
+    - { code: TAN, name: Tax Deduction Account Number }
+    - { code: GST, name: GST identification number, per_jurisdiction: true }
+    - { code: CIN, name: Corporate Identity Number }
+    - { code: LLPIN, name: LLP Identification Number }
+    - { code: PF, name: EPFO establishment code }
+    - { code: ESIC, name: ESIC employer code }
+    - { code: PT_EC, name: Professional tax — enrolment certificate, per_jurisdiction: true }
+    - { code: PT_RC, name: Professional tax — registration certificate, per_jurisdiction: true }
+    - { code: IEC, name: Importer Exporter Code }
+    - { code: UDYAM, name: Udyam registration }
+    - { code: FACTORY_LICENCE, name: Factory licence, per_jurisdiction: true }
+    - { code: SHOPS_ESTAB, name: Shops and establishments registration, per_jurisdiction: true }
+    - { code: PCB_CONSENT, name: Pollution control board consent, per_jurisdiction: true }
+    - { code: DRUG_LICENCE, name: Drug licence, per_jurisdiction: true }
+    - { code: FSSAI, name: FSSAI licence }
+    - { code: LEGAL_METROLOGY, name: Legal metrology registration, per_jurisdiction: true }
+    - { code: BIS, name: BIS certification }
+    - { code: TRADE_LICENCE, name: Municipal trade licence, per_jurisdiction: true }
+    - { code: FIRE_NOC, name: Fire safety no-objection certificate, per_jurisdiction: true }
+    - { code: CONTRACT_LABOUR, name: Contract labour registration, per_jurisdiction: true }
+    - { code: FCRN, name: Foreign Company Registration Number }
+    - { code: FIRM_REGN, name: Registrar of Firms registration number }
+    - { code: TRUST_REGN, name: Trust registration number }
+    - { code: SOCIETY_REGN, name: Society registration number }
+    - { code: COOP_REGN, name: Co-operative society registration number }
+    - { code: RBI_ROC_DETAILS, name: RBI/ROC details }
+    - { code: RBI_APPROVAL, name: RBI approval reference }
+    - { code: KARTA_PAN, name: Karta's PAN }
+    - { code: "12AB", name: Income-tax registration under section 12AB }
+    - { code: "80G", name: Income-tax approval under section 80G }
+    - { code: DARPAN, name: NGO Darpan ID }
+  by_entity_type:
+    PVT_LTD: [{ code: PAN, requirement: M }, TAN, GST, { code: CIN, requirement: C }, ESIC, PF, IEC, UDYAM]
+    PUBLIC_LTD: [{ code: PAN, requirement: M }, TAN, GST, { code: CIN, requirement: M }, ESIC, PF, IEC, UDYAM]
+    OPC: [{ code: PAN, requirement: M }, TAN, GST, { code: CIN, requirement: M }, ESIC, PF, IEC, UDYAM]
+    LLP: [{ code: PAN, requirement: M }, TAN, GST, { code: LLPIN, requirement: M }, ESIC, PF, IEC, UDYAM]
+    PARTNERSHIP: [{ code: PAN, requirement: M }, TAN, GST, { code: FIRM_REGN, requirement: C }, ESIC, PF, IEC, UDYAM]
+    PROPRIETORSHIP: [{ code: PAN, requirement: M }, TAN, GST, ESIC, PF, UDYAM, IEC]
+    TRUST: [{ code: PAN, requirement: M }, TAN, GST, { code: TRUST_REGN, requirement: M }, ESIC, PF, "12AB", "80G", DARPAN]
+    SOCIETY: [{ code: PAN, requirement: M }, TAN, GST, { code: SOCIETY_REGN, requirement: "M/C" }, ESIC, PF, "12AB", "80G", DARPAN]
+    SECTION_8: [{ code: PAN, requirement: M }, TAN, GST, { code: CIN, requirement: M }, ESIC, PF, "12AB", "80G", DARPAN, IEC]
+    BRANCH_OFFICE: [{ code: PAN, requirement: M }, TAN, GST, { code: FCRN, requirement: M }, ESIC, PF, RBI_ROC_DETAILS, IEC]
+    LIAISON_OFFICE: [{ code: PAN, requirement: M }, TAN, GST, { code: FCRN, requirement: M }, ESIC, PF, RBI_APPROVAL]
+    COOPERATIVE: [{ code: PAN, requirement: M }, TAN, GST, { code: COOP_REGN, requirement: M }, ESIC, PF, UDYAM, IEC]
+    HUF: [{ code: PAN, requirement: M }, TAN, GST, ESIC, PF, { code: KARTA_PAN, requirement: M }]
 
 # Sunday only. Note what this is *not*: a statement that Indian due dates move
 # off a Sunday. They do not — the portals accept filings on a Sunday and relief

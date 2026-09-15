@@ -35,7 +35,7 @@ evidence:
   label: ITR-V acknowledgement
   kind: DOC
   mandatory_for_close: true
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: Late filing can attract fee under Section 234F, interest and restrictions on carry-forward
   of certain losses.
 effective_from: '1962-04-01'

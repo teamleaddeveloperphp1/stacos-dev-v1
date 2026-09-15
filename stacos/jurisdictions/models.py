@@ -62,7 +62,9 @@ class JurisdictionPack(TimeStampedModel):
     #: Entity types legally available in this country.
     entity_types = models.JSONField(default=list, blank=True)
     #: Registration/tax-identifier types, keyed to validators in `validators.py`.
-    registration_types = models.JSONField(default=list, blank=True)
+    #: Shape: ``{"catalog": [...], "by_entity_type": {ENTITY_TYPE: [...]}}`` —
+    #: see `stacos.jurisdictions.registration_requirements`.
+    registration_types = models.JSONField(default=dict, blank=True)
 
     is_published = models.BooleanField(default=False)
     #: Community and partner packs carry attribution; see the brief's

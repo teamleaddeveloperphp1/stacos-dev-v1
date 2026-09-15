@@ -521,7 +521,7 @@ SPECS["IN-MCA-AUDITORS-REPORT"] = Spec(
     due=after_fy_end(6, 30),
     applicability=COMPANY,
     tags=["roc", "audit-report", "financial-statements"],
-    owner="org-finance",
+    owner="org-owner",
     evidence=[doc("report", "Signed independent auditor's report")],
 )
 
@@ -686,7 +686,7 @@ SPECS["IN-MCA-FINANCIAL-STATEMENTS-PREPARATION"] = Spec(
     ),
     due=after_fy_end(5, 31),
     applicability=COMPANY,
-    owner="org-finance",
+    owner="org-owner",
     tags=["roc", "financial-statements"],
     evidence=[doc("financials", "Draft financial statements")],
 )
@@ -698,7 +698,7 @@ SPECS["IN-MCA-FINANCIAL-STATEMENT-APPROVAL"] = Spec(
     ),
     due=after_fy_end(6, 15),
     applicability=COMPANY,
-    owner="org-finance",
+    owner="org-owner",
     tags=["roc", "financial-statements", "governance"],
     evidence=[doc("resolution", "Board resolution approving the accounts")],
 )
@@ -720,7 +720,7 @@ SPECS["IN-MCA-AOC4-NBFC"] = Spec(
     ),
     tags=["roc", "financial-statements", "annual-filing"],
     sector_tags=["nbfc"],
-    owner="org-finance",
+    owner="org-owner",
     evidence=[doc("srn", "AOC-4 NBFC SRN"), doc("financials", "Audited financials", False)],
 )
 
@@ -949,7 +949,7 @@ SPECS["IN-MCA-DIRECTOR-REMUNERATION-DISCLOSURE"] = Spec(
     ),
     due=after_fy_end(6, 30),
     applicability=COMPANY,
-    owner="org-finance",
+    owner="org-owner",
     tags=["roc", "remuneration", "disclosure", "financial-statements"],
     evidence=[doc("disclosure", "Remuneration note")],
 )
@@ -961,7 +961,7 @@ SPECS["IN-MCA-DIRECTOR-REMUNERATION-ANNUAL"] = Spec(
     ),
     due=after_fy_end(6, 30),
     applicability=COMPANY,
-    owner="org-finance",
+    owner="org-owner",
     tags=["roc", "remuneration", "kmp", "reconciliation"],
     evidence=[doc("statement", "Remuneration statement")],
 )
@@ -1052,7 +1052,7 @@ SPECS["IN-MCA-DIVIDEND-DECLARATION"] = Spec(
     applicability=COMPANY_WITH_MEMBERS,
     trigger_kind="EVENT_DRIVEN",
     tags=["roc", "dividend", "payment"],
-    owner="org-finance",
+    owner="org-owner",
     evidence=[doc("records", "Payment records")],
 )
 
@@ -1068,7 +1068,7 @@ SPECS["IN-MCA-UNPAID-DIVIDEND"] = Spec(
     applicability=COMPANY_WITH_MEMBERS,
     trigger_kind="EVENT_DRIVEN",
     tags=["roc", "dividend", "iepf"],
-    owner="org-finance",
+    owner="org-owner",
     evidence=[doc("transfer", "Transfer confirmation")],
 )
 
@@ -1162,7 +1162,7 @@ SPECS["IN-MCA-CSR-UTILISATION-CERTIFICATE"] = Spec(
     applicability=CSR_LIABLE,
     trigger_kind="INTERNAL",
     tags=["roc", "csr", "certificate", "internal-control"],
-    owner="org-finance",
+    owner="org-owner",
     evidence=[doc("certificate", "Utilisation certificate")],
 )
 
@@ -1196,7 +1196,7 @@ def _epf(code: str, summary: str, **kw: Any) -> None:
         applicability=HAS_PF,
         folder="pf-esic",
         authority="EPFO",
-        owner="org-hr",
+        owner="org-owner",
         portal="https://unifiedportal-emp.epfindia.gov.in",
         **kw,
     )
@@ -1352,7 +1352,7 @@ SPECS["IN-ESIC-CONTRIBUTION-PAYMENT"] = Spec(
     applicability=HAS_ESIC,
     folder="pf-esic",
     authority="ESIC",
-    owner="org-hr",
+    owner="org-owner",
     tags=["esic", "payroll", "payment", "monthly-filing"],
     evidence=[doc("challan", "Payment challan")],
     effective_from="1952-09-01",
@@ -1401,7 +1401,7 @@ def _pt(code: str, summary: str, periodicity: str, day: int, registration: str, 
         jurisdictions=PT_UNCOVERED,
         folder="professional-tax",
         authority="STATE_TAX",
-        owner="org-hr",
+        owner="org-owner",
         effective_from="1976-04-01",
         confidence="LOW",
         **kw,
@@ -1524,7 +1524,7 @@ def _it(code: str, summary: str, **kw: Any) -> None:
     kw.setdefault("effective_from", "1962-04-01")
     kw.setdefault("portal", "https://www.incometax.gov.in")
     SPECS[code] = Spec(
-        summary=summary, folder="income-tax", authority="CBDT", owner="org-finance", **kw
+        summary=summary, folder="income-tax", authority="CBDT", owner="org-owner", **kw
     )
 
 
@@ -1965,7 +1965,7 @@ def _tds_challan(code: str, summary: str, event: str, tag: str) -> None:
         tags=["tds", "withholding", tag],
         folder="tds",
         authority="CBDT",
-        owner="org-finance",
+        owner="org-owner",
         effective_from="2013-06-01",
         portal="https://www.incometax.gov.in",
         evidence=[doc("challan", "Challan-cum-statement")],
@@ -2017,7 +2017,7 @@ SPECS["IN-TDS-CORRECTION"] = Spec(
     tags=["tds", "correction"],
     folder="tds",
     authority="CBDT",
-    owner="org-finance",
+    owner="org-owner",
     effective_from="2013-06-01",
     evidence=[doc("ack", "Correction acknowledgement")],
 )
@@ -2039,7 +2039,7 @@ SPECS["IN-TDS-TRACES-DEFAULT"] = Spec(
     tags=["tds", "reconciliation", "internal-control"],
     folder="tds",
     authority="CBDT",
-    owner="org-finance",
+    owner="org-owner",
     effective_from="2013-06-01",
     evidence=[doc("review", "Default review", False)],
 )
@@ -2056,7 +2056,7 @@ def _gst(code: str, summary: str, **kw: Any) -> None:
         summary=summary,
         folder="gst",
         authority="CBIC",
-        owner="org-finance",
+        owner="org-owner",
         portal="https://www.gst.gov.in",
         **kw,
     )

@@ -36,7 +36,7 @@ due:
   shift_if_holiday: NONE
 evidence:
   - { key: ack, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: "₹50 per day (₹20 for a nil return), capped at ₹2,000 per return."
 effective_from: 2021-01-01
 reviewed_by: Skorydov compliance desk

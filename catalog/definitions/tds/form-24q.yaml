@@ -35,8 +35,56 @@ due:
 evidence:
   - { key: ack, label: Return acknowledgement (token number), kind: DOC, mandatory_for_close: true }
   - { key: fvu, label: Validated FVU file, kind: DOC }
-default_owner_role: org-finance
+steps:
+  - key: confirm_applies
+    label: Confirm TDS applies this quarter
+    role: PREPARE
+    default_owner_role: org-owner
+    days_before_due: 45
+  - key: pull_salary_registers
+    label: Pull the quarter's salary registers
+    role: PREPARE
+    default_owner_role: org-owner
+    days_before_due: 35
+  - key: reconcile_challans
+    label: Reconcile challans against Form 26AS
+    role: PREPARE
+    default_owner_role: org-owner
+    days_before_due: 25
+  - key: validate_pans
+    label: Validate PANs for every employee
+    role: REVIEW
+    default_owner_role: org-owner
+    days_before_due: 20
+  - key: generate_fvu
+    label: Generate and validate the FVU file
+    role: PREPARE
+    default_owner_role: org-owner
+    days_before_due: 10
+    requires_evidence: true
+  - key: signoff
+    label: Sign off on the filing pack
+    role: APPROVE
+    default_owner_role: org-owner
+    days_before_due: 5
+  - key: file_return
+    label: Sign with DSC and file
+    role: SIGN
+    default_owner_role: org-owner
+    days_before_due: 0
+    requires_evidence: true
+default_owner_role: org-owner
 penalty_summary: "₹200 per day under Section 234E until filed, capped at the TDS amount; ₹10,000–₹1,00,000 under 271H."
+penalty_rules:
+  - kind: PER_DAY_CAPPED
+    rate_minor: 20000
+    statutory_reference: "Section 234E"
+    # No cap_minor: the real cap is "the TDS amount", which STACOS does not
+    # store on an obligation — shown as a rate and reference, not a total.
+  - kind: FIXED_RANGE
+    min_minor: 1000000
+    max_minor: 10000000
+    statutory_reference: "Section 271H"
 effective_from: 2010-04-01
 reviewed_by: Skorydov compliance desk
 reviewed_at: 2026-06-01

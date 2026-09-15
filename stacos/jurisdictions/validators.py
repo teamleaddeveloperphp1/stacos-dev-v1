@@ -40,6 +40,12 @@ class RegistrationValidator:
     validate: Callable[[str], None]
     example: str = ""
     help_text: str = ""
+    #: False when nobody has confirmed this identifier's format yet. ``validate``
+    #: still runs (and still accepts anything) either way, but this flag is what
+    #: lets a caller say so out loud — e.g. as help text on the input — instead
+    #: of a value silently passing for the same reason an *unregistered* type
+    #: would: the two must not look identical to the person typing it in.
+    verified: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +183,18 @@ def _regex_validator(pattern: re.Pattern[str], message: str, code: str) -> Calla
     return _validate
 
 
+def _unverified(_value: str) -> None:
+    """Accept anything.
+
+    Registered for identifiers whose issuing format is not yet confirmed —
+    a Registrar-of-Firms number, an RBI approval reference, a Darpan ID.
+    Guessing a rule here risks rejecting a real value; the honest answer is to
+    check nothing and say so via ``RegistrationValidator.verified = False``,
+    which the form surfaces as help text rather than staying silent about it.
+    """
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Other jurisdictions — thin, to prove the abstraction holds
 # ---------------------------------------------------------------------------
@@ -233,6 +251,104 @@ VALIDATORS: dict[str, RegistrationValidator] = {
             "IN",
             _regex_validator(EPF_RE, "An EPF code looks like KN/BNG/0012345/000.", "invalid_pf"),
             "KN/BNG/0012345/000",
+        ),
+        RegistrationValidator(
+            "KARTA_PAN",
+            "Karta's PAN",
+            "IN",
+            validate_pan,
+            "ABCDE1234F",
+        ),
+        RegistrationValidator(
+            "FCRN",
+            "Foreign Company Registration Number",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text="Format not yet verified — accepted as entered.",
+        ),
+        RegistrationValidator(
+            "FIRM_REGN",
+            "Registrar of Firms registration number",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text=(
+                "Format varies by state Registrar of Firms and is not yet verified — "
+                "accepted as entered."
+            ),
+        ),
+        RegistrationValidator(
+            "TRUST_REGN",
+            "Trust registration number",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text=(
+                "Format varies by state registrar and is not yet verified — accepted as entered."
+            ),
+        ),
+        RegistrationValidator(
+            "SOCIETY_REGN",
+            "Society registration number",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text=(
+                "Format varies by state Registrar of Societies and is not yet verified — "
+                "accepted as entered."
+            ),
+        ),
+        RegistrationValidator(
+            "COOP_REGN",
+            "Co-operative society registration number",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text=(
+                "Format varies by state Registrar of Co-operative Societies and is not yet "
+                "verified — accepted as entered."
+            ),
+        ),
+        RegistrationValidator(
+            "RBI_ROC_DETAILS",
+            "RBI/ROC details",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text="Free-text reference — not yet verified against a fixed format.",
+        ),
+        RegistrationValidator(
+            "RBI_APPROVAL",
+            "RBI approval reference",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text="Free-text reference — not yet verified against a fixed format.",
+        ),
+        RegistrationValidator(
+            "12AB",
+            "Section 12AB registration",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text="Format not yet verified — accepted as entered.",
+        ),
+        RegistrationValidator(
+            "80G",
+            "Section 80G approval",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text="Format not yet verified — accepted as entered.",
+        ),
+        RegistrationValidator(
+            "DARPAN",
+            "NGO Darpan ID",
+            "IN",
+            _unverified,
+            verified=False,
+            help_text="Format not yet verified — accepted as entered.",
         ),
         RegistrationValidator(
             "AE_TRN",

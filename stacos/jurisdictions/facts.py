@@ -241,6 +241,17 @@ REGISTRATION_TYPES: tuple[str, ...] = (
     "TRADE_LICENCE",
     "FIRE_NOC",
     "CONTRACT_LABOUR",
+    "FCRN",
+    "FIRM_REGN",
+    "TRUST_REGN",
+    "SOCIETY_REGN",
+    "COOP_REGN",
+    "RBI_ROC_DETAILS",
+    "RBI_APPROVAL",
+    "KARTA_PAN",
+    "12AB",
+    "80G",
+    "DARPAN",
 )
 
 PREMISES_TYPES: tuple[str, ...] = (

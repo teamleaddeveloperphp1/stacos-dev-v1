@@ -60,7 +60,7 @@ due:
 evidence:
   - { key: ack, label: Filed return acknowledgement, kind: DOC, mandatory_for_close: true }
   - { key: challan, label: Tax payment challan, kind: DOC, mandatory_for_close: true }
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: "₹50 per day (₹20 nil), capped at ₹5,000, plus interest at 18% a year."
 effective_from: 2021-01-01
 reviewed_by: Skorydov compliance desk

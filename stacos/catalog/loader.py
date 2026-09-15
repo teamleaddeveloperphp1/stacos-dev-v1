@@ -104,6 +104,17 @@ _TRIGGER_KINDS = frozenset(
     {"STATUTORY_PERIODIC", "EVENT_DRIVEN", "RENEWAL", "GOVERNANCE", "INTERNAL"}
 )
 
+#: Mirrors ``stacos.obligations.models.ObligationStep.Role``. Kept as a literal
+#: here too, for the same reason as ``_TRIGGER_KINDS`` — parsing must not import
+#: the obligations app.
+_STEP_ROLES = frozenset({"PREPARE", "REVIEW", "APPROVE", "SIGN"})
+
+#: Mirrors the ``kind`` values ``stacos.engine.penalty.compute_penalties``
+#: understands. A literal here for the same reason as ``_STEP_ROLES`` — the
+#: engine must stay importable on its own, so nothing in ``stacos.catalog``
+#: imports *from* it either; the two sides just agree on these strings.
+_PENALTY_KINDS = frozenset({"PER_DAY_CAPPED", "FIXED_RANGE"})
+
 
 class CatalogError(ValueError):
     """A YAML document that cannot be loaded, with the file that caused it."""
@@ -138,6 +149,8 @@ class DefinitionDocument:
     trigger_kind: str = "STATUTORY_PERIODIC"
     tags: list[str] = field(default_factory=list)
     sector_tags: list[str] = field(default_factory=list)
+    workflow_steps: list[dict[str, Any]] = field(default_factory=list)
+    penalty_rules: list[dict[str, Any]] = field(default_factory=list)
     plain_language_summary: str = ""
     statutory_reference: str = ""
     filing_portal_url: str = ""
@@ -428,6 +441,73 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
         if not isinstance(item, dict) or not item.get("key"):
             raise CatalogError(source, f"evidence entries need a key: {item!r}")
 
+    steps = list(raw.get("steps") or [])
+    seen_step_keys: set[str] = set()
+    for item in steps:
+        if not isinstance(item, dict) or not item.get("key") or not item.get("label"):
+            raise CatalogError(source, f"a step needs a key and a label: {item!r}")
+        if item["key"] in seen_step_keys:
+            raise CatalogError(source, f"step key {item['key']!r} is repeated")
+        seen_step_keys.add(item["key"])
+        role = item.get("role")
+        if role not in _STEP_ROLES:
+            raise CatalogError(
+                source,
+                f"step {item['key']!r} has role {role!r}; expected one of {sorted(_STEP_ROLES)}",
+            )
+        days_before_due = item.get("days_before_due")
+        if days_before_due is not None and (
+            not isinstance(days_before_due, int)
+            or isinstance(days_before_due, bool)
+            or days_before_due < 0
+        ):
+            raise CatalogError(
+                source,
+                f"step {item['key']!r} has days_before_due {days_before_due!r}; "
+                f"expected a non-negative integer",
+            )
+
+    penalty_rules = list(raw.get("penalty_rules") or [])
+    for item in penalty_rules:
+        if not isinstance(item, dict):
+            raise CatalogError(source, f"a penalty rule must be a mapping: {item!r}")
+        kind = item.get("kind")
+        if kind not in _PENALTY_KINDS:
+            raise CatalogError(
+                source,
+                f"penalty rule has kind {kind!r}; expected one of {sorted(_PENALTY_KINDS)}",
+            )
+        if not str(item.get("statutory_reference", "")).strip():
+            raise CatalogError(source, f"penalty rule {kind!r} needs a statutory_reference")
+        if kind == "PER_DAY_CAPPED":
+            rate = item.get("rate_minor")
+            if not isinstance(rate, int) or isinstance(rate, bool) or rate <= 0:
+                raise CatalogError(
+                    source,
+                    f"penalty rule {kind!r} needs a positive integer rate_minor, got {rate!r}",
+                )
+            cap = item.get("cap_minor")
+            if cap is not None and (not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0):
+                raise CatalogError(
+                    source, f"penalty rule {kind!r} has a non-positive cap_minor: {cap!r}"
+                )
+        elif kind == "FIXED_RANGE":
+            minimum = item.get("min_minor")
+            maximum = item.get("max_minor")
+            if (
+                not isinstance(minimum, int)
+                or isinstance(minimum, bool)
+                or not isinstance(maximum, int)
+                or isinstance(maximum, bool)
+                or minimum < 0
+                or maximum < minimum
+            ):
+                raise CatalogError(
+                    source,
+                    f"penalty rule {kind!r} needs 0 <= min_minor <= max_minor, "
+                    f"got min={minimum!r} max={maximum!r}",
+                )
+
     return DefinitionDocument(
         code=code,
         country=str(required("country")),
@@ -445,6 +525,8 @@ def parse_document(path: Path, raw: Mapping[str, Any]) -> DefinitionDocument:
         trigger_rule=trigger_rule,
         due_rule=due_rule,
         evidence_requirements=evidence,
+        workflow_steps=steps,
+        penalty_rules=penalty_rules,
         effective_from=effective_from,
         effective_to=effective_to,
         trigger_kind=trigger_kind,
@@ -622,6 +704,8 @@ def _version_fields(document: DefinitionDocument) -> dict[str, Any]:
         "trigger_rule": document.trigger_rule,
         "due_rule": document.due_rule,
         "evidence_requirements": document.evidence_requirements,
+        "workflow_steps": document.workflow_steps,
+        "penalty_rules": document.penalty_rules,
         "default_owner_role": document.default_owner_role,
         "penalty_summary": document.penalty_summary,
         "effective_from": document.effective_from,

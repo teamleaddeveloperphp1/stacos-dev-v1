@@ -33,7 +33,7 @@ evidence:
 - key: ack
   label: Revised ITR-V
   kind: DOC
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: No separate penalty merely for a valid revision; interest / tax consequences continue
   to apply to the corrected return.
 effective_from: '1962-04-01'

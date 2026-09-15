@@ -473,14 +473,24 @@ def plan(
                         else ""
                     ),
                     owner_role=definition.default_owner_role,
-                    # An opt-in is never "confirmed": the rule did not decide
-                    # this, a person did, and the row has to say which.
-                    confirmed=verdict.result is V.TRUE and not forced,
-                    # Only when the rule is genuinely undecided. An opt-in is
-                    # unconfirmed because a person chose it, and there is nothing
-                    # to ask about that.
+                    # An opt-in is confirmed the moment it is added. "Unconfirmed"
+                    # means *nobody has decided yet*, and somebody has: a person
+                    # chose this deliberately, which is a stronger answer than any
+                    # rule could give. Asking them to confirm what they just asked
+                    # for is a question with one honest answer, and a calendar that
+                    # asks it reads as though it did not believe them. Where the
+                    # answer came from is still recorded, in ``reasons`` below —
+                    # ``confirmed`` says whether the question is settled, not who
+                    # settled it.
+                    confirmed=verdict.result is V.TRUE or forced,
+                    # Only when the rule is genuinely undecided *and* nobody has
+                    # decided in its place. An opt-in has nothing to ask about even
+                    # if the rule went looking for a fact: the person adding it has
+                    # already answered the only question that fact would settle.
                     missing_facts=(
-                        tuple(sorted(verdict.missing_facts)) if verdict.result is V.UNKNOWN else ()
+                        tuple(sorted(verdict.missing_facts))
+                        if verdict.result is V.UNKNOWN and not forced
+                        else ()
                     ),
                     reasons=(
                         (_OPT_IN_REASON, *verdict.reasons())

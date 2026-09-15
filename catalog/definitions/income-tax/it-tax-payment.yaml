@@ -32,7 +32,7 @@ evidence:
 - key: challan
   label: Challan
   kind: DOC
-default_owner_role: org-finance
+default_owner_role: org-owner
 penalty_summary: Interest, recovery action and other consequences depend on the underlying tax liability.
 effective_from: '1962-04-01'
 reviewed_by: Skorydov compliance desk
