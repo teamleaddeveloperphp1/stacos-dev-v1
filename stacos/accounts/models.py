@@ -299,9 +299,9 @@ class PendingVerification(models.Model):
     user_agent = models.CharField(max_length=512, blank=True)
     next_url = models.CharField(max_length=500, blank=True)
 
-    #: Unused — sign-up no longer collects an organisation name; that happens in
-    #: the onboarding wizard afterwards instead. Left in place rather than
-    #: migrated away in the same change that stopped writing to it.
+    #: Carried across the OTP step so the tenant can be provisioned the moment
+    #: both channels are verified — see ``accounts.views._complete_verification``.
+    #: Blank for every purpose except ``REGISTRATION``.
     organisation_name = models.CharField(max_length=200, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)

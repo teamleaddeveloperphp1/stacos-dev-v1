@@ -1,0 +1,42 @@
+{% load i18n %}
+{% comment %}
+  Step three, and the end of the guided setup: the same Compliance card as step
+  two, and the build button in the wizard footer where steps one and two put
+  their forward action.
+
+  The footer, not the card header. Two reasons, and the first is the one a user
+  feels: this is a wizard, the button that ends it belongs where the button that
+  advanced every previous step was, and step three used to be the only step
+  whose `wizard__actions` held an empty `<span></span>` on that side — the
+  primary action was a small secondary-looking button in a card header instead,
+  and people scrolled to the bottom looking for it and concluded there was none.
+
+  The second is structural. The card re-renders itself whenever a question is
+  answered or a pack is toggled (`_render_entity_preview` swaps
+  `#entity-obligations` outerHTML), so a button *inside* it has to carry its own
+  state back through every one of those round trips — which is how
+  `?finish_setup=1` came to be silently dropped, leaving a button that rebuilt
+  in place and ended nothing. Out here the button is outside the swapped region
+  and simply survives, so `finish_setup` is set once, in one place, by the
+  template that means it.
+
+  `?finish_setup=1` tells `stacos.obligations.views.rebuild_calendar` to answer
+  with `HX-Location` to the dashboard once the calendar exists, rather than
+  re-rendering the card.
+{% endcomment %}
+<c-page-header title="{{ entity.name }}"
+               subtitle="{% translate 'Ready when you are. You can always add more and rebuild later.' %}">
+</c-page-header>
+
+{% include "tenancy/setup/_fragments/steps.html" %}
+
+<div class="wizard wizard--wide">
+  {% include "obligations/_fragments/entity_summary.html" %}
+
+  <div class="wizard__actions">
+    <a class="btn btn-outline-secondary" href="{% url 'app:entity_setup_preview' entity.pk %}">
+      {% translate "Back" %}
+    </a>
+    {% include "obligations/_fragments/entity_build_button.html" with finish_setup=True button_class="btn" %}
+  </div>
+</div>

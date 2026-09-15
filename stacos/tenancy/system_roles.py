@@ -47,6 +47,8 @@ _VIEW_BASICS = frozenset(
         # the product's floor. A user who cannot read either has nothing to look
         # at, so both sit in the basic bundle rather than being granted upwards.
         "compliance.obligation.view",
+        "compliance.obligation.comment",
+        "compliance.library.view",
         "catalog.view",
         # Notifications are addressed to one person and grant nothing about
         # anyone else, so they sit in the floor bundle. A user who can sign in
@@ -88,6 +90,7 @@ _COMPLIANCE_APPROVER = _COMPLIANCE_PREPARER | {
     "compliance.obligation.defer",
     "compliance.obligation.dismiss",
     "compliance.obligation.dispute",
+    "compliance.library.manage",
 }
 
 
@@ -107,8 +110,6 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
         permissions=_ENTITY_STEWARD
         | {
             "tenancy.tenant.manage",
-            # So an owner can set up a second organisation from inside the product.
-            "tenancy.onboarding.start",
             "tenancy.entity.create",
             "tenancy.entity.archive",
             "tenancy.registration.manage",
@@ -134,53 +135,6 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "billing.view",
             "billing.subscription.manage",
         },
-    ),
-    RoleSpec(
-        code="org-compliance-manager",
-        name="Compliance Manager",
-        tenant_type=Tenant.Type.ORGANISATION,
-        rank=20,
-        description=(
-            "Works the checklist day to day: prepares filings, chases internal "
-            "departments. Cannot approve a filing or change who has access."
-        ),
-        permissions=_ENTITY_STEWARD
-        | {
-            "tenancy.entity.create",
-            "tenancy.registration.view",
-            "accounts.user.view",
-            "engagements.invite",
-            "finance.view",
-        }
-        # Prepares and chases, but does not approve — that is the whole point of
-        # the role, and the reason `_COMPLIANCE_APPROVER` is not used here.
-        | _COMPLIANCE_PREPARER
-        | {"compliance.obligation.close"},
-    ),
-    RoleSpec(
-        code="org-department-user",
-        name="Department User",
-        tenant_type=Tenant.Type.ORGANISATION,
-        rank=40,
-        description=(
-            "A plant, HR or admin user who closes internal compliances only — "
-            "fire, safety, POSH, licences. Sees nothing financial."
-        ),
-        # Note the absence of `finance.view`: this user sees an obligation's
-        # title and due date but every amount is masked.
-        permissions=_VIEW_BASICS
-        | {"tenancy.premises.manage"}
-        | _COMPLIANCE_PREPARER
-        | {"compliance.obligation.close"},
-        default_categories=("SAFETY_FIRE", "LABOUR", "ENVIRONMENT", "LICENSING"),
-    ),
-    RoleSpec(
-        code="org-viewer",
-        name="Viewer",
-        tenant_type=Tenant.Type.ORGANISATION,
-        rank=50,
-        description="Read-only access, for auditors and observers.",
-        permissions=_VIEW_BASICS | {"core.audit.view"},
     ),
     # -----------------------------------------------------------------------
     # Practice — a professional firm
@@ -221,44 +175,6 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             "billing.payment.record",
         },
     ),
-    RoleSpec(
-        code="practice-manager",
-        name="Manager",
-        tenant_type=Tenant.Type.PRACTICE,
-        rank=20,
-        description=(
-            "Owns a set of clients, assigns work to staff, reviews preparer "
-            "work and pushes filings for client approval."
-        ),
-        permissions=_ENTITY_STEWARD
-        | {
-            "accounts.user.view",
-            "engagements.invite",
-            "finance.view",
-        }
-        | _COMPLIANCE_APPROVER
-        | {
-            "practice.work.manage",
-            "practice.time.log",
-            "practice.time.view_all",
-            "practice.wip.view",
-        },
-    ),
-    RoleSpec(
-        code="practice-staff",
-        name="Staff / Article",
-        tenant_type=Tenant.Type.PRACTICE,
-        rank=40,
-        description=("Executes assigned work, prepares filings and logs time against it."),
-        permissions=_VIEW_BASICS
-        | {"tenancy.profile.edit", "tenancy.registration.view"}
-        | _COMPLIANCE_PREPARER
-        # The board, their own cards, and their own time. Not
-        # `practice.time.view_all`: seeing everybody's hours is a management
-        # view, not a peer-comparison tool. And not `practice.wip.view`: what the
-        # work is worth is a partner's question.
-        | {"practice.work.view", "practice.work.manage", "practice.time.log"},
-    ),
     # -----------------------------------------------------------------------
     # Dealer — a channel partner
     #
@@ -290,21 +206,6 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
                 "dealers.commission.view",
                 "dealers.account.manage",
                 "billing.view",
-            }
-        ),
-    ),
-    RoleSpec(
-        code="dealer-staff",
-        name="Dealer Staff",
-        tenant_type=Tenant.Type.DEALER,
-        rank=30,
-        description="Onboards and supports client accounts. No compliance data.",
-        permissions=frozenset(
-            {
-                "core.search",
-                "accounts.security.manage",
-                "tenancy.tenant.view",
-                "dealers.account.manage",
             }
         ),
     ),

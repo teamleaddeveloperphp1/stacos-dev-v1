@@ -47,6 +47,27 @@ logger = structlog.get_logger(__name__)
 
 __all__ = ["OWNER_ROLE_CODES", "provision_tenant", "record_fact", "unique_slug"]
 
+#: Profile facts that have their own typed column rather than living in the
+#: ``facts`` JSONB. ``women_employees_count`` and ``net_profit`` are registered,
+#: askable facts (``jurisdictions/facts.py``) with no matching column on
+#: ``EntityProfile`` — passing either to ``setattr(profile, key, value)`` would
+#: raise. Every other caller that builds an ``EntityProfile`` (the
+#: ``manufacturer`` test fixture, ``seed_dev``, ``catalog.personas``) already
+#: puts both in ``facts``, never as a column — this is the one place that
+#: distinction is decided.
+_PROFILE_COLUMNS = frozenset(
+    {
+        "aggregate_turnover",
+        "employee_count",
+        "contractor_count",
+        "paid_up_capital",
+        "net_worth",
+        "nic_code",
+        "sector",
+        "sub_sector",
+    }
+)
+
 #: The system role that owns a newly created tenant, per tenant type.
 #:
 #: Keyed by the plain string rather than the enum member, because callers pass
@@ -152,8 +173,6 @@ def record_fact(
     the failure ``EntityFactValue`` exists to prevent — and writing only the fact
     row leaves the current view unchanged for a fact that is not effective-dated.
 
-    Mirrors ``onboarding.services._write_fact_history``, which does the same for
-    a whole draft at once.
     """
     profile = EntityProfile.objects.filter(entity=entity).first()
     if profile is None:
@@ -195,8 +214,6 @@ def record_fact(
 
 
 def _profile_column_names() -> frozenset[str]:
-    from stacos.tenancy.onboarding.services import _PROFILE_COLUMNS
-
     return _PROFILE_COLUMNS
 
 

@@ -1,17 +1,18 @@
 """
-Where a signed-in user who belongs to no organisation ends up.
+Where a signed-in user with no usable workspace ends up.
 
-Somebody who has just signed up is authenticated, fully verified, and a member
-of nothing. Every page under ``/app/`` requires a permission only a member holds,
-so the first thing the product said to a brand-new customer was that they were
-not allowed in — a 403, on the dashboard, with the way out buried in a sidebar
-dropdown nobody was pointed at.
+STACOS provisions an organisation at sign-up now — see
+``tests/test_registration_provisioning.py`` — so "authenticated, verified, and a
+member of nothing" is a rare state rather than the ordinary one right after
+sign-up. It still has to be answered honestly rather than with a 403 that reads
+as a bug, and a brand-new organisation with no entity yet is now the ordinary
+state for a few seconds, so that gets its own answer too.
 
-``OrganisationGateMiddleware`` decides this once, for every page including the
-ones nobody has written yet. Two things have to be true of it at the same time,
-and only one of them is about the redirect:
+``OrganisationGateMiddleware`` decides all of this once, for every page
+including the ones nobody has written yet. Two things have to be true of it at
+the same time, and only one of them is about the redirect:
 
-* the user is taken somewhere useful rather than refused, and
+* the user is taken somewhere useful, or told plainly why they cannot be, and
 * **nothing has been widened**. A redirect looks exactly the same whether or not
   access leaked, so the tests below assert on the resolved scope and on what the
   scope can reach, not on the status code alone.
@@ -48,7 +49,12 @@ APP_PAGES = [
 
 @pytest.fixture
 def newcomer(db: object) -> User:
-    """Verified, signed in, and a member of nothing."""
+    """Verified, signed in, and a member of nothing.
+
+    Not the ordinary path any more — sign-up provisions a tenant — but still
+    reachable: an account created outside the ordinary flow, or one whose only
+    invitation has not been accepted.
+    """
     return User.objects.create_user(
         email="newcomer@example.com",
         password="correct-horse-battery",
@@ -90,29 +96,30 @@ def suspended_user(db: object, org: Tenant, org_owner: User) -> User:
 
 
 # ---------------------------------------------------------------------------
-# No membership at all — the setup flow, everywhere
+# No membership at all — told plainly, everywhere
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("path", APP_PAGES)
-def test_every_app_page_sends_a_member_less_user_to_setup(stranger: Client, path: str) -> None:
+def test_every_app_page_tells_a_member_less_user_there_is_no_organisation(
+    stranger: Client, path: str
+) -> None:
     response = stranger.get(path)
 
-    assert response.status_code == 302, f"{path} did not redirect"
-    assert response["Location"] == reverse("onboarding:identity")
+    assert response.status_code == 403, f"{path} did not answer with the no-organisation screen"
+    assert "no organisation" in response.content.decode().lower()
 
 
-def test_a_boosted_click_tells_the_browser_to_navigate(stranger: Client) -> None:
-    """A 302 here is followed by HTMX and swapped into #main.
+def test_a_boosted_click_still_gets_the_full_screen(stranger: Client) -> None:
+    """A 403 body swapped into ``#main`` would render the refusal inside a shell
 
-    The user would see the setup page's markup appear inside the shell of the
-    page they were refused from, or — for a fragment endpoint — nothing at all.
-    ``HX-Redirect`` is the instruction the browser acts on.
+    this session is not entitled to. ``navigate()`` to the same URL is what
+    forces a full document reload, the same trick ``_suspended`` uses.
     """
     response = stranger.get("/app/compliance/", headers=HTMX)
 
     assert response.status_code == 204
-    assert response["HX-Redirect"] == reverse("onboarding:identity")
+    assert response["HX-Redirect"] == "/app/compliance/"
     assert not response.content, "an HX-Redirect response must carry no body to swap"
 
 
@@ -121,7 +128,7 @@ def test_a_fragment_endpoint_is_gated_too(stranger: Client) -> None:
     response = stranger.get(reverse("notifications:panel"), headers=HTMX)
 
     assert response.status_code == 204
-    assert response["HX-Redirect"] == reverse("onboarding:identity")
+    assert response["HX-Redirect"] == reverse("notifications:panel")
 
 
 # ---------------------------------------------------------------------------
@@ -129,17 +136,16 @@ def test_a_fragment_endpoint_is_gated_too(stranger: Client) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_scope_is_still_exactly_one_permission(stranger: Client) -> None:
-    """The proof that matters, and the one a redirect cannot give.
+def test_the_scope_is_empty(stranger: Client) -> None:
+    """The proof that matters, and a status code alone cannot give it.
 
-    ``/app/entities/`` answers with a 302 whether the caller holds one permission
-    or every permission in the registry. What must not have changed is the scope
-    behind it.
+    There is no self-service route left for a member-less user to reach, so
+    unlike the old setup flow, this grants nothing at all.
     """
     scope = stranger.get("/app/entities/").wsgi_request.access_scope
 
     assert scope is not None
-    assert scope.permissions == frozenset({"tenancy.onboarding.start"})
+    assert scope.permissions == frozenset()
     assert scope.principal_tenant_id is None
     assert scope.readable_tenant_ids == frozenset()
     assert scope.writable_tenant_ids == frozenset()
@@ -148,7 +154,7 @@ def test_the_scope_is_still_exactly_one_permission(stranger: Client) -> None:
 def test_no_organisations_rows_are_reachable(stranger: Client, entity_a: Entity) -> None:
     """A member of nothing reaches nobody's data."""
     detail = stranger.get(reverse("app:entity_detail", args=[entity_a.pk]))
-    assert detail.status_code == 302, "the gate fires before the view"
+    assert detail.status_code == 403, "the gate fires before the view"
 
     scope = stranger.get("/app/").wsgi_request.access_scope
     assert scope is not None
@@ -163,24 +169,8 @@ def test_no_organisations_rows_are_reachable(stranger: Client, entity_a: Entity)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "name",
-    ["onboarding:identity", "onboarding:profile", "onboarding:preview"],
-)
-def test_the_setup_flow_itself_stays_reachable(stranger: Client, name: str) -> None:
-    """The one carve-out inside /app/. Without it the redirect is a loop."""
-    response = stranger.get(reverse(name))
-
-    assert response.status_code in {200, 302}
-    if response.status_code == 302:
-        # `profile` and `preview` bounce back within the wizard when the draft is
-        # empty. What they must never do is bounce to the gate's destination,
-        # which is what a loop looks like.
-        assert response["Location"].startswith("/app/start/")
-
-
 def test_signing_out_is_not_blocked_by_the_gate(stranger: Client) -> None:
-    """Being sent to setup must not trap somebody in it."""
+    """Being told there is no organisation must not trap somebody in it."""
     response = stranger.post(reverse("accounts:logout"))
 
     assert response.status_code == 302
@@ -192,11 +182,32 @@ def test_marketing_pages_are_untouched(stranger: Client) -> None:
 
 
 # ---------------------------------------------------------------------------
-# A member is unaffected
+# A tenant with no entity yet — sent to add one, everywhere, with one
+# carve-out for the page being redirected to
 # ---------------------------------------------------------------------------
 
 
-def test_a_member_still_lands_on_the_dashboard(client: Client, org_owner: User) -> None:
+def test_a_member_with_no_entity_yet_is_sent_to_add_one(client: Client, org_owner: User) -> None:
+    signed_in = sign_in(client, org_owner)
+
+    response = signed_in.get("/app/")
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("app:entity_create")
+
+
+def test_the_entity_create_page_itself_stays_reachable(client: Client, org_owner: User) -> None:
+    """The one carve-out once a tenant exists. Without it the redirect is a loop."""
+    signed_in = sign_in(client, org_owner)
+
+    response = signed_in.get(reverse("app:entity_create"))
+
+    assert response.status_code == 200
+
+
+def test_a_member_with_an_entity_lands_on_the_dashboard(
+    client: Client, org_owner: User, entity_a: Entity
+) -> None:
     signed_in = sign_in(client, org_owner)
 
     response = signed_in.get("/app/")
@@ -204,30 +215,15 @@ def test_a_member_still_lands_on_the_dashboard(client: Client, org_owner: User) 
     assert response.status_code == 200
 
 
-def test_a_member_can_still_start_a_second_organisation(client: Client, org_owner: User) -> None:
-    """The sidebar dropdown's route, which must keep working exactly as it did.
-
-    The gate cannot fire for them — they have a tenant — and `org-owner` carries
-    `tenancy.onboarding.start` for precisely this.
-    """
-    signed_in = sign_in(client, org_owner)
-
-    assert signed_in.get(reverse("onboarding:identity")).status_code == 200
-
-
 # ---------------------------------------------------------------------------
 # Suspended: a different answer, on purpose
 # ---------------------------------------------------------------------------
 
 
-def test_a_suspended_member_is_told_so_rather_than_sent_to_setup(
+def test_a_suspended_member_is_told_so_rather_than_sent_anywhere_else(
     client: Client, suspended_user: User, org: Tenant
 ) -> None:
-    """Suspension is a decision somebody took. It is not an invitation to start again.
-
-    Sent into setup, this user would create a fresh organisation and carry on —
-    which would make a suspension a suggestion.
-    """
+    """Suspension is a decision somebody took. It is not an invitation to add an entity."""
     signed_in = sign_in(client, suspended_user)
 
     response = signed_in.get("/app/")
@@ -236,7 +232,7 @@ def test_a_suspended_member_is_told_so_rather_than_sent_to_setup(
     assert response.status_code == 403
     assert "suspended" in body.lower()
     assert org.name in body
-    assert reverse("onboarding:identity") not in body, "an escape route into setup"
+    assert reverse("app:entity_create") not in body, "an escape route past the suspension"
 
 
 def test_a_suspended_member_can_still_sign_out(client: Client, suspended_user: User) -> None:
@@ -245,20 +241,14 @@ def test_a_suspended_member_can_still_sign_out(client: Client, suspended_user: U
     assert signed_in.post(reverse("accounts:logout")).status_code == 302
 
 
-def test_a_suspended_member_cannot_create_an_organisation(
+def test_a_suspended_member_cannot_reach_entity_create_either(
     client: Client, suspended_user: User
 ) -> None:
-    """The escape hatch, closed twice over.
-
-    ``/app/start/`` is exempt from the gate's redirect so that a member-less user
-    can reach it — so the exemption is checked *after* suspension, and the scope
-    resolver withholds ``tenancy.onboarding.start`` as well. Either alone would
-    hold today; both is what makes it survive somebody rearranging the
-    middleware.
-    """
+    """The carve-out that exists for a healthy, entity-less tenant does not apply
+    to a suspended one — suspension is checked first, unconditionally."""
     signed_in = sign_in(client, suspended_user)
 
-    response = signed_in.get(reverse("onboarding:identity"))
+    response = signed_in.get(reverse("app:entity_create"))
 
     assert response.status_code == 403
     scope = response.wsgi_request.access_scope
@@ -295,18 +285,20 @@ def test_suspension_in_one_organisation_does_not_affect_another(
     signed_in = sign_in(client, suspended_user)
     response = signed_in.get("/app/")
 
-    assert response.status_code == 200
+    # `other_org` owns no entity in this test, so the second organisation's own
+    # gate — not a refusal — is what fires next.
+    assert response.status_code == 302
+    assert response["Location"] == reverse("app:entity_create")
     assert response.wsgi_request.tenant == other_org
 
 
-def test_an_unaccepted_invitation_goes_to_setup_not_the_refusal(
+def test_an_unaccepted_invitation_is_not_told_it_is_suspended(
     client: Client, org: Tenant, org_owner: User
 ) -> None:
     """An invitation nobody has accepted is not a revocation.
 
     Such a user has no active membership either, and lumping the two together
-    would show somebody who has done nothing wrong a screen telling them their
-    access was suspended.
+    would show somebody who has done nothing wrong the suspension screen.
     """
     invitee = User.objects.create_user(
         email="invited@example.com",
@@ -329,6 +321,8 @@ def test_an_unaccepted_invitation_goes_to_setup_not_the_refusal(
 
     signed_in = sign_in(client, invitee)
     response = signed_in.get("/app/")
+    body = response.content.decode()
 
-    assert response.status_code == 302
-    assert response["Location"] == reverse("onboarding:identity")
+    assert response.status_code == 403
+    assert "no organisation" in body.lower()
+    assert "suspended" not in body.lower()

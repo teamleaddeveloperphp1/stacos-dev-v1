@@ -1,13 +1,14 @@
 """
-Sign-up, and the account it is supposed to leave behind.
+Sign-up, and the organisation it is supposed to leave behind.
 
 Registration used to collect one undivided name, one number, and a password with
 nothing to check it against. A typo in the password locked somebody out of the
 account they had just made, and they found out at the next sign-in.
 
-Organisation setup happens afterwards, in the onboarding wizard — see
-``tests/wave1/test_onboarding.py`` — not at sign-up. Registration itself never
-creates a tenant.
+STACOS is one identity per user, decided here: the organisation name is
+collected at sign-up, and the tenant is provisioned the moment both OTP
+channels are proven (``accounts.views._complete_verification``) — there is no
+separate "set up an organisation" step afterwards.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ pytestmark = pytest.mark.django_db
 EXPECTED_FIELD_ORDER = [
     "first_name",
     "last_name",
+    "organisation_name",
     "email",
     "phone",
     "password",
@@ -42,6 +44,7 @@ def payload(**overrides: str) -> dict[str, str]:
     data = {
         "first_name": "Asha",
         "last_name": "Founder",
+        "organisation_name": "Founder Textiles",
         "email": "asha@example.com",
         "phone": "9876500002",
         "password": "a-long-enough-password",
@@ -122,22 +125,64 @@ def test_the_name_halves_are_stored_and_composed(client: Client) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Provisioning happens in the onboarding wizard now, not at sign-up
+# Provisioning happens on verification, not later
 # ---------------------------------------------------------------------------
 
 
-def test_registration_never_creates_a_tenant(client: Client) -> None:
+def test_a_missing_organisation_name_creates_nothing(client: Client) -> None:
+    response = client.post(reverse("accounts:register"), payload(organisation_name=""))
+
+    assert response.status_code == 200
+    assert not User.objects.filter(email="asha@example.com").exists()
+    assert not mail.outbox, "a verification code went out for a sign-up that failed"
+
+
+def test_verification_provisions_the_named_organisation(client: Client) -> None:
     client.post(reverse("accounts:register"), payload())
     response = _verify(client)
     assert response.status_code == 302
 
     with platform_scope(reason="test"):
-        assert Tenant.objects.count() == 0
-        assert Membership.objects.count() == 0
+        tenant = Tenant.objects.get()
+        assert tenant.name == "Founder Textiles"
+        assert tenant.type == Tenant.Type.ORGANISATION
 
-    # They are sent to setup rather than refused. See
-    # tests/security/test_organisation_gate.py for the whole of that behaviour,
-    # and tests/wave1/test_onboarding.py for what the wizard does from here.
+        membership = Membership.objects.get()
+        assert membership.tenant_id == tenant.id
+        assert membership.user == User.objects.get(email="asha@example.com")
+        assert membership.status == Membership.Status.ACTIVE
+        assert membership.role.code == "org-owner"
+
+    # A tenant now, but no entity yet — so the gate sends them to add one
+    # rather than to a "set up an organisation" step that no longer exists.
+    # See tests/security/test_organisation_gate.py for the whole of that
+    # behaviour.
     response = client.get("/app/")
     assert response.status_code == 302
-    assert response["Location"] == reverse("onboarding:identity")
+    assert response["Location"] == reverse("app:entity_create")
+
+
+def test_provisioning_is_idempotent_on_membership(client: Client) -> None:
+    """Guards the idempotency check in ``_provision_signup_tenant``.
+
+    A second call for the same user must not be able to double-provision — the
+    guard is "does this user already have a membership", not "has this
+    verification been used", so it stays correct even if this handler is ever
+    reached twice for the same verified user.
+    """
+    client.post(reverse("accounts:register"), payload())
+    _verify(client)
+
+    from stacos.accounts.models import PendingVerification
+    from stacos.accounts.views import _provision_signup_tenant
+
+    user = User.objects.get(email="asha@example.com")
+    verification = PendingVerification.objects.filter(user=user).latest("created_at")
+
+    class _FakeRequest:
+        session: dict[str, str] = {}
+
+    _provision_signup_tenant(_FakeRequest(), user, verification)  # type: ignore[arg-type]
+
+    with platform_scope(reason="test"):
+        assert Tenant.objects.filter(name="Founder Textiles").count() == 1

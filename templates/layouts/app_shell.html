@@ -40,6 +40,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% translate "STACOS" %}{% endblock %}</title>
   <meta name="robots" content="noindex, nofollow">
+  {% include "layouts/_fonts.html" %}
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
   <script defer src="{% static 'js/app.js' %}"></script>
@@ -78,7 +79,7 @@
         <span>STACOS</span>
       </a>
 
-      <c-tenant-switcher :tenant="current_tenant" :memberships="nav_memberships" />
+      <c-tenant-switcher :tenant="current_tenant" />
 
       <nav class="app-nav" aria-label="{% translate 'Main' %}">
         <div class="app-nav__group">
@@ -102,6 +103,12 @@
               {{ overdue_count|default:"" }}
             </span>
           </a>
+          {% if "compliance.library.view" in access_scope.permissions %}
+            <a class="app-nav__link" href="{% url 'compliance:library_picker' %}" preload data-nav-match="/app/compliance/library/">
+              <c-icon name="folder" />
+              <span>{% translate "Compliance library" %}</span>
+            </a>
+          {% endif %}
         </div>
 
         {% comment %}

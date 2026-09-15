@@ -1,0 +1,58 @@
+{% load i18n %}
+{% comment %}
+  Step one of the guided setup: what the Add Entity screen already recorded,
+  and anywhere else to add one it did not cover — a second GSTIN in another
+  state, say. Reuses the exact same table and modal the ordinary entity
+  detail page uses (`tenancy/_fragments/registration_rows.html`,
+  `app:registration_create`), so nothing here is a second implementation of
+  either.
+
+  "Next" is always enabled. An entity with zero registrations is unusual but
+  not invalid — some genuinely have none — and the preview step ahead says so
+  honestly (`stacos.obligations.preview.for_preview`) rather than this step
+  refusing to let anyone past it.
+{% endcomment %}
+<c-page-header title="{{ entity.name }}"
+               subtitle="{% translate 'Set up compliance for this entity, one step at a time.' %}">
+</c-page-header>
+
+{% include "tenancy/setup/_fragments/steps.html" %}
+
+<div class="wizard">
+  <div class="data-table mb-4">
+    <div class="data-table__toolbar">
+      <strong class="small">{% translate "Registrations" %}</strong>
+      <span class="text-muted ms-auto" style="font-size:.75rem">
+        {% translate "Each one generates its own filings" %}
+      </span>
+      {% if "tenancy.registration.manage" in access_scope.permissions %}
+        <button class="btn btn-sm btn-outline-secondary"
+                hx-get="{% url 'app:registration_create' entity.pk %}"
+                hx-target="#modal-container"
+                hx-swap="innerHTML">
+          {% translate "Add" %}
+        </button>
+      {% endif %}
+    </div>
+    <div class="data-table__scroll">
+      <table class="table mb-0">
+        <thead>
+          <tr>
+            <th>{% translate "Type" %}</th>
+            <th>{% translate "Number" %}</th>
+            <th>{% translate "Jurisdiction" %}</th>
+            <th>{% translate "Valid" %}</th>
+          </tr>
+        </thead>
+        {% include "tenancy/_fragments/registration_rows.html" %}
+      </table>
+    </div>
+  </div>
+
+  <div class="wizard__actions">
+    <span></span>
+    <a class="btn btn-primary" href="{% url 'app:entity_setup_preview' entity.pk %}">
+      {% translate "Next: what applies to you" %}
+    </a>
+  </div>
+</div>

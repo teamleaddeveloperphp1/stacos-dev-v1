@@ -1,0 +1,11 @@
+{% load crispy_forms_tags %}
+{% comment %}
+  The identifier fields for whichever entity type is currently selected.
+  Rendered inline by `entity_form.html` on first load, and re-rendered whole
+  by `entity_registration_fields` (views.py) every time `entity_type` changes —
+  the swap target itself (`#entity-registration-fields`, with `aria-live`)
+  lives in `entity_form.html`, not here, so this partial is just the fields.
+{% endcomment %}
+{% if reg_form and reg_form.fields %}
+  {% crispy reg_form %}
+{% endif %}

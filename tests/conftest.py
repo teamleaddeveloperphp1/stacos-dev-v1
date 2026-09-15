@@ -164,11 +164,17 @@ def _make_entity(tenant: Tenant, name: str, code: str) -> Entity:
         entity = Entity.objects.create(
             tenant=tenant,
             name=name,
+            # Complete, because `EntityForm` makes every one of its fields
+            # mandatory: an entity that reached the database through the UI
+            # always has a legal name and a registered office, so a fixture
+            # missing them would describe a state the product cannot produce.
+            legal_name=name.replace("Pvt Ltd", "Private Limited"),
             short_code=code,
             entity_type="PVT_LTD",
             country="IN",
             incorporation_date=date(2015, 4, 1),
             registered_office_state="IN-GJ",
+            registered_office_address="1 Ashram Road, Ahmedabad",
         )
         EntityProfile.objects.create(
             tenant=tenant,
@@ -227,11 +233,13 @@ def manufacturer(org: Tenant) -> Entity:
         entity = Entity.objects.create(
             tenant=org,
             name="Shreeji Textiles Pvt Ltd",
+            legal_name="Shreeji Textiles Private Limited",
             short_code="STPL",
             entity_type="PVT_LTD",
             country="IN",
             incorporation_date=date(2011, 6, 14),
             registered_office_state="IN-GJ",
+            registered_office_address="Plot 14, GIDC Estate, Ahmedabad",
         )
         EntityProfile.objects.create(
             tenant=org,
@@ -367,7 +375,7 @@ def rival_owner(other_org: Tenant) -> User:
 @pytest.fixture
 def practice_staff(practice: Tenant) -> User:
     return _make_member(
-        practice, "staff@mehta.example", "Nikhil Mehta", "+919800000003", "practice-staff"
+        practice, "staff@mehta.example", "Nikhil Mehta", "+919800000003", "practice-partner"
     )
 
 

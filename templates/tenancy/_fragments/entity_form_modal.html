@@ -35,27 +35,7 @@
         </div>
 
         <div class="modal-body">
-          {% comment %}
-            Onboarding copy, and only that: someone correcting a typo has
-            already been told what comes next.
-          {% endcomment %}
-          {% if not entity %}
-            <p class="text-muted small mb-4">
-              {% blocktranslate %}
-              Just the essentials for now. Turnover, headcount, registrations and
-              premises come next — those are what we use to work out which
-              obligations apply.
-              {% endblocktranslate %}
-            </p>
-          {% endif %}
-
-          {% if form.non_field_errors %}
-            <div class="alert alert-danger py-2 small" role="alert">
-              {% for error in form.non_field_errors %}{{ error }}{% endfor %}
-            </div>
-          {% endif %}
-
-          {% crispy form %}
+          {% include "tenancy/_fragments/entity_form.html" %}
         </div>
 
         <div class="modal-footer">

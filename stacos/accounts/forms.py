@@ -6,7 +6,7 @@ from typing import Any
 
 import phonenumbers
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Layout, Submit
+from crispy_forms.layout import Field, Layout, Submit
 from django import forms
 from django.contrib.auth import authenticate
 from django.utils.translation import gettext_lazy as _
@@ -14,6 +14,11 @@ from django.utils.translation import gettext_lazy as _
 from stacos.accounts.models import User
 
 __all__ = ["DualOtpForm", "LoginForm", "RegistrationForm", "StepUpForm"]
+
+# A password field with a show/hide toggle, in place of crispy's default
+# bootstrap5/field.html. Referenced by path (not the field class) because
+# crispy resolves layout templates through the standard template loader.
+_MASKED_FIELD_TEMPLATE = "accounts/_password_field.html"
 
 
 def normalise_phone(raw: str, *, default_region: str = "IN") -> str:
@@ -52,15 +57,22 @@ class RegistrationForm(_CrispyForm):
     ``phone`` is the WhatsApp channel the second verification code goes to and
     is a hard requirement (``CLAUDE.md`` rule 5).
 
-    Organisation setup is not collected here — someone signing up with no
-    organisation yet is sent through the onboarding wizard afterwards, which asks
-    for the name there instead.
+    Collects the organisation name too: STACOS is one identity per user, decided
+    here, not a set of organisations picked later. There is no "set up an
+    organisation" step afterwards — the name typed here is what
+    ``accounts.views._complete_verification`` hands to ``provision_tenant`` the
+    moment both OTP channels are satisfied.
     """
 
     submit_label = _("Create account")
 
     first_name = forms.CharField(label=_("First name"), max_length=100)
     last_name = forms.CharField(label=_("Last name"), max_length=100)
+    organisation_name = forms.CharField(
+        label=_("Organisation name"),
+        max_length=200,
+        help_text=_("Your business or firm's name. You can add entities under it next."),
+    )
     email = forms.EmailField(label=_("Work email"))
     phone = forms.CharField(
         label=_("WhatsApp number"),
@@ -84,10 +96,11 @@ class RegistrationForm(_CrispyForm):
         self.helper.layout = Layout(
             "first_name",
             "last_name",
+            "organisation_name",
             "email",
             "phone",
-            "password",
-            "confirm_password",
+            Field("password", template=_MASKED_FIELD_TEMPLATE),
+            Field("confirm_password", template=_MASKED_FIELD_TEMPLATE),
         )
 
     def clean(self) -> dict[str, Any]:
@@ -129,6 +142,7 @@ class LoginForm(_CrispyForm):
         self.request = request
         self.user: User | None = None
         super().__init__(*args, **kwargs)
+        self.helper.layout = Layout("email", Field("password", template=_MASKED_FIELD_TEMPLATE))
 
     def clean(self) -> dict[str, Any]:
         super().clean()
@@ -205,6 +219,7 @@ class StepUpForm(_CrispyForm):
     def __init__(self, *args: Any, user: User | None = None, **kwargs: Any) -> None:
         self.user = user
         super().__init__(*args, **kwargs)
+        self.helper.layout = Layout(Field("password", template=_MASKED_FIELD_TEMPLATE))
 
     def clean_password(self) -> str:
         password = self.cleaned_data["password"]

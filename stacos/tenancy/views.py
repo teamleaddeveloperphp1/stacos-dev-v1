@@ -11,10 +11,10 @@ from __future__ import annotations
 from typing import Any, cast
 from uuid import UUID
 
-from django.contrib import messages
 from django.contrib.postgres.search import TrigramSimilarity
+from django.db import transaction
 from django.db.models import Count, Q, QuerySet
-from django.forms.models import model_to_dict
+from django.forms.models import construct_instance, model_to_dict
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -23,14 +23,21 @@ from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView
 
 from stacos.core.audit import diff_fields, record_event
-from stacos.core.htmx import Fragment, HtmxFragmentMixin, Toast, oob
+from stacos.core.htmx import Fragment, HtmxFragmentMixin, Toast, is_fragment_request, navigate, oob
 from stacos.core.models import AuditAction
-from stacos.core.permissions import RequirePermissionMixin, require_permission
-from stacos.core.rls import rls_bootstrap
+from stacos.core.permissions import RequirePermissionMixin, check_permissions, require_permission
 from stacos.core.typing import current_user
-from stacos.tenancy.forms import EntityForm, PremisesForm, RegistrationForm
-from stacos.tenancy.models import Entity, EntityProfile, Membership
-from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
+from stacos.jurisdictions.registration_requirements import get_registration_requirements
+from stacos.obligations.models import MaterialisationRun
+from stacos.tenancy.forms import (
+    EntityForm,
+    EntityProfileForm,
+    EntityRegistrationFieldsForm,
+    PremisesForm,
+    RegistrationForm,
+    registration_field_name,
+)
+from stacos.tenancy.models import Entity, EntityProfile, EntityRegistration
 
 #: The one modal that both creates and edits an entity.
 ENTITY_FORM_TEMPLATE = "tenancy/_fragments/entity_form_modal.html"
@@ -119,6 +126,14 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         )
     )
 
+    # Counted here rather than left to `context["entity_count"]` below, so a
+    # brand-new organisation is sent to add its first entity before any of the
+    # aggregate queries beneath this run for a register that does not exist yet
+    # — and so that count costs one query either way, not two.
+    entity_count = entities.count()
+    if entity_count == 0:
+        return navigate(request, reverse("app:entity_create"))
+
     # Everything below defaults to every entity in the tenant combined. Picking
     # one from `?entity=` narrows every breakdown to it — the same `entity_ids`
     # parameter each query function already takes for exactly this reason.
@@ -201,7 +216,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     calendar_url = reverse("compliance:calendar")
 
     context = {
-        "entity_count": entities.count(),
+        "entity_count": entity_count,
         "entities": entities_display,
         "entity_options": entity_options,
         "selected_entity": selected_entity,
@@ -318,55 +333,6 @@ class EntityListView(RequirePermissionMixin, HtmxFragmentMixin, ListView[Entity]
         return context
 
 
-@require_permission("tenancy.tenant.view")
-@require_http_methods(["POST"])
-def switch_tenant(request: HttpRequest) -> HttpResponse:
-    """Change which tenant the user is working in.
-
-    Filtered by ``user`` so a forged tenant id in the form cannot reach a tenant
-    the user is not a member of — the switcher is a convenience, never an
-    authorisation boundary.
-
-    ``rls_bootstrap`` is load-bearing, and its absence is why switching appeared
-    to be broken rather than merely restricted. ``objects_unscoped`` lifts the
-    *ORM* tenant filter and nothing else; PostgreSQL's Row-Level Security is
-    still pointed at the tenant the user is currently in, because
-    ``ScopeMiddleware`` published that set for this transaction. The membership
-    row being switched *to* therefore belongs to a tenant the policy excludes,
-    the lookup returns nothing, and a user who genuinely belongs to both
-    organisations is told they are not a member of the second one. Both layers
-    have to be satisfied, which is the whole point of having two.
-
-    The transaction the setting is local to is already open — ``ScopeMiddleware``
-    opened it. Same bootstrap as ``scope_resolver._select_membership`` and the
-    mobile ``/me/`` endpoint, and for the same reason.
-    """
-    tenant_id = request.POST.get("tenant_id", "")
-    with rls_bootstrap():
-        membership = (
-            Membership.objects_unscoped.filter(
-                user=request.user, tenant_id=tenant_id, status=Membership.Status.ACTIVE
-            )
-            .select_related("tenant")
-            .first()
-        )
-
-    if membership is None:
-        messages.error(request, _("You are not a member of that organisation."))
-        return redirect("/app/")
-
-    request.session[SESSION_TENANT_KEY] = str(membership.tenant_id)
-
-    if getattr(request, "htmx", False):
-        # A tenant switch changes every part of the shell, so the honest response
-        # is a full navigation rather than a partial swap.
-        response = HttpResponse(status=204)
-        response["HX-Redirect"] = "/app/"
-        return response
-
-    return redirect("/app/")
-
-
 #: Fixed destinations the palette always offers, filtered by what was typed.
 #:
 #: The fourth element is the chord hint the palette renders as ``<kbd>`` keys, so
@@ -421,37 +387,174 @@ def palette_search(request: HttpRequest) -> HttpResponse:
     )
 
 
+def _save_profile_fields(
+    request: HttpRequest, profile: EntityProfile, profile_form: EntityProfileForm
+) -> None:
+    """Save turnover/employees and audit only what actually changed.
+
+    Mirrors ``entity_edit``'s own no-op-records-nothing convention: an edit
+    that leaves both fields the same produces no audit entry.
+
+    ``profile_form`` was validated against a throwaway blank instance — there
+    is no real ``EntityProfile`` to bind it to until the entity it belongs to
+    has been saved (create) or fetched (edit) — so its cleaned values are
+    copied onto the real ``profile`` explicitly with ``construct_instance``
+    rather than by reassigning ``profile_form.instance`` and calling
+    ``.save()``, which would silently save ``profile`` unchanged: the cleaned
+    data lives on the form's *original* instance, not on one swapped in after
+    the fact.
+    """
+    fields = ["aggregate_turnover", "employee_count"]
+    original = model_to_dict(profile, fields=fields)
+    construct_instance(profile_form, profile, fields=fields)
+    profile.full_clean(exclude=["tenant", "entity"])
+    profile.save()
+    before, after = diff_fields(profile, fields=fields, original=original)
+    if before or after:
+        record_event(
+            action=AuditAction.UPDATE,
+            actor=current_user(request),
+            obj=profile,
+            before=before,
+            after=after,
+        )
+
+
+def _save_registration_fields(
+    request: HttpRequest, entity: Entity, reg_form: EntityRegistrationFieldsForm
+) -> None:
+    """Upsert one ``EntityRegistration`` row per changed identifier field, at
+    ``jurisdiction=""`` — the screen's single inline slot for that type (a
+    second GSTIN in another state is still added through the separate
+    "Add Registration" modal). A field left blank archives its existing row
+    rather than deleting it; a field for a code no longer applicable to the
+    chosen entity type is neither touched nor asked about here at all.
+
+    Diffed against what is already on file first, and a no-op does nothing:
+    re-submitting a value that has not changed (which the whole-form
+    round-trip means happens on *every* edit that touches this section at
+    all) must not write a redundant audit entry, and — since
+    ``tenancy.registration.manage`` is sensitive — must not demand a step-up
+    re-authentication for a save that would not actually change anything.
+    """
+    existing = {
+        registration.type: registration
+        for registration in entity.registrations.filter(jurisdiction="", archived_at__isnull=True)
+    }
+
+    to_write = {
+        code: value
+        for code, value in reg_form.values().items()
+        if existing.get(code) is None or existing[code].value != value
+    }
+    to_clear = {code for code in reg_form.cleared_codes() if code in existing}
+
+    if not to_write and not to_clear:
+        return
+
+    # The step-up challenge ``registration_create`` already demands is
+    # enforced here too, right before the write it actually guards — not at
+    # `entity_registration_fields`, which only ever echoes values back
+    # (`.view`, not sensitive), and not merely because the section was shown.
+    check_permissions(request, ["tenancy.registration.manage"])
+    actor = current_user(request)
+
+    for code, value in to_write.items():
+        registration = existing.get(code) or EntityRegistration(
+            entity=entity, tenant=entity.tenant, type=code, jurisdiction=""
+        )
+        created = registration.pk is None
+        registration.value = value
+        registration.full_clean(exclude=["tenant", "entity"])
+        registration.save()
+        record_event(
+            action=AuditAction.CREATE if created else AuditAction.UPDATE,
+            actor=actor,
+            obj=registration,
+        )
+
+    for code in to_clear:
+        registration = existing[code]
+        registration.archive(reason="Cleared from the Add/Edit Entity screen")
+        record_event(action=AuditAction.UPDATE, actor=actor, obj=registration)
+
+
 @require_permission("tenancy.entity.create")
 @require_http_methods(["GET", "POST"])
 def entity_create(request: HttpRequest) -> HttpResponse:
-    """Create an entity, in a modal loaded on demand.
+    """Create an entity — a modal for a tenant that already has one, a page for
+    a tenant that does not.
 
-    The two render paths differ here in a way worth noting: a GET returns just
-    the modal markup for injection, and a successful POST returns the new row
-    plus out-of-band updates for the sidebar counter and a toast — one request,
-    three regions, no refetch.
+    Two different shapes for the same form, not two render paths of one shape.
+    A tenant with at least one entity reaches this from the entity list's
+    "+ Add" button: the HTMX modal fragment, closed by the row it prepends into
+    the list underneath it. A tenant with none is redirected straight here by
+    ``OrganisationGateMiddleware`` — there is no list underneath to return to,
+    so that caller gets the plain full page every other view in the product
+    renders on a direct GET, and a successful POST redirects to the entity
+    just created rather than returning an OOB swap nothing on the page is
+    listening for.
 
-    A validation failure re-renders **only the form fragment** with a 422, so the
-    modal stays open and the user keeps what they typed.
+    ``is_fragment_request`` is what tells the two apart, the same test every
+    dual-render view in the project uses. A validation failure on the fragment
+    path re-renders **only the form fragment** with a 422, so the modal stays
+    open and the user keeps what they typed; on the page path it re-renders the
+    whole page with the bound form, same as any other page.
     """
     tenant = getattr(request, "tenant", None)
     if tenant is None:
         raise Http404
 
-    form = EntityForm(request.POST or None)
+    scope = request.access_scope  # type: ignore[attr-defined]
+    can_manage_registrations = scope.has_permission("tenancy.registration.manage")
+    can_edit_profile = scope.has_permission("tenancy.profile.edit")
 
-    if request.method == "POST" and form.is_valid():
-        entity = form.save(commit=False)
-        entity.tenant = tenant
-        entity.country = tenant.country
-        entity.full_clean(exclude=["tenant"])
-        entity.save()
+    form = EntityForm(request.POST or None, can_manage_registrations=can_manage_registrations)
+    fragment = is_fragment_request(request)
 
-        # An entity with no profile has nothing for the compliance engine to
-        # evaluate, so one is always created alongside it.
-        EntityProfile.objects.get_or_create(entity=entity, defaults={"tenant": tenant})
+    # The identifier fields depend on the entity type just picked — absent
+    # entirely (rather than an empty form) until one is chosen, so nothing
+    # shows before the user has told the screen what to show.
+    entity_type = request.POST.get("entity_type", "") if request.method == "POST" else ""
+    reg_form = None
+    if can_manage_registrations and entity_type:
+        requirements = get_registration_requirements(tenant.country, entity_type)
+        reg_form = EntityRegistrationFieldsForm(request.POST or None, requirements=requirements)
 
-        record_event(action=AuditAction.CREATE, actor=current_user(request), obj=entity)
+    profile_form = EntityProfileForm(request.POST or None) if can_edit_profile else None
+
+    forms_valid = form.is_valid()
+    if reg_form is not None:
+        forms_valid = reg_form.is_valid() and forms_valid
+    if profile_form is not None:
+        forms_valid = profile_form.is_valid() and forms_valid
+
+    if request.method == "POST" and forms_valid:
+        with transaction.atomic():
+            entity = form.save(commit=False)
+            entity.tenant = tenant
+            entity.country = tenant.country
+            entity.full_clean(exclude=["tenant"])
+            entity.save()
+
+            # An entity with no profile has nothing for the compliance engine to
+            # evaluate, so one is always created alongside it.
+            profile, _created = EntityProfile.objects.get_or_create(
+                entity=entity, defaults={"tenant": tenant}
+            )
+            if profile_form is not None:
+                _save_profile_fields(request, profile, profile_form)
+
+            record_event(action=AuditAction.CREATE, actor=current_user(request), obj=entity)
+
+            if reg_form is not None:
+                _save_registration_fields(request, entity, reg_form)
+
+        if not fragment:
+            # Straight into the guided setup flow, not the entity page or the
+            # list — `entity_detail` would only redirect here itself, since
+            # this entity has no calendar yet (see its own docstring).
+            return redirect("app:entity_setup_registrations", pk=entity.pk)
 
         remaining = Entity.objects.filter(archived_at__isnull=True).count()
 
@@ -472,13 +575,23 @@ def entity_create(request: HttpRequest) -> HttpResponse:
             triggers={"stacos:modal-close": True},
         )
 
+    context = {
+        "form": form,
+        "tenant": tenant,
+        "reg_form": reg_form,
+        "profile_form": profile_form,
+        "can_manage_registrations": can_manage_registrations,
+    }
+
+    if not fragment:
+        return render(request, "tenancy/entity_create.html", context)
+
     status = 422 if request.method == "POST" else 200
     return render(
         request,
         ENTITY_FORM_TEMPLATE,
         {
-            "form": form,
-            "tenant": tenant,
+            **context,
             # One template serves both create and edit. What differs is where it
             # posts and what it swaps, so the view says — a conditional in the
             # markup would have to know about both, and would be read wrong the
@@ -518,26 +631,73 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
     if entity is None:
         raise Http404
 
+    scope = request.access_scope  # type: ignore[attr-defined]
+    can_manage_registrations = scope.has_permission("tenancy.registration.manage")
+    can_edit_profile = scope.has_permission("tenancy.profile.edit")
+
     # Snapshot before the form binds. `EntityForm(..., instance=entity)` writes
     # the submitted values onto the instance during `is_valid()`, so by the time
     # there is something to compare against, the "before" side is already gone.
     original = model_to_dict(entity, fields=AUDITED_ENTITY_FIELDS)
 
-    form = EntityForm(request.POST or None, instance=entity)
+    form = EntityForm(
+        request.POST or None, instance=entity, can_manage_registrations=can_manage_registrations
+    )
 
-    if request.method == "POST" and form.is_valid():
-        entity = form.save(commit=False)
-        entity.full_clean(exclude=["tenant"])
-        entity.save()
-
-        before, after = diff_fields(entity, fields=AUDITED_ENTITY_FIELDS, original=original)
-        record_event(
-            action=AuditAction.UPDATE,
-            actor=current_user(request),
-            obj=entity,
-            before=before,
-            after=after,
+    entity_type = (
+        request.POST.get("entity_type", "") if request.method == "POST" else entity.entity_type
+    )
+    reg_form = None
+    if can_manage_registrations and entity_type:
+        requirements = get_registration_requirements(entity.country, entity_type)
+        initial = None
+        if request.method != "POST":
+            saved = {
+                r.type: r.value
+                for r in entity.registrations.filter(jurisdiction="", archived_at__isnull=True)
+            }
+            initial = {registration_field_name(r.code): saved.get(r.code, "") for r in requirements}
+        reg_form = EntityRegistrationFieldsForm(
+            request.POST or None, requirements=requirements, initial=initial
         )
+
+    profile = None
+    profile_form = None
+    if can_edit_profile:
+        profile, _created = EntityProfile.objects.get_or_create(
+            entity=entity, defaults={"tenant": entity.tenant}
+        )
+        profile_form = EntityProfileForm(request.POST or None, instance=profile)
+
+    forms_valid = form.is_valid()
+    if reg_form is not None:
+        forms_valid = reg_form.is_valid() and forms_valid
+    if profile_form is not None:
+        forms_valid = profile_form.is_valid() and forms_valid
+
+    if request.method == "POST" and forms_valid:
+        with transaction.atomic():
+            entity = form.save(commit=False)
+            entity.full_clean(exclude=["tenant"])
+            entity.save()
+
+            before, after = diff_fields(entity, fields=AUDITED_ENTITY_FIELDS, original=original)
+            record_event(
+                action=AuditAction.UPDATE,
+                actor=current_user(request),
+                obj=entity,
+                before=before,
+                after=after,
+            )
+
+            if profile_form is not None:
+                # Always built together, just above — this is not a fresh
+                # runtime possibility, only mypy not following the pairing.
+                assert profile is not None
+                _save_profile_fields(request, profile, profile_form)
+
+            if reg_form is not None:
+                _save_registration_fields(request, entity, reg_form)
 
         # Re-read so the row carries `registration_count`. Falling back to the
         # saved instance rather than letting `None` through: the count would be
@@ -562,6 +722,9 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
         {
             "form": form,
             "entity": entity,
+            "reg_form": reg_form,
+            "profile_form": profile_form,
+            "can_manage_registrations": can_manage_registrations,
             "form_action": reverse("app:entity_edit", args=[entity.pk]),
             "form_target": f"#entity-row-{entity.pk}",
             "form_swap": "outerHTML",
@@ -572,8 +735,82 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
     )
 
 
+@require_permission("tenancy.registration.view")
+@require_http_methods(["GET"])
+def entity_registration_fields(request: HttpRequest) -> HttpResponse:
+    """Refresh the identifier fields on the Add/Edit Entity screen when
+    ``entity_type`` changes.
+
+    A pure display refresh, not a submission — the form built here is always
+    unbound, so nothing is validated or saved; that only happens when the
+    surrounding entity form itself is submitted. Fetched with
+    ``hx-include="closest form"``, so every value currently sitting in the
+    form arrives as a GET parameter: a field that already existed for the
+    previous entity type keeps whatever the user just typed into it, and a
+    field that has just appeared falls back to the entity's saved value (when
+    editing) or blank (when creating).
+
+    Gated on ``tenancy.registration.view`` — reading a registration's value is
+    exactly what that permission is for — rather than ``.manage``, which is
+    marked sensitive and would force a step-up re-authentication just to keep
+    the fields in step with the entity type as someone fills the form in. The
+    step-up challenge that permission carries still applies in full at the
+    point the value is actually saved, in ``entity_create``/``entity_edit``.
+
+    Directly reachable by URL like any other fragment endpoint, so it re-checks
+    the caller's scope itself rather than trusting that the button which
+    triggers it was only shown to someone entitled to see the answer — the
+    entity id (when given) is re-fetched through the tenant-scoped manager,
+    404 rather than 403 on a mismatch, for the same reason ``entity_edit`` does.
+    """
+    entity_type = request.GET.get("entity_type", "")
+
+    entity = None
+    entity_pk = request.GET.get("entity", "")
+    if entity_pk:
+        entity = Entity.objects.filter(pk=entity_pk, archived_at__isnull=True).first()
+        if entity is None:
+            raise Http404
+
+    tenant = getattr(request, "tenant", None)
+    country = entity.country if entity is not None else getattr(tenant, "country", "IN")
+
+    requirements = get_registration_requirements(country, entity_type)
+
+    saved_values: dict[str, str] = {}
+    if entity is not None:
+        saved_values = {
+            r.type: r.value
+            for r in entity.registrations.filter(jurisdiction="", archived_at__isnull=True)
+        }
+
+    initial = {}
+    for requirement in requirements:
+        field_name = registration_field_name(requirement.code)
+        initial[field_name] = request.GET.get(field_name, saved_values.get(requirement.code, ""))
+
+    reg_form = EntityRegistrationFieldsForm(requirements=requirements, initial=initial)
+    return render(
+        request, "tenancy/_fragments/entity_registration_fields.html", {"reg_form": reg_form}
+    )
+
+
 @require_permission("tenancy.entity.view")
 def entity_detail(request: HttpRequest, pk: str) -> HttpResponse:
+    """The all-in-one page — reached only once this entity has been through a
+    materialisation run.
+
+    A freshly created entity is sent to the guided setup flow instead (see
+    ``stacos.tenancy.entity_setup``), always at its first step: there is no
+    persisted "how far did they get" to resume from, and re-entering at step
+    one costs nothing when the steps ahead are just a couple of clicks for an
+    entity that already has what they need. This redirect fires exactly once
+    in an entity's life — the moment a build is attempted, ``rebuild_calendar``
+    (``?finish_setup=1``) sends the browser to the dashboard, and every visit
+    here after that has a run to satisfy the ``exists()`` check below — a run, not an
+    obligation count, so an entity whose first build honestly creates nothing
+    (no registrations recorded yet) is not sent back into setup forever.
+    """
     entity = Entity.objects.select_related("tenant", "profile").filter(pk=pk).first()
     if entity is None:
         # 404, not 403: confirming that an entity exists in another tenant is
@@ -581,6 +818,14 @@ def entity_detail(request: HttpRequest, pk: str) -> HttpResponse:
         from django.http import Http404
 
         raise Http404
+
+    # A run, not an instance count: an entity with no registrations yet can be
+    # materialised and truthfully produce nothing, and this would otherwise
+    # redirect it back into the setup flow forever — see
+    # `obligations.views.entity_preview_context`'s own `has_calendar`, which
+    # answers the identical question for the identical reason.
+    if not MaterialisationRun.objects.filter(entity=entity).exists():
+        return navigate(request, reverse("app:entity_setup_registrations", args=[entity.pk]))
 
     context = {
         "entity": entity,

@@ -35,7 +35,11 @@ def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
 @pytest.mark.parametrize(
     ("route", "marker"),
     [
-        ("compliance:entity_summary", b"Rebuild calendar"),
+        # "Rebuild calendar" only once a calendar already exists — a fresh
+        # entity's own build button reads "Create my calendar" instead (see
+        # `stacos.obligations.views.entity_preview_context`) — so the marker
+        # checks for the action generically rather than one specific label.
+        ("compliance:entity_summary", b"calendar"),
     ],
     ids=["compliance summary"],
 )
@@ -48,11 +52,18 @@ def test_the_entity_panels_answer(
     assert marker.lower() in response.content.lower()
 
 
-def test_the_entity_page_asks_for_the_compliance_panel(signed_in: Client, entity_a: Entity) -> None:
-    """Without this, the rebuild button has no home and cannot be pressed."""
-    body = signed_in.get(reverse("app:entity_detail", args=[entity_a.pk])).content.decode()
+def test_the_entity_page_asks_for_the_compliance_panel(
+    signed_in: Client, materialised: Entity
+) -> None:
+    """Without this, the rebuild button has no home and cannot be pressed.
 
-    assert reverse("compliance:entity_summary", args=[entity_a.pk]) in body, (
+    ``materialised`` rather than a bare entity: one with no calendar yet
+    redirects `entity_detail` into the guided setup flow instead of rendering
+    this page at all — see `tenancy.views.entity_detail`.
+    """
+    body = signed_in.get(reverse("app:entity_detail", args=[materialised.pk])).content.decode()
+
+    assert reverse("compliance:entity_summary", args=[materialised.pk]) in body, (
         "compliance:entity_summary is not loaded by the page"
     )
 

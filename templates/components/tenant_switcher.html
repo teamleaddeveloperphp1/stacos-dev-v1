@@ -1,17 +1,15 @@
 {% load i18n %}
 {% comment %}
-  The tenant switcher — always visible, top left.
+  The organisation identity — always visible, top left.
 
-  A user is one global identity that may belong to many tenants: a partner at
-  their firm, a director of their own company, a consultant to three clients.
-  Switching context has to be one click and always in the same place, or people
-  end up keeping several browser profiles open.
+  STACOS is one identity per user, decided at sign-up: there is nothing to
+  switch between and nothing to set up from here, so this is a static display,
+  not a menu. `tenant` is `None` only in the moment between login and the
+  session's tenant binding taking effect, which is why the label still has a
+  fallback rather than assuming it is always set.
 {% endcomment %}
-<div class="tenant-switcher" x-data="{ open: false }" @keydown.escape="open = false">
-  <button type="button" class="tenant-switcher__button"
-          @click="open = !open"
-          :aria-expanded="open.toString()"
-          aria-haspopup="listbox">
+<div class="tenant-switcher">
+  <span class="tenant-switcher__button" aria-hidden="false">
     <span class="avatar">{{ tenant.name|slice:":1"|upper|default:"?" }}</span>
     <span class="flex-grow-1 overflow-hidden">
       <span class="tenant-switcher__name d-block">
@@ -21,70 +19,8 @@
         {% if tenant.type == "PRACTICE" %}{% translate "Professional firm" %}
         {% elif tenant.type == "DEALER" %}{% translate "Channel partner" %}
         {% elif tenant.type %}{% translate "Business" %}
-        {% else %}{% translate "Finish setting up" %}{% endif %}
+        {% else %}{% translate "Setting up…" %}{% endif %}
       </span>
     </span>
-    <c-icon name="chevron-down" size="14" />
-  </button>
-
-  <div x-show="open" x-cloak x-transition.opacity.duration.120ms
-       @click.outside="open = false"
-       class="card mt-1 p-1" role="listbox"
-       aria-label="{% translate 'Switch organisation' %}">
-    {% for membership in memberships %}
-      <form method="post" action="{% url 'app:switch_tenant' %}">
-        {% csrf_token %}
-        <input type="hidden" name="tenant_id" value="{{ membership.tenant_id }}">
-        <button type="submit" class="palette__item"
-                role="option"
-                aria-selected="{% if membership.tenant_id == tenant.id %}true{% else %}false{% endif %}">
-          <span class="avatar">{{ membership.tenant.name|slice:":1"|upper }}</span>
-          <span class="flex-grow-1 text-start">
-            <span class="d-block">{{ membership.tenant.name }}</span>
-            <span class="palette__hint ms-0">{{ membership.role.name }}</span>
-          </span>
-          {% if membership.tenant_id == tenant.id %}<c-icon name="check" size="14" />{% endif %}
-        </button>
-      </form>
-    {% empty %}
-      <p class="text-muted small p-2 mb-0">{% translate "You are not a member of any organisation yet." %}</p>
-    {% endfor %}
-
-    {% if memberships %}
-      {% comment %}
-        Only "Create a new organisation" is offered here now — a separate
-        workspace, reached via `?new_org=1`, which is what lets
-        `onboarding.views.finish` tell it apart from a plain run; see there and
-        `state.OnboardingDraft.new_organisation`. The switcher used to also
-        offer "Add a business here" (a plain run, folding into whichever
-        organisation the session already points at) but that action is not
-        exposed from here any more — the plain-run codepath itself still
-        exists and is unchanged.
-      {% endcomment %}
-      <a class="palette__item" href="{% url 'onboarding:identity' %}?new_org=1" role="option" aria-selected="false">
-        <span class="avatar"><c-icon name="briefcase" size="14" /></span>
-        <span class="flex-grow-1 text-start">
-          <span class="d-block">{% translate "Create a new organisation" %}</span>
-          <span class="palette__hint ms-0">
-            {% translate "A separate workspace, with its own team and billing" %}
-          </span>
-        </span>
-      </a>
-    {% else %}
-      {% comment %}
-        The way in for a user who has just signed up. Without it they are
-        authenticated, own nothing, and every other route is correctly forbidden —
-        which was the state the product left them in before the wizard existed.
-      {% endcomment %}
-      <a class="palette__item" href="{% url 'onboarding:identity' %}" role="option" aria-selected="false">
-        <span class="avatar"><c-icon name="plus" size="14" /></span>
-        <span class="flex-grow-1 text-start">
-          <span class="d-block">{% translate "Set up an organisation" %}</span>
-          <span class="palette__hint ms-0">
-            {% translate "We read your CIN or PAN and build the calendar" %}
-          </span>
-        </span>
-      </a>
-    {% endif %}
-  </div>
+  </span>
 </div>

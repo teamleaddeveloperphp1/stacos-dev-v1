@@ -65,26 +65,19 @@ def resolve_scope_for_request(request: HttpRequest) -> AccessScope | None:
     membership = _select_membership(request)
     if membership is None:
         # Authenticated but not a member of anything *active*. Every scoped query
-        # returns nothing rather than raising, so the screens render.
+        # returns nothing rather than raising, so the screens render. No
+        # permission at all either way — organisations are created at sign-up
+        # now, not from inside the product, so there is no self-service route
+        # here left to grant access to.
+        # ``OrganisationGateMiddleware`` renders the screen that explains which
+        # of the two this is; that is what makes it a boundary rather than a
+        # sign on a door that opens.
         #
-        # Which permission that comes with depends on why, and the difference is
-        # the whole of it:
-        #
-        # * **Nothing, or an invitation not yet accepted** — one permission,
-        #   ``tenancy.onboarding.start``. Without it a self-service user who has
-        #   just verified their email is authenticated, owns nothing, and has no
-        #   route in the product to create the company they signed up to manage.
-        # * **Suspended** — none at all. Somebody revoked this deliberately, and
-        #   handing them the permission to create a fresh organisation would make
-        #   the revocation a formality. ``OrganisationGateMiddleware`` renders the
-        #   screen that says so; this is what makes it a boundary rather than a
-        #   sign on a door that opens.
-        #
-        # Neither confers access to anybody else's data: no tenant is bound, so
-        # the scoped managers and the RLS policy both return nothing.
+        # Confers no access to anybody else's data either way: no tenant is
+        # bound, so the scoped managers and the RLS policy both return nothing.
         suspended = getattr(request, "suspended_memberships", None)
         scope = AccessScope(
-            permissions=frozenset() if suspended else frozenset({"tenancy.onboarding.start"}),
+            permissions=frozenset(),
             reason="request:suspended" if suspended else "request:no-membership",
         )
         setattr(request, REQUEST_CACHE_ATTR, scope)
@@ -105,14 +98,6 @@ def _select_membership(request: HttpRequest) -> Membership | None:
     has to choose. A stale or forged tenant id in the session resolves to nothing
     and falls back — it cannot be used to reach a tenant the user is not in,
     because the lookup is always filtered by ``user``.
-
-    The whole set is materialised rather than queried twice, and left on the
-    request as ``user_memberships``. The tenant switcher in the shell needs
-    exactly this list and cannot obtain it for itself: ``member_tenant_ids``
-    holds only the tenant currently switched *to*, so the scoped manager would
-    answer with the one organisation the user is already looking at. Reusing the
-    bootstrap read that has to happen anyway is cheaper than a second escape
-    hatch, and keeps the one RLS lift in the request path where it is.
 
     The read covers suspended and invited rows as well. Only the active ones are
     ever selected from — that has not changed — but "suspended", "invited, not
@@ -141,7 +126,6 @@ def _select_membership(request: HttpRequest) -> Membership | None:
         )
 
     memberships = [m for m in rows if m.status == Membership.Status.ACTIVE]
-    request.user_memberships = memberships  # type: ignore[attr-defined]
     # Only when there is nothing active. A user suspended from one organisation
     # and active in another is simply a member of the second — showing them a
     # refusal would be wrong, and so would revoking their permissions.

@@ -91,9 +91,7 @@ def gallery_context() -> dict[str, object]:
         "days_ahead": 20,
         "days_late": -10,
         "tenant": SimpleNamespace(id="t1", name="Acme Manufacturing", type="ORGANISATION"),
-        "memberships": [],
         "no_tenant": None,
-        "no_memberships": [],
         "user": SimpleNamespace(
             initials="AR",
             full_name="Anita Rao",
@@ -219,7 +217,8 @@ def test_due_badge_keeps_the_original_date_visible(gallery_context: dict[str, ob
 def test_tenant_switcher_survives_having_no_tenant(
     gallery_context: dict[str, object],
 ) -> None:
-    """Mid-onboarding a user belongs to nothing, and the shell still has to draw."""
+    """Between sign-up and the session's tenant binding taking effect, the shell
+    still has to draw."""
     html = render_to_string(GALLERY, gallery_context)
     assert "No organisation" in html
 
@@ -249,6 +248,18 @@ UNLINKED_BARE: frozenset[str] = frozenset({"healthz", "robots", "sitemap"})
 
 #: Individual routes with no link, each with the reason it is deliberate.
 #: Anything added here needs a reason that survives being read aloud.
+#: The obligation detail page asks "is this filing completed?" and nothing else;
+#: the named checklist it replaced is parked, not deleted. Its rows, its
+#: services and these endpoints are all still here and still tested directly,
+#: because the maker-checker flow is expected back for the firms that want it —
+#: but nothing links to them, and an endpoint kept for a future UI should say so
+#: here rather than look like a link somebody forgot.
+_CHECKLIST_PARKED = (
+    "The per-step checklist is not rendered on the detail page for now — see "
+    "`templates/obligations/_fragments/status_questions.html`. The endpoint, "
+    "its permission check and its tests are kept for when it returns."
+)
+
 UNLINKED_ROUTES: dict[str, str] = {
     "billing:invoice_issue": (
         "Raising a subscription invoice out of cycle is a vendor operation, not "
@@ -257,6 +268,9 @@ UNLINKED_ROUTES: dict[str, str] = {
         "Same for `billing.invoice.void`, which is why the void control in the "
         "invoice panel stays hidden."
     ),
+    "compliance:step_toggle": _CHECKLIST_PARKED,
+    "compliance:step_block": _CHECKLIST_PARKED,
+    "compliance:step_nudge": _CHECKLIST_PARKED,
 }
 
 
@@ -343,6 +357,32 @@ def test_the_unlinked_allowlist_has_no_stale_entries() -> None:
 # ===========================================================================
 # 6. Two mistakes that are cheap to make and expensive to find
 # ===========================================================================
+
+
+def test_every_layout_loads_the_webfonts() -> None:
+    """All three layouts pull in the same two faces, from one partial.
+
+    The product spent a long time naming a font nothing ever fetched, so every
+    screen rendered in whatever the operating system offered and the application
+    looked unfinished beside its own design work. Worse than looking unfinished
+    is looking *inconsistent*: a sign-in page in a different face from the screen
+    behind it reads as broken before the user has typed anything. One include,
+    asserted in all three, is what prevents that drifting apart again.
+    """
+    for layout in ("app_shell.html", "auth.html", "public.html"):
+        source = (TEMPLATES_DIR / "layouts" / layout).read_text(encoding="utf-8")
+        assert 'include "layouts/_fonts.html"' in source, (
+            f"layouts/{layout} does not include the webfont partial. Every layout "
+            f"loads the same faces, or the product renders in two of them."
+        )
+
+    fonts = (TEMPLATES_DIR / "layouts" / "_fonts.html").read_text(encoding="utf-8")
+    for family in ("Fraunces", "IBM+Plex+Sans", "IBM+Plex+Mono"):
+        assert family in fonts, f"{family} is named in the tokens but not requested"
+    assert "display=swap" in fonts, (
+        "Without display=swap, text is invisible until the webfont arrives — "
+        "which on a patchy mobile connection is the whole screen for seconds."
+    )
 
 
 def test_the_app_shell_does_not_push_urls() -> None:

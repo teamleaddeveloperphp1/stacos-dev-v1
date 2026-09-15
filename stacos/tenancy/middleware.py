@@ -1,38 +1,32 @@
 """
-The gate between a signed-in session and an organisation.
+The gate between a signed-in session and a working organisation.
 
-A user can be perfectly authenticated, fully verified, and belong to nothing —
-they have just signed up without naming an organisation, their invitation has
-not been accepted, or their membership has been suspended. Every page under
-``/app/`` needs a permission that only a member holds, so before this existed the
-first thing the product said to a brand-new customer was that they were not
-allowed in.
+STACOS is one identity per user, decided at sign-up: the organisation exists
+before the session does, because ``accounts.views._complete_verification``
+provisions it the moment both OTP channels are proven. That closes the state
+this gate used to spend most of its logic on — "signed in, belongs to
+nothing" — but two situations still reach ``/app/`` without a usable
+workspace, and each gets a different answer:
 
-The decision is taken **once, here**, rather than in the dashboard view, because
-the requirement is that it holds for pages nobody has written yet. A view-level
-fix covers the page it is written on and silently misses the next one.
+* **No membership at all.** Rare now — a user created outside the ordinary
+  sign-up path, or one whose only invitation has not been accepted — but not
+  impossible, and there is no self-service fix inside the product for it any
+  more: organisations are not created here. A screen that says so, plainly.
+* **A suspended membership and nothing active.** A screen that says so too,
+  on every page under ``/app/``, offering only sign-out. Never a route to fix
+  it by creating something new — a suspension is a decision somebody made on
+  purpose.
+A tenant with no entity yet — the ordinary state for a few seconds after
+sign-up — is *not* handled here. Redirecting every page under ``/app/`` to
+"add an entity" would mean a query on every request to ask a question only
+the dashboard actually needs answered, so ``tenancy.views.dashboard`` sends
+that redirect itself, reusing the entity count it already has to fetch for
+its own tiles rather than spending a second query on it.
 
-Two situations, deliberately answered differently:
-
-* **No membership at all** → the setup flow. This is somebody who needs an
-  organisation and has no route to one.
-* **A suspended membership and nothing active** → a screen that says so, on
-  every page under ``/app/`` *including the setup flow*. Sending them to setup
-  would invite them to create a fresh organisation to escape a revocation
-  somebody made on purpose, which quietly defeats the suspension. The scope
-  resolver refuses them ``tenancy.onboarding.start`` for the same reason, so
-  this screen is the readable face of a real boundary rather than the boundary
-  itself.
-
-An invitation that has not been accepted is *not* a suspension. Such a user has
-no active membership either, and they go to setup like anybody else — accepting
-the invitation is not the only thing they might reasonably want to do.
-
-What this does *not* do is widen anything. The scope a member-less user resolves
-to is unchanged — one permission, ``tenancy.onboarding.start``, and no tenant
-bound — so every scoped query still returns nothing and every object URL still
-404s. This middleware only decides which screen they are looking at while that
-remains true.
+The two situations below are taken **once, here**, rather than in a view,
+because the requirement is that they hold for pages nobody has written yet —
+a view-level fix covers the page it is written on and silently misses the
+next one.
 """
 
 from __future__ import annotations
@@ -42,28 +36,23 @@ from collections.abc import Callable
 import structlog
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
-from django.urls import reverse
 
 from stacos.core.htmx import navigate, page_url
 
 logger = structlog.get_logger(__name__)
 
-__all__ = ["APP_PREFIX", "SETUP_PREFIX", "OrganisationGateMiddleware"]
+__all__ = ["APP_PREFIX", "OrganisationGateMiddleware"]
 
-#: Everything behind this prefix is tenant-scoped and needs an organisation.
-#: Marketing, ``/auth/`` (sign-out included), ``/accounts/``, ``/api/``,
-#: ``/admin/``, ``/static/`` and ``/media/`` all sit outside it and are therefore
-#: reachable without one, which is what keeps sign-out from becoming a trap.
+#: Everything behind this prefix is tenant-scoped and needs a working
+#: organisation. Marketing, ``/auth/`` (sign-out included), ``/accounts/``,
+#: ``/api/``, ``/admin/``, ``/static/`` and ``/media/`` all sit outside it and
+#: are therefore reachable without one, which is what keeps sign-out from
+#: becoming a trap.
 APP_PREFIX = "/app/"
-
-#: The one carve-out inside ``/app/``: the flow being redirected *to*. Without
-#: this the redirect is a loop. It does not apply to a suspended user — see
-#: :meth:`OrganisationGateMiddleware.__call__`.
-SETUP_PREFIX = "/app/start/"
 
 
 class OrganisationGateMiddleware:
-    """Route a signed-in user who belongs to nothing to somewhere useful.
+    """Route a signed-in user with no usable workspace to somewhere useful.
 
     Listed after ``ScopeMiddleware``, so ``request.tenant`` and
     ``request.inactive_memberships`` are already resolved, and before
@@ -81,35 +70,35 @@ class OrganisationGateMiddleware:
         if not self._applies(request):
             return self.get_response(request)
 
-        # Checked before the carve-out, not after. The exemption exists so that
-        # somebody with no organisation can reach the flow that gives them one;
-        # letting a suspended user through it would hand them exactly the escape
-        # hatch the suspension was meant to close.
         if getattr(request, "suspended_memberships", None):
             return self._suspended(request)
 
-        if request.path.startswith(SETUP_PREFIX):
-            return self.get_response(request)
+        if getattr(request, "tenant", None) is None:
+            return self._no_organisation(request)
 
-        logger.info(
-            "tenancy.no_organisation",
-            user_id=str(request.user.pk),
-            path=request.path,
-        )
-        return navigate(request, reverse("onboarding:identity"))
+        return self.get_response(request)
 
     @staticmethod
     def _applies(request: HttpRequest) -> bool:
         user = getattr(request, "user", None)
         if user is None or not user.is_authenticated:
             return False
-        if not request.path.startswith(APP_PREFIX):
-            return False
-        # `tenant` is only set once a scope has been resolved. It is absent on
-        # the paths ScopeMiddleware skips, and those are all outside /app/ — but
-        # `getattr` rather than an attribute access, because a middleware that
-        # raises AttributeError on an unexpected path is a 500 on every page.
-        return getattr(request, "tenant", None) is None
+        return request.path.startswith(APP_PREFIX)
+
+    @staticmethod
+    def _no_organisation(request: HttpRequest) -> HttpResponse:
+        """A member-less user, with no in-product fix left to offer.
+
+        403, not a redirect: there is nowhere inside ``/app/`` for this session
+        to usefully land, and pretending otherwise is worse than saying so.
+        Renders outside the application shell, like :meth:`_suspended` — the
+        shell assumes a tenant, and there is not one here.
+        """
+        logger.info("tenancy.no_organisation", user_id=str(request.user.pk), path=request.path)
+        response = render(request, "tenancy/no_organisation.html", status=403)
+        if getattr(request, "htmx", False):
+            return navigate(request, page_url(request))
+        return response
 
     @staticmethod
     def _suspended(request: HttpRequest) -> HttpResponse:

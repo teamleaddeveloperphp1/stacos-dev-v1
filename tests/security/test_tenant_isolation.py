@@ -221,7 +221,7 @@ def test_practice_permissions_come_from_the_engagement_not_its_own_role(
     scope = in_practice
     assert scope.has_permission("tenancy.profile.view")
     assert not scope.has_permission("tenancy.registration.manage")
-    assert not scope.has_permission("accounts.user.invite")
+    assert not scope.has_permission("tenancy.entity.create")
 
 
 def test_ending_an_engagement_removes_access_immediately(

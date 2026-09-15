@@ -75,9 +75,9 @@
 </section>
 
 <section id="switcher">
-  <c-tenant-switcher :tenant="tenant" :memberships="memberships" />
-  {# Mid-onboarding: no tenant yet, and the shell must still draw. #}
-  <c-tenant-switcher :tenant="no_tenant" :memberships="no_memberships" />
+  <c-tenant-switcher :tenant="tenant" />
+  {# Between sign-up and the session's tenant binding taking effect. #}
+  <c-tenant-switcher :tenant="no_tenant" />
 </section>
 
 <section id="user-menu">

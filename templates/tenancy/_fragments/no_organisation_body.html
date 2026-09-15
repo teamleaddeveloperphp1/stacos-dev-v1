@@ -1,0 +1,24 @@
+{% load i18n %}
+{% comment %}
+  Rendered by `OrganisationGateMiddleware._no_organisation` for an authenticated,
+  fully-verified user who is a member of nothing. Outside the application shell
+  on purpose: the shell's organisation display assumes a tenant, and there is
+  not one here.
+
+  Organisations are created at sign-up now, not from inside the product, so
+  this deliberately offers no "set up an organisation" route — there is no
+  in-product fix for this state. The two honest possibilities are a pending
+  invitation (which arrives by email and is accepted outside `/app/`) or an
+  account that needs support's attention.
+{% endcomment %}
+<div class="auth-card">
+  <h1 class="auth-card__title">{% translate "No organisation yet" %}</h1>
+  <p class="auth-card__lede">
+    {% blocktranslate %}Your account is not linked to an organisation, so there is nothing here for you to open. If you were invited to join one, check your email for the invitation link.{% endblocktranslate %}
+  </p>
+
+  <form method="post" action="{% url 'accounts:logout' %}" class="mt-4" hx-boost="false">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-secondary w-100">{% translate "Sign out" %}</button>
+  </form>
+</div>

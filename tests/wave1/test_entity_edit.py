@@ -22,6 +22,7 @@ from django.urls import reverse
 from stacos.accounts.models import User
 from stacos.core.models import AuditAction, AuditLog
 from stacos.core.scope import platform_scope
+from stacos.tenancy.forms import registration_field_name
 from stacos.tenancy.models import Entity, Tenant
 from tests.conftest import sign_in
 
@@ -32,21 +33,46 @@ HTMX = {"HX-Request": "true"}
 
 @pytest.fixture
 def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
-    return sign_in(client, org_owner)
+    # `tenancy.registration.manage` is sensitive: saving any identifier field
+    # through this same screen now demands a fresh step-up, the same as the
+    # standalone "Add Registration" modal already does.
+    return sign_in(client, org_owner, step_up=True)
 
 
 def _payload(entity: Entity, **overrides: str) -> dict[str, str]:
-    """The whole form. A ModelForm treats an absent field as cleared."""
+    """The whole form. A ModelForm treats an absent field as cleared —
+    including the identifier fields now: ``org-owner`` (this file's
+    ``signed_in`` actor) holds ``tenancy.registration.manage``, so an edit
+    that omits an entity's existing PAN/GST/etc. would read as "the user
+    cleared it", exactly as omitting ``name`` would. Seeding them here from
+    what is actually on file is what a real browser does too — the fields are
+    real inputs in the same ``<form>``, pre-filled by the GET.
+
+    ``aggregate_turnover``/``employee_count`` are mandatory for every entity
+    type now that ``org-owner`` also holds ``tenancy.profile.edit`` — a plain
+    form-level rule, not entity-type conditional, so a fixed valid pair
+    belongs in every payload here rather than varying per test.
+
+    PAN is mandatory for every entity type too, and the base fixtures
+    deliberately carry no registrations at all (``test_entity_preview`` has a
+    test whose whole subject is an entity with none), so a valid one is
+    defaulted in here and overridden by any the entity actually holds.
+    """
     incorporated = entity.incorporation_date
     data = {
+        "reg_PAN": "AAACE1234F",
         "name": entity.name,
         "legal_name": entity.legal_name or "",
-        "short_code": entity.short_code or "",
         "entity_type": entity.entity_type,
         "incorporation_date": incorporated.isoformat() if incorporated else "",
         "registered_office_state": entity.registered_office_state or "",
         "registered_office_address": entity.registered_office_address or "",
+        "aggregate_turnover": "50000000.00",
+        "employee_count": "25",
     }
+    with platform_scope(reason="test-payload"):
+        for registration in entity.registrations.filter(jurisdiction="", archived_at__isnull=True):
+            data[registration_field_name(registration.type)] = registration.value
     data.update(overrides)
     return data
 
@@ -156,9 +182,24 @@ def test_the_edited_row_keeps_its_registration_count(
         expected = manufacturer.registrations.filter(archived_at__isnull=True).count()
     assert expected > 1, "the fixture is meant to carry several registrations"
 
+    # The fixture's PAN/TAN/CIN/ESIC/PF values (`PANXXTEST`, ...) were written
+    # straight through the ORM and never format-checked. `_payload()` now
+    # round-trips them through the real identifier fields on this same screen,
+    # which *does* check format — so a real-shaped value stands in for each
+    # here, the same way a person fixing the format would retype it, rather
+    # than leaving the fixture's placeholder to be rejected and archived as
+    # "cleared".
     body = signed_in.post(
         reverse("app:entity_edit", args=[manufacturer.pk]),
-        _payload(manufacturer, name="Renamed Manufacturing Pvt Ltd"),
+        _payload(
+            manufacturer,
+            name="Renamed Manufacturing Pvt Ltd",
+            reg_PAN="AAACE1234F",
+            reg_TAN="ABCD12345E",
+            reg_CIN="U72200KA2015PTC012345",
+            reg_ESIC="12345678901234567",
+            reg_PF="KN/BNG/0012345/000",
+        ),
         headers=HTMX,
     ).content.decode()
 
@@ -187,13 +228,13 @@ def test_an_entity_may_keep_its_own_name(signed_in: Client, entity_a: Entity) ->
     """The duplicate check must not fire against the row being edited."""
     response = signed_in.post(
         reverse("app:entity_edit", args=[entity_a.pk]),
-        _payload(entity_a, short_code="ATL"),
+        _payload(entity_a, registered_office_address="12 MG Road"),
         headers=HTMX,
     )
 
     assert response.status_code == 200
     entity_a.refresh_from_db()
-    assert entity_a.short_code == "ATL"
+    assert entity_a.registered_office_address == "12 MG Road"
 
 
 # ---------------------------------------------------------------------------

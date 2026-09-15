@@ -21,38 +21,75 @@ Appearance is not tested. The grouping and the arithmetic are.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
-from stacos.tenancy.onboarding.services import preview_draft
-from stacos.tenancy.onboarding.state import OnboardingDraft
+from stacos.core.scope import platform_scope
+from stacos.obligations.preview import preview_entity
+from stacos.obligations.profile import build_profile_view
+from stacos.tenancy.models import Entity, EntityProfile, EntityRegistration, Tenant
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def preview(india: object) -> object:
-    """A realistic draft, so the catalog actually produces all three columns.
+def partly_known_entity(org: Tenant) -> Entity:
+    """A realistic entity that has added one registration and answered two
+    questions — everything else, deliberately, is still unknown.
 
-    A minimal one would leave "applies" nearly empty and prove nothing about
-    grouping — which only misbehaves at the sizes that made the screen
-    unreadable in the first place.
+    Deliberately partial rather than the fully-profiled ``manufacturer``
+    fixture: a business that complete leaves almost nothing undecided, and
+    this file is specifically about the "might apply" column and its link to
+    the questions beside it, which only exists while real facts are still
+    missing. A registration is included rather than omitted, unlike the old
+    session-draft fixture this replaces — ``build_profile_view`` treats zero
+    registrations as a definite "none", not "not answered yet" (see
+    ``stacos.obligations.profile._base_facts``), which is correct for a saved
+    entity but leaves nothing to test here if there genuinely are none.
     """
-    draft = OnboardingDraft().with_(
-        name="Shreeji Textiles",
-        entity_type="PVT_LTD",
-        registered_office_state="IN-GJ",
-        states_of_operation=("IN-GJ", "IN-MH"),
-        answers={
-            "gst_scheme": "REGULAR",
-            "employee_count": 200,
-            "aggregate_turnover": "800000000",
-        },
-    )
-    # A larger queue than the screen's default, so the link between a blocked
+    with platform_scope(reason="test-fixture"):
+        entity = Entity.objects.create(
+            tenant=org,
+            name="Shreeji Textiles",
+            entity_type="PVT_LTD",
+            country="IN",
+            registered_office_state="IN-GJ",
+        )
+        EntityProfile.objects.create(
+            tenant=org,
+            entity=entity,
+            employee_count=200,
+            aggregate_turnover=800000000,
+            states_of_operation=["IN-GJ", "IN-MH"],
+            facts={"gst_scheme": "REGULAR"},
+        )
+        EntityRegistration.objects.create(
+            tenant=org,
+            entity=entity,
+            type="GST",
+            value="24AABCU9603R1ZM",
+            jurisdiction="IN-GJ",
+        )
+    return entity
+
+
+@pytest.fixture
+def preview(partly_known_entity: Entity) -> object:
+    """The partition against a realistic-but-incomplete profile.
+
+    Realistic rather than minimal, so the catalog actually produces all three
+    columns — a one-fact profile would leave "applies" nearly empty and prove
+    nothing about grouping, which only misbehaves at the sizes that made the
+    screen unreadable in the first place.
+    """
+    with platform_scope(reason="test-fixture"):
+        profile = build_profile_view(partly_known_entity, as_of=date(2026, 8, 12))
+    # A larger queue than the card's default, so the link between a blocked
     # group and the question that clears it is actually exercised. With the
     # default eight, whether any group links at all depends on which facts happen
     # to rank highest for this profile.
-    return preview_draft(draft, question_limit=40)
+    return preview_entity(profile, country=partly_known_entity.country, question_limit=40)
 
 
 # ---------------------------------------------------------------------------

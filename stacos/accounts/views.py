@@ -20,6 +20,7 @@ from urllib.parse import quote
 import structlog
 from django.contrib import messages
 from django.contrib.auth import login, logout
+from django.db import transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -35,7 +36,11 @@ from stacos.accounts.stepup import mark_step_up_complete
 from stacos.core.htmx import is_fragment_request
 from stacos.core.htmx import navigate as _navigate
 from stacos.core.permissions import public_view, require_permission
+from stacos.core.rls import rls_bootstrap
 from stacos.core.typing import current_user
+from stacos.tenancy.models import Membership
+from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
+from stacos.tenancy.services import provision_tenant
 
 logger = structlog.get_logger(__name__)
 
@@ -95,6 +100,7 @@ def register(request: HttpRequest) -> HttpResponse:
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.headers.get("User-Agent", ""),
             next_url=_safe_next(request),
+            organisation_name=form.cleaned_data["organisation_name"],
         )
         if verification is None:
             form.add_error(None, decision.reason)
@@ -291,6 +297,16 @@ def _complete_verification(
     request.session[SESSION_VERIFIED_KEY] = True
     request.session.pop(SESSION_PENDING_KEY, None)
 
+    # Not for somebody signing up on their way to accept a colleague's
+    # invitation — `SESSION_INVITATION_KEY` is still parked at this point
+    # (`accept_invitation` only pops it once the membership is actually
+    # bound, on the request this one redirects to), and that invitation is
+    # what puts them in an organisation, not a fresh one of their own.
+    if verification.purpose == PendingVerification.Purpose.REGISTRATION and not request.session.get(
+        SESSION_INVITATION_KEY
+    ):
+        _provision_signup_tenant(request, user, verification)
+
     target = verification.next_url or SAFE_REDIRECT_DEFAULT
     response = redirect(target)
 
@@ -301,6 +317,39 @@ def _complete_verification(
         mark_step_up_complete(request)
 
     return response
+
+
+def _provision_signup_tenant(
+    request: HttpRequest, user: User, verification: PendingVerification
+) -> None:
+    """The organisation named at sign-up, created the moment both channels are proven.
+
+    STACOS is one identity per user, decided at sign-up — there is no later
+    "set up an organisation" step to fall back on, so this is the only place a
+    fresh account's tenant is created. Guarded on an existing membership rather
+    than on verification state, because that is the one check that stays correct
+    even if this handler is ever reached twice for the same verified user.
+
+    ``rls_bootstrap`` is load-bearing, not decorative: a member-less user has no
+    tenant bound, so Row-Level Security restricts ``Membership`` to nothing at
+    all here — ``objects_unscoped`` lifts only the ORM's own filter. Without the
+    bootstrap the guard above always reads as "no membership yet" and a retried
+    request provisions a second tenant. Same bootstrap
+    ``scope_resolver._select_membership`` uses, for the same reason.
+
+    Wrapped in its own transaction rather than relying on one already being
+    open: unlike a request under ``/app/``, ``ScopeMiddleware`` opens none here
+    — this request was still anonymous when it ran, ``login()`` having happened
+    a moment ago inside this same view — and the bootstrap's setting is
+    transaction-local.
+    """
+    with transaction.atomic():
+        with rls_bootstrap():
+            already_provisioned = Membership.objects_unscoped.filter(user=user).exists()
+        if already_provisioned:
+            return
+        tenant = provision_tenant(verification.organisation_name, owner=user, reason="signup")
+    request.session[SESSION_TENANT_KEY] = str(tenant.id)
 
 
 @public_view

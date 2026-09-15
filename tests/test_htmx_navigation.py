@@ -282,14 +282,20 @@ def test_confirming_a_password_without_htmx_still_redirects_normally(
 
 
 def test_the_whole_round_trip_lands_on_the_entity_page(
-    client: Client, org_owner: User, entity_a: Entity
+    client: Client, org_owner: User, materialised: Entity
 ) -> None:
-    """End to end, because each leg passing alone is what let this ship."""
+    """End to end, because each leg passing alone is what let this ship.
+
+    ``materialised`` rather than a bare entity: one with no calendar yet
+    redirects `entity_detail` straight into the guided setup flow (see
+    ``tenancy.views.entity_detail``), which is a real behaviour this test
+    would otherwise trip over rather than one it means to exercise.
+    """
     signed_in = _stale_step_up(client, org_owner)
-    page = reverse("app:entity_detail", args=[entity_a.pk])
+    page = reverse("app:entity_detail", args=[materialised.pk])
 
     bounced = signed_in.get(
-        reverse("app:registration_create", args=[entity_a.pk]),
+        reverse("app:registration_create", args=[materialised.pk]),
         headers={**HTMX, "HX-Current-URL": f"http://testserver{page}"},
     )
     next_url = parse_qs(urlparse(bounced["HX-Redirect"]).query)["next"][0]
@@ -304,7 +310,7 @@ def test_the_whole_round_trip_lands_on_the_entity_page(
     assert b"<!doctype html>" in landed.content.lower(), "the user landed on a bare fragment"
 
     # And the modal now opens, which is what the user was trying to do.
-    modal = signed_in.get(reverse("app:registration_create", args=[entity_a.pk]), headers=HTMX)
+    modal = signed_in.get(reverse("app:registration_create", args=[materialised.pk]), headers=HTMX)
     assert modal.status_code == 200
 
 

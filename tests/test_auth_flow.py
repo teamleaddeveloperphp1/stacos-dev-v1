@@ -21,6 +21,7 @@ from django.urls import reverse
 from stacos.accounts.models import PendingVerification, TrustedDevice, User
 from stacos.accounts.whatsapp import MemoryWhatsAppProvider
 from stacos.tenancy.models import Entity, Tenant
+from tests.conftest import sign_in
 
 pytestmark = pytest.mark.django_db
 
@@ -93,13 +94,14 @@ def test_htmx_requests_get_a_redirect_header_not_a_302(client: Client) -> None:
 def _registration_payload(**overrides: str) -> dict[str, str]:
     """A complete, valid sign-up.
 
-    Written once because sign-up now has six fields and a confirmation, and a
+    Written once because sign-up now has seven fields and a confirmation, and a
     test that omits one gets a 200 with form errors rather than the redirect it
     asserts — a failure that reads as "verification broke".
     """
     payload = {
         "first_name": "Priya",
         "last_name": "Vaibhav",
+        "organisation_name": "Vaibhav Consulting",
         "email": "priya@example.com",
         "phone": "9876543210",
         "password": "a-long-enough-password",
@@ -222,12 +224,13 @@ def test_a_verified_session_reaches_the_application(client: Client) -> None:
         {"email_code": email_code, "phone_code": phone_code, "remember_device": "on"},
     )
 
-    # No membership yet. What a brand-new user must NOT see is a refusal: they
-    # are sent to the flow that gives them an organisation. See
+    # A tenant now exists — provisioned on verification, named after what was
+    # typed at sign-up — but it owns no entity yet. What a brand-new user must
+    # NOT see is a refusal: they are sent to add one. See
     # `tenancy.middleware.OrganisationGateMiddleware`.
     response = client.get("/app/")
     assert response.status_code == 302
-    assert response["Location"] == reverse("onboarding:identity")
+    assert response["Location"] == reverse("app:entity_create")
 
 
 # ===========================================================================
@@ -263,11 +266,14 @@ def test_entity_list_renders_and_shows_only_this_tenants_entities(
 
 
 def test_entity_detail_is_a_404_for_another_tenants_entity(
-    signed_in: Client, rival_entity: Entity
+    signed_in: Client, entity_a: Entity, rival_entity: Entity
 ) -> None:
     """404, not 403.
 
     Confirming that an entity exists in another tenant is itself a disclosure.
+    ``entity_a`` is here only so this tenant is past the "add your first
+    entity" redirect and the gate lets the request through to the view being
+    tested.
     """
     assert signed_in.get(f"/app/entities/{rival_entity.pk}/").status_code == 404
 
@@ -290,8 +296,17 @@ def test_htmx_request_returns_the_fragment_not_the_page(
     assert entity_a.name.encode() in fragment.content
 
 
-def test_entity_can_be_created_through_the_modal(signed_in: Client, org: Tenant) -> None:
-    """Open the modal, submit it, and get a row plus out-of-band updates back."""
+def test_entity_can_be_created_through_the_modal(
+    client: Client, org_owner: User, org: Tenant
+) -> None:
+    """Open the modal, submit it, and get a row plus out-of-band updates back.
+
+    Stepped up, unlike this module's ``signed_in``: PAN is mandatory for every
+    entity type, so creating an entity always writes an identifier, and
+    ``tenancy.registration.manage`` is sensitive. Without it the POST is
+    answered with the step-up challenge rather than the row.
+    """
+    signed_in = sign_in(client, org_owner, step_up=True)
     form = signed_in.get(reverse("app:entity_create"), headers={"HX-Request": "true"})
     assert form.status_code == 200
     assert b"modal" in form.content
@@ -300,12 +315,14 @@ def test_entity_can_be_created_through_the_modal(signed_in: Client, org: Tenant)
         reverse("app:entity_create"),
         {
             "name": "New Ventures Pvt Ltd",
+            "reg_PAN": "AAACE1234F",
             "legal_name": "New Ventures Private Limited",
-            "short_code": "NVPL",
             "entity_type": "PVT_LTD",
             "incorporation_date": "2020-04-01",
             "registered_office_state": "IN-KA",
             "registered_office_address": "Bengaluru",
+            "aggregate_turnover": "50000000.00",
+            "employee_count": "25",
         },
         headers={"HX-Request": "true"},
     )
@@ -313,7 +330,6 @@ def test_entity_can_be_created_through_the_modal(signed_in: Client, org: Tenant)
 
     entity = Entity.objects_unscoped.get(name="New Ventures Pvt Ltd")
     assert entity.tenant_id == org.id
-    assert entity.short_code == "NVPL"
     assert hasattr(entity, "profile"), "an entity with no profile has nothing to evaluate"
 
     # One request, three regions: the row, the sidebar counter, and a toast.
@@ -338,7 +354,17 @@ def test_invalid_entity_form_returns_422_and_keeps_the_modal_open(
 def test_duplicate_entity_name_is_rejected(signed_in: Client, entity_a: Entity) -> None:
     response = signed_in.post(
         reverse("app:entity_create"),
-        {"name": entity_a.name, "entity_type": "PVT_LTD"},
+        {
+            "name": entity_a.name,
+            "reg_PAN": "AAACE1234F",
+            "legal_name": "Acme Textiles Private Limited",
+            "entity_type": "PVT_LTD",
+            "incorporation_date": "2020-04-01",
+            "registered_office_state": "IN-KA",
+            "registered_office_address": "4 Residency Road, Bengaluru",
+            "aggregate_turnover": "50000000.00",
+            "employee_count": "25",
+        },
         headers={"HX-Request": "true"},
     )
     assert response.status_code == 422
@@ -360,13 +386,29 @@ def test_signing_out_everywhere_rotates_the_security_stamp(
     assert signed_in.get("/app/").status_code == 302
 
 
-def test_audit_entries_are_written_for_entity_creation(signed_in: Client, org: Tenant) -> None:
+def test_audit_entries_are_written_for_entity_creation(
+    client: Client, org_owner: User, org: Tenant
+) -> None:
     """Every state change is recorded. This is the product, not the plumbing."""
     from stacos.core.models import AuditAction, AuditLog
 
+    # Stepped up for the same reason as the modal test above: a mandatory PAN
+    # means every creation writes a registration.
+    signed_in = sign_in(client, org_owner, step_up=True)
+
     signed_in.post(
         reverse("app:entity_create"),
-        {"name": "Audited Pvt Ltd", "entity_type": "PVT_LTD"},
+        {
+            "name": "Audited Pvt Ltd",
+            "reg_PAN": "AAACE1234F",
+            "legal_name": "Audited Private Limited",
+            "entity_type": "PVT_LTD",
+            "incorporation_date": "2020-04-01",
+            "registered_office_state": "IN-KA",
+            "registered_office_address": "4 Residency Road, Bengaluru",
+            "aggregate_turnover": "50000000.00",
+            "employee_count": "25",
+        },
         headers={"HX-Request": "true"},
     )
 

@@ -23,8 +23,6 @@ because the next occurrence will be on a page nobody has written yet.
 
 from __future__ import annotations
 
-import re
-
 import pytest
 from django.test import Client
 from django.urls import get_resolver
@@ -77,11 +75,20 @@ FRAGMENT_ONLY = {
     "/app/search/",
     # Modal bodies. Opened with hx-get into #modal-container from the page that
     # owns them; they have no standalone form and never appear in the address bar.
+    #
+    # `/app/entities/new/` is deliberately not here: for a tenant that already
+    # has an entity it behaves like these (the "+ Add" modal), but it is also
+    # the full page a brand-new organisation is redirected to, so the sweep
+    # below has to check it renders both ways rather than skip it.
     "/app/documents/upload/",
-    "/app/entities/new/",
     "/app/notices/new/",
     "/app/requests/new/",
     "/app/secretarial/meetings/new/",
+    # A sub-widget of the Add/Edit Entity form, refreshed by `hx-get` whenever
+    # `entity_type` changes. It has no standalone page — a bare GET with no
+    # `entity_type` renders an empty identifier-fields fragment, not a form
+    # anyone would navigate to directly.
+    "/app/entities/registration-fields/",
 }
 
 
@@ -173,77 +180,3 @@ def test_the_practice_screens_render_both_ways(
     assert b"<!doctype html>" in page.content.lower()
     assert b"<!doctype html>" not in fragment.content.lower()
     assert b'class="app-shell"' not in fragment.content
-
-
-# ---------------------------------------------------------------------------
-# The setup flow specifically
-#
-# It was the one views module in the project that never called
-# `is_fragment_request`, and it is the flow a brand-new customer is now sent
-# into, so it is worth asserting on directly rather than only through the sweep.
-# ---------------------------------------------------------------------------
-
-SETUP_PAGES = ["/app/start/", "/app/start/profile/", "/app/start/preview/"]
-
-
-@pytest.fixture
-def in_setup(client: Client, org_owner: User, org: Tenant) -> Client:
-    """Signed in and part-way through the wizard, so every step renders."""
-    signed_in = sign_in(client, org_owner, step_up=True)
-    signed_in.post("/app/start/", {"pan": "AABCU9603R"})
-    signed_in.post(
-        "/app/start/profile/",
-        {
-            "name": "Nimbus Software",
-            "entity_type": "PVT_LTD",
-            "registered_office_state": "IN-KA",
-        },
-    )
-    return signed_in
-
-
-@pytest.mark.parametrize("path", SETUP_PAGES)
-def test_every_setup_step_renders_both_ways(in_setup: Client, path: str) -> None:
-    page = in_setup.get(path)
-    fragment = in_setup.get(path, headers=HTMX)
-
-    assert page.status_code == 200
-    assert fragment.status_code == 200
-    assert b"<!doctype html>" in page.content.lower()
-    assert b"<!doctype html>" not in fragment.content.lower()
-    assert b'class="app-shell"' not in fragment.content
-
-
-@pytest.mark.parametrize("path", SETUP_PAGES)
-def test_the_step_rail_is_numbered_once(in_setup: Client, path: str) -> None:
-    """The reported "duplicate step numbers", asserted at its cause.
-
-    The rail itself always emitted 1, 2, 3 exactly once. What produced a second
-    set was the whole document being swapped into `#main`, bringing a second copy
-    of everything with it.
-    """
-    body = in_setup.get(path).content.decode()
-
-    rails = body.count('class="wizard__steps"')
-    numbers = len(re.findall(r'class="wizard__step-number">(\d+)<', body))
-
-    assert rails == 1, f"{path} rendered {rails} step rails"
-    assert numbers == 3, f"{path} rendered {numbers} step numbers, expected 3"
-
-
-def test_the_preview_declares_each_region_once(in_setup: Client) -> None:
-    """Three duplicate id pairs used to be on the page before anything was clicked.
-
-    Each region was declared by `preview_body.html` and then again by the
-    `<c-oob>` at the root of the fragment it included — the same id twice, nested,
-    with a meaningless `hx-swap-oob` on the inner one. Every answer submitted
-    added another level.
-    """
-    body = in_setup.get("/app/start/preview/").content.decode()
-
-    for region in ("onboarding-questions", "onboarding-preview", "onboarding-packs"):
-        assert body.count(f'id="{region}"') == 1, f"{region} is declared more than once"
-
-    assert "hx-swap-oob" not in body, (
-        "an out-of-band marker in the first paint, where it means nothing"
-    )

@@ -1,0 +1,14 @@
+{% load i18n %}
+{% comment %}
+  The rail: which step this is, out of how many, and which one is current.
+  Reuses the onboarding wizard's own `.wizard__steps` styling — the shape is
+  identical, only the steps themselves differ.
+{% endcomment %}
+<ul class="wizard__steps">
+  {% for key, label in steps %}
+    <li class="wizard__step{% if key == current_step %} is-current{% endif %}">
+      <span class="wizard__step-number">{{ forloop.counter }}</span>
+      <span class="wizard__step-label">{{ label }}</span>
+    </li>
+  {% endfor %}
+</ul>

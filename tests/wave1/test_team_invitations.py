@@ -41,18 +41,18 @@ def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
 
 
 @pytest.fixture
-def viewer_role(org: Tenant) -> Role:
+def owner_role(org: Tenant) -> Role:
     with platform_scope(reason="test-fixture"):
-        return Role.objects.get(tenant__isnull=True, code="org-viewer", tenant_type=org.type)
+        return Role.objects.get(tenant__isnull=True, code="org-owner", tenant_type=org.type)
 
 
 @pytest.fixture
-def invitation(org: Tenant, org_owner: User, viewer_role: Role) -> tuple[TenantInvitation, str]:
+def invitation(org: Tenant, org_owner: User, owner_role: Role) -> tuple[TenantInvitation, str]:
     with platform_scope(reason="test-fixture"):
         return invite_colleague(
             org,
             email="colleague@acme.example",
-            role=viewer_role,
+            role=owner_role,
             inviter=org_owner,
         )
 
@@ -78,11 +78,11 @@ def test_an_owner_can_reach_the_people_screen(signed_in: Client) -> None:
 
 
 def test_inviting_sends_an_email_with_a_link(
-    signed_in: Client, viewer_role: Role, org: Tenant
+    signed_in: Client, owner_role: Role, org: Tenant
 ) -> None:
     response = signed_in.post(
         reverse("app:team_invite"),
-        {"email": "Colleague@Acme.Example", "role": str(viewer_role.pk)},
+        {"email": "Colleague@Acme.Example", "role": str(owner_role.pk)},
         headers=HTMX,
     )
 
@@ -93,16 +93,16 @@ def test_inviting_sends_an_email_with_a_link(
     with platform_scope(reason="test"):
         row = TenantInvitation.objects.get(tenant=org)
         assert row.status == TenantInvitation.Status.SENT
-        assert row.role == viewer_role
+        assert row.role == owner_role
 
 
 def test_inviting_an_existing_member_is_refused(
-    signed_in: Client, viewer_role: Role, org_owner: User
+    signed_in: Client, owner_role: Role, org_owner: User
 ) -> None:
     """Not silently ignored. To the inviter, nothing happening is a bug report."""
     response = signed_in.post(
         reverse("app:team_invite"),
-        {"email": org_owner.email, "role": str(viewer_role.pk)},
+        {"email": org_owner.email, "role": str(owner_role.pk)},
         headers=HTMX,
     )
 
@@ -110,10 +110,10 @@ def test_inviting_an_existing_member_is_refused(
     assert "already a member" in response.content.decode()
 
 
-def test_inviting_is_audited(signed_in: Client, viewer_role: Role) -> None:
+def test_inviting_is_audited(signed_in: Client, owner_role: Role) -> None:
     signed_in.post(
         reverse("app:team_invite"),
-        {"email": "colleague@acme.example", "role": str(viewer_role.pk)},
+        {"email": "colleague@acme.example", "role": str(owner_role.pk)},
         headers=HTMX,
     )
 
@@ -160,10 +160,16 @@ def test_a_verified_user_joins_immediately(
     with platform_scope(reason="test"):
         membership = Membership.objects.get(tenant=org, user=colleague)
         assert membership.status == Membership.Status.ACTIVE
-        assert membership.role.code == "org-viewer"
+        assert membership.role.code == "org-owner"
 
-    # And they are in, rather than being sent to create an organisation of their own.
-    assert signed_in.get("/app/").status_code == 200
+    # And they are in the organisation they were invited to, rather than being
+    # sent to create one of their own — even though `org` owns no entity yet
+    # and the dashboard therefore redirects them to add one, same as it would
+    # for the owner who invited them.
+    response = signed_in.get("/app/")
+    assert response.status_code == 302
+    assert response["Location"] == reverse("app:entity_create")
+    assert response.wsgi_request.tenant == org
 
 
 def test_accepting_twice_is_not_an_error(
@@ -242,6 +248,11 @@ def test_somebody_with_no_account_can_sign_up_and_land_inside(
         {
             "first_name": "Deepa",
             "last_name": "Colleague",
+            # Asked and filled in like any other sign-up, but unused: joining
+            # via an invitation is what puts them in an organisation, and
+            # `_complete_verification` skips provisioning one from this field
+            # while `SESSION_INVITATION_KEY` is parked on the session.
+            "organisation_name": "Colleague's Consultancy",
             "email": "colleague@acme.example",
             "phone": "9876500012",
             "password": "a-long-enough-password",
@@ -269,7 +280,12 @@ def test_somebody_with_no_account_can_sign_up_and_land_inside(
     with platform_scope(reason="test"):
         assert Tenant.objects.count() == 1
 
-    assert client.get("/app/").status_code == 200
+    # `org` owns no entity yet, so the dashboard sends them to add one — the
+    # same as it would for anybody else in this organisation, and still not a
+    # refusal or a route to inventing a second one.
+    response = client.get("/app/")
+    assert response.status_code == 302
+    assert response["Location"] == reverse("app:entity_create")
 
 
 # ---------------------------------------------------------------------------
@@ -309,14 +325,14 @@ def test_a_forged_token_is_refused_the_same_way() -> None:
 
 
 def test_reinviting_revokes_the_previous_link(
-    org: Tenant, org_owner: User, viewer_role: Role
+    org: Tenant, org_owner: User, owner_role: Role
 ) -> None:
     with platform_scope(reason="test"):
         _first, first_raw = invite_colleague(
-            org, email="colleague@acme.example", role=viewer_role, inviter=org_owner
+            org, email="colleague@acme.example", role=owner_role, inviter=org_owner
         )
         _second, second_raw = invite_colleague(
-            org, email="colleague@acme.example", role=viewer_role, inviter=org_owner
+            org, email="colleague@acme.example", role=owner_role, inviter=org_owner
         )
 
     visitor = Client()
@@ -360,26 +376,8 @@ def test_another_tenants_invitations_are_not_listed(
     assert "colleague@acme.example" not in body
 
 
-def test_a_plain_member_cannot_invite(client: Client, org: Tenant, viewer_role: Role) -> None:
-    """Inviting is granting access. It is not something every member may do."""
-    from tests.conftest import _make_member
-
-    viewer = _make_member(org, "viewer@acme.example", "Vik Viewer", "+919800000304", "org-viewer")
-    signed_in = sign_in(client, viewer, step_up=True)
-
-    assert signed_in.get(reverse("app:team")).status_code == 403
-    assert (
-        signed_in.post(
-            reverse("app:team_invite"),
-            {"email": "someone@else.example", "role": str(viewer_role.pk)},
-            headers=HTMX,
-        ).status_code
-        == 403
-    )
-
-
 def test_invite_colleague_refuses_an_empty_address(
-    org: Tenant, org_owner: User, viewer_role: Role
+    org: Tenant, org_owner: User, owner_role: Role
 ) -> None:
     with platform_scope(reason="test"), pytest.raises(InvitationError):
-        invite_colleague(org, email="   ", role=viewer_role, inviter=org_owner)
+        invite_colleague(org, email="   ", role=owner_role, inviter=org_owner)

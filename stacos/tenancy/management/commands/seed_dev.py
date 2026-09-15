@@ -79,10 +79,7 @@ class Command(BaseCommand):
   Sign in at http://localhost:8000/auth/login/
 
     priya@vaibhav-textiles.example    {PASSWORD}   Owner, Vaibhav Textiles
-    ramesh@vaibhav-textiles.example   {PASSWORD}   Compliance Manager
-    hitesh@vaibhav-textiles.example   {PASSWORD}   Plant HR (Surat only, no financials)
     anand@sharma-associates.example   {PASSWORD}   Partner, Sharma & Associates
-    nikhil@sharma-associates.example  {PASSWORD}   Staff
 
   With WHATSAPP_PROVIDER=console the verification codes are printed to this terminal.
 """
@@ -147,32 +144,11 @@ class Command(BaseCommand):
         people = [
             (org, "org-owner", "priya@vaibhav-textiles.example", "Priya Vaibhav", "+919812340001"),
             (
-                org,
-                "org-compliance-manager",
-                "ramesh@vaibhav-textiles.example",
-                "Ramesh Patel",
-                "+919812340002",
-            ),
-            (
-                org,
-                "org-department-user",
-                "hitesh@vaibhav-textiles.example",
-                "Hitesh Shah",
-                "+919812340003",
-            ),
-            (
                 practice,
                 "practice-partner",
                 "anand@sharma-associates.example",
                 "Anand Sharma",
                 "+919812340011",
-            ),
-            (
-                practice,
-                "practice-staff",
-                "nikhil@sharma-associates.example",
-                "Nikhil Rao",
-                "+919812340012",
             ),
         ]
 

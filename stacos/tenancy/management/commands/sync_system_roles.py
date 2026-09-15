@@ -16,12 +16,13 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from stacos.core.permissions import permission_registry
+from stacos.core.scope import platform_scope
 from stacos.tenancy.models import Role
 from stacos.tenancy.system_roles import SYSTEM_ROLES
 
 
 class Command(BaseCommand):
-    help = "Create or update the built-in system roles."
+    help = "Create, update or remove the built-in system roles."
 
     def add_arguments(self, parser: Any) -> None:
         parser.add_argument("--dry-run", action="store_true", help="Show changes without applying.")
@@ -91,9 +92,44 @@ class Command(BaseCommand):
                 role.rank = spec.rank
                 role.save(update_fields=["name", "description", "permissions", "rank"])
 
-        summary = f"{created} created, {updated} updated, {unchanged} unchanged"
+        stale_removed = self._remove_stale(dry_run=dry_run)
+
+        summary = (
+            f"{created} created, {updated} updated, {unchanged} unchanged, {stale_removed} removed"
+        )
         if dry_run:
             self.stdout.write(self.style.WARNING(f"\nDry run — nothing written. {summary}."))
             transaction.set_rollback(True)
         else:
             self.stdout.write(self.style.SUCCESS(f"\nSystem roles synchronised: {summary}."))
+
+    def _remove_stale(self, *, dry_run: bool) -> int:
+        """Delete system roles no longer defined in code.
+
+        A role still held by a membership is left in place and reported instead
+        of deleted — ``Membership.role`` is ``on_delete=PROTECT`` for exactly
+        this reason, and reassigning those members is a data-migration decision,
+        not something this command should guess at.
+        """
+        current_codes = {(spec.code, spec.tenant_type) for spec in SYSTEM_ROLES}
+        removed = 0
+        with platform_scope(reason="sync_system_roles:prune"):
+            for role in Role.objects.filter(is_system=True):
+                if (role.code, role.tenant_type) in current_codes:
+                    continue
+
+                held_by = role.memberships.count()
+                if held_by:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f"  ! {role.tenant_type:<13} {role.code} no longer defined but still "
+                            f"held by {held_by} membership(s) — left in place"
+                        )
+                    )
+                    continue
+
+                removed += 1
+                self.stdout.write(f"  - {role.tenant_type:<13} {role.code}")
+                if not dry_run:
+                    role.delete()
+        return removed

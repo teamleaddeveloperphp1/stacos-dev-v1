@@ -6,8 +6,15 @@
                  label="{{ entity.get_status_display }}" />
 </c-page-header>
 
+{% comment %}
+  One column, not two. Registrations first and everything else stacked beneath
+  it: the registrations are what the rest of the page is about — obligations fan
+  out per registration — so they lead, and Details/Scale/Premises read as
+  supporting facts about the same entity rather than as a sidebar competing with
+  them for the first glance.
+{% endcomment %}
 <div class="row g-4">
-  <div class="col-12 col-lg-7">
+  <div class="col-12">
     {# ------------------------------------------------------------- #}
     {# Registrations                                                  #}
     {#                                                                #}
@@ -15,7 +22,7 @@
     {# fan out per registration: an entity with GST registrations in  #}
     {# six states files six monthly returns, not one.                 #}
     {# ------------------------------------------------------------- #}
-    <div class="data-table mb-4">
+    <div class="data-table">
       <div class="data-table__toolbar">
         <strong class="small">{% translate "Registrations" %}</strong>
         <span class="text-muted ms-auto" style="font-size:.75rem">
@@ -45,9 +52,64 @@
       </div>
     </div>
 
-    {# ------------------------------------------------------------- #}
-    {# Premises                                                       #}
-    {# ------------------------------------------------------------- #}
+  </div>
+
+  {# --------------------------------------------------------------- #}
+  {# Details and Scale share a row: both are four-line definition lists, and #}
+  {# each one alone across the full width is mostly empty space.             #}
+  {# --------------------------------------------------------------- #}
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><strong class="small">{% translate "Details" %}</strong></div>
+      <div class="card-body">
+        <dl class="row mb-0 small">
+          <dt class="col-5 text-muted fw-normal">{% translate "Entity type" %}</dt>
+          <dd class="col-7">{{ entity.entity_type }}</dd>
+
+          <dt class="col-5 text-muted fw-normal">{% translate "Incorporated" %}</dt>
+          <dd class="col-7">{{ entity.incorporation_date|date:"j M Y"|default:"—" }}</dd>
+
+          <dt class="col-5 text-muted fw-normal">{% translate "Registered office" %}</dt>
+          <dd class="col-7">{{ entity.registered_office_state|default:"—" }}</dd>
+
+          <dt class="col-5 text-muted fw-normal">{% translate "Country" %}</dt>
+          <dd class="col-7">{{ entity.country }}</dd>
+        </dl>
+      </div>
+    </div>
+
+  </div>
+
+  {% comment %}
+    Financial figures are masked for users without `finance.view`. A plant HR
+    user can see that an obligation exists and when it is due, but not the
+    amounts attached to it.
+  {% endcomment %}
+  <div class="col-12 col-lg-6">
+    {% can 'finance.view' as may_see_finance %}
+    <div class="card h-100">
+      <div class="card-header"><strong class="small">{% translate "Scale" %}</strong></div>
+      <div class="card-body">
+        <dl class="row mb-0 small">
+          <dt class="col-6 text-muted fw-normal">{% translate "Turnover" %}</dt>
+          <dd class="col-6 num">
+            {% if may_see_finance %}{{ entity.profile.aggregate_turnover|compact|default:"—" }}
+            {% else %}<span class="text-muted-subtle">{% translate "Hidden" %}</span>{% endif %}
+          </dd>
+
+          <dt class="col-6 text-muted fw-normal">{% translate "Employees" %}</dt>
+          <dd class="col-6 num">{{ entity.profile.employee_count|num|default:"—" }}</dd>
+        </dl>
+      </div>
+    </div>
+
+  </div>
+
+  {# ------------------------------------------------------------- #}
+  {# Premises — full width: it is a table, and the three columns of  #}
+  {# a real site list do not fit in half a row on a laptop.          #}
+  {# ------------------------------------------------------------- #}
+  <div class="col-12">
     <div class="data-table">
       <div class="data-table__toolbar">
         <strong class="small">{% translate "Premises" %}</strong>
@@ -76,108 +138,67 @@
         </table>
       </div>
     </div>
-
-    {% comment %}
-      The per-module panels for this entity, each fetched on load rather than
-      rendered inline.
-
-      Loading them lazily keeps the entity page itself one cheap query: the
-      compliance panel aggregates the whole register for the entity. A user who
-      only wanted to check a GSTIN should not pay for it.
-
-      Each panel is permission-gated here as well as in its own view, so a user
-      without the permission sees nothing rather than an empty card that 403s in
-      the background. The compliance panel is also the only place the "Rebuild
-      calendar" control exists anywhere in the product.
-
-      `transition:false` because these load at the same moment: the View
-      Transitions API allows one at a time and rejects the rest, which surfaces
-      as an unhandled "Transition was skipped" rejection in the console. A panel
-      filling itself in is not a navigation and should not animate like one.
-
-      `hx-target="this"` is load-bearing, and leaving it off is what broke this
-      page. `hx-target` is inherited, and the shell sets it to `#main` for
-      navigation — so a panel with no target of its own resolves to `#main` and,
-      with `outerHTML`, replaces the entire main region with one card. All three
-      fire at once, so whichever answered first won and the registrations table
-      and premises section vanished with it. Worse, `#main` carries
-      `hx-history-elt` and is what every later navigation targets, so once it is
-      gone the sidebar and the shortcuts stop responding until a manual reload.
-      `this` rather than the fragment's own id: the placeholder swaps itself out,
-      so it must not also claim the id its replacement carries.
-    {% endcomment %}
-    {% if "compliance.obligation.view" in access_scope.permissions %}
-      <div hx-get="{% url 'compliance:entity_summary' entity.pk %}"
-           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
-           class="card mb-4" aria-busy="true">
-        <div class="card-body text-muted small">
-          <span class="spinner-inline"></span>
-          <span class="ms-2">{% translate "Loading…" %}</span>
-        </div>
-      </div>
-    {% endif %}
-
-    {% comment %}
-      The events panel. Sixty of the compliance definitions are event-triggered
-      and produce nothing at all until something is recorded, so this is the only
-      place outside a specific "tell us your AGM date" prompt where they can be
-      brought into existence. Built unreachable, they would silently never fire
-      with every test still green.
-    {% endcomment %}
-    {% if "compliance.obligation.view" in access_scope.permissions %}
-      <div hx-get="{% url 'compliance:entity_events' entity.pk %}"
-           hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
-           class="card mb-4" aria-busy="true">
-        <div class="card-body text-muted small">
-          <span class="spinner-inline"></span>
-          <span class="ms-2">{% translate "Loading…" %}</span>
-        </div>
-      </div>
-    {% endif %}
-
-  </div>
-
-  {# --------------------------------------------------------------- #}
-  <div class="col-12 col-lg-5">
-    <div class="card mb-4">
-      <div class="card-header"><strong class="small">{% translate "Details" %}</strong></div>
-      <div class="card-body">
-        <dl class="row mb-0 small">
-          <dt class="col-5 text-muted fw-normal">{% translate "Entity type" %}</dt>
-          <dd class="col-7">{{ entity.entity_type }}</dd>
-
-          <dt class="col-5 text-muted fw-normal">{% translate "Incorporated" %}</dt>
-          <dd class="col-7">{{ entity.incorporation_date|date:"j M Y"|default:"—" }}</dd>
-
-          <dt class="col-5 text-muted fw-normal">{% translate "Registered office" %}</dt>
-          <dd class="col-7">{{ entity.registered_office_state|default:"—" }}</dd>
-
-          <dt class="col-5 text-muted fw-normal">{% translate "Country" %}</dt>
-          <dd class="col-7">{{ entity.country }}</dd>
-        </dl>
-      </div>
-    </div>
-
-    {% comment %}
-      Financial figures are masked for users without `finance.view`. A plant HR
-      user can see that an obligation exists and when it is due, but not the
-      amounts attached to it.
-    {% endcomment %}
-    {% can 'finance.view' as may_see_finance %}
-    <div class="card">
-      <div class="card-header"><strong class="small">{% translate "Scale" %}</strong></div>
-      <div class="card-body">
-        <dl class="row mb-0 small">
-          <dt class="col-6 text-muted fw-normal">{% translate "Turnover" %}</dt>
-          <dd class="col-6 num">
-            {% if may_see_finance %}{{ entity.profile.aggregate_turnover|compact|default:"—" }}
-            {% else %}<span class="text-muted-subtle">{% translate "Hidden" %}</span>{% endif %}
-          </dd>
-
-          <dt class="col-6 text-muted fw-normal">{% translate "Employees" %}</dt>
-          <dd class="col-6 num">{{ entity.profile.employee_count|num|default:"—" }}</dd>
-        </dl>
-      </div>
-    </div>
   </div>
 </div>
+
+{% comment %}
+  The per-module panels for this entity, below the facts above. They were once
+  squeezed into a `col-lg-7` half-row, which produced a stat row that wrapped to
+  two lines and a question queue with nowhere to sit but underneath everything
+  else; the compliance panel's "Answer these first" alongside "what applies to
+  you, by category" needs the full width.
+
+  Each fetched on load rather than rendered inline. Loading them lazily keeps
+  the entity page itself one cheap query: the compliance panel aggregates the
+  whole register for the entity. A user who only wanted to check a GSTIN
+  should not pay for it.
+
+  Each panel is permission-gated here as well as in its own view, so a user
+  without the permission sees nothing rather than an empty card that 403s in
+  the background. The compliance panel is also the only place the "Rebuild
+  calendar" control exists anywhere in the product.
+
+  `transition:false` because these load at the same moment: the View
+  Transitions API allows one at a time and rejects the rest, which surfaces
+  as an unhandled "Transition was skipped" rejection in the console. A panel
+  filling itself in is not a navigation and should not animate like one.
+
+  `hx-target="this"` is load-bearing, and leaving it off is what broke this
+  page. `hx-target` is inherited, and the shell sets it to `#main` for
+  navigation — so a panel with no target of its own resolves to `#main` and,
+  with `outerHTML`, replaces the entire main region with one card. Both fire
+  at once, so whichever answered first won and the row above vanished with
+  it. Worse, `#main` carries `hx-history-elt` and is what every later
+  navigation targets, so once it is gone the sidebar and the shortcuts stop
+  responding until a manual reload. `this` rather than the fragment's own id:
+  the placeholder swaps itself out, so it must not also claim the id its
+  replacement carries.
+{% endcomment %}
+{% if "compliance.obligation.view" in access_scope.permissions %}
+  <div hx-get="{% url 'compliance:entity_summary' entity.pk %}"
+       hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
+       class="card mt-4" aria-busy="true">
+    <div class="card-body text-muted small">
+      <span class="spinner-inline"></span>
+      <span class="ms-2">{% translate "Loading…" %}</span>
+    </div>
+  </div>
+{% endif %}
+
+{% comment %}
+  The events panel. Sixty of the compliance definitions are event-triggered
+  and produce nothing at all until something is recorded, so this is the only
+  place outside a specific "tell us your AGM date" prompt where they can be
+  brought into existence. Built unreachable, they would silently never fire
+  with every test still green.
+{% endcomment %}
+{% if "compliance.obligation.view" in access_scope.permissions %}
+  <div hx-get="{% url 'compliance:entity_events' entity.pk %}"
+       hx-trigger="load" hx-target="this" hx-swap="outerHTML transition:false"
+       class="card mt-4" aria-busy="true">
+    <div class="card-body text-muted small">
+      <span class="spinner-inline"></span>
+      <span class="ms-2">{% translate "Loading…" %}</span>
+    </div>
+  </div>
+{% endif %}
