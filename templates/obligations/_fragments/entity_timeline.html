@@ -1,0 +1,37 @@
+{% load i18n %}
+{% comment %}
+  The entity's own activity feed — every obligation's history, combined.
+
+  Distinct from `timeline.html`, which is one obligation's own page and has no
+  reason to repeat what the page is already about. Here a single "Create my
+  calendar" run writes one `MATERIALISED` event per instance it added, so
+  without naming which obligation each row belongs to, ten rows for ten
+  different filings all read as "Added to the calendar — you hold a TAN",
+  ten times over, which looks like the same thing logged by mistake rather
+  than ten different things happening once each.
+{% endcomment %}
+<ol class="timeline">
+  {% for event in timeline_events %}
+    <li class="timeline__item timeline__item--{{ event.kind|lower }}">
+      <div class="timeline__meta">
+        <time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:"j M Y, H:i" }}</time>
+        <span class="text-muted">{{ event.actor_label|default:"STACOS" }}</span>
+      </div>
+      <div class="timeline__body">
+        <a href="{% url 'compliance:detail' event.obligation_id %}">
+          {{ event.obligation.title }}{% if event.obligation.period_label %} — {{ event.obligation.period_label }}{% endif %}
+        </a>
+        <div>
+          {% if event.kind == "TRANSITION" %}
+            {{ event.context.label|default:event.get_kind_display }}
+          {% else %}
+            {{ event.get_kind_display }}
+          {% endif %}
+        </div>
+        {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
+      </div>
+    </li>
+  {% empty %}
+    <li class="text-muted small">{% translate "Nothing has happened yet." %}</li>
+  {% endfor %}
+</ol>

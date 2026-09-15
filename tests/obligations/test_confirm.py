@@ -16,14 +16,16 @@ recalculates immediately rather than waiting for the nightly run, and that one
 tenant cannot reach another tenant's obligation through this route — as a 404,
 not a 403, because confirming that a row exists elsewhere is itself a disclosure.
 
-An obligation opted into by hand — a pack, or one at a time — has no fact
-behind it either, and used to render the same "Confirm" word as an inert
-``<span>`` a second time: the badge above got a real button, but the one
-below still invited a click that did nothing. It gets the same fix here: a
-plain "does this apply?" yes/no, "yes" recorded on the instance itself
-(``confirmed_by_user``, which the planner never touches and so never
-reverts), "no" routed through the same "mark not applicable" transition the
-detail page's action menu already offers.
+An obligation opted into by hand — a pack, or one at a time — is not in that
+position at all, and the rest of this module is about keeping it out of it. It
+has no missing fact, and it needs no confirming: a person chose to add it, which
+is a firmer answer than a rule could give. It was briefly asked anyway, as a
+plain "does this apply?" yes/no, and the question has one honest answer — a
+calendar that asks a user to confirm what they have just asked for reads as
+though it did not believe them. So an opt-in is materialised confirmed, carries
+no badge, and cannot be reached through this view at all. Changing their mind is
+a dismissal — the detail page's "mark not applicable" — not a confirmation, and
+that route is asserted here too because it is now the only one.
 """
 
 from __future__ import annotations
@@ -37,10 +39,11 @@ from django.urls import reverse
 from stacos.accounts.models import User
 from stacos.core.models import AuditLog
 from stacos.core.scope import platform_scope
-from stacos.engine.lifecycle import State
+from stacos.engine.lifecycle import OPEN_STATES, State
 from stacos.obligations.models import ObligationInclusion, ObligationInstance
+from stacos.obligations.queries import live, status_counts
 from stacos.obligations.services import materialise
-from stacos.tenancy.models import Entity, EntityProfile, Tenant
+from stacos.tenancy.models import Entity, EntityProfile
 from tests.conftest import AS_OF, sign_in
 
 pytestmark = pytest.mark.django_db
@@ -76,7 +79,8 @@ def unconfirmed(materialised: Entity) -> ObligationInstance:
 @pytest.fixture
 def opted_in(materialised: Entity) -> ObligationInstance:
     """An obligation added by hand — no rule ever decided it, so unlike
-    ``unconfirmed`` above, there is no missing fact behind it at all.
+    ``unconfirmed`` above, there is no missing fact behind it at all, and
+    nothing left to ask.
 
     ``IN-IT-ITR7`` (trusts, societies, Section 8 companies) is definitely
     FALSE for a PVT_LTD entity — exactly the shape that needs an opt-in to
@@ -93,9 +97,7 @@ def opted_in(materialised: Entity) -> ObligationInstance:
         )
         materialise(materialised, as_of=AS_OF, trigger="MANUAL")
         row = (
-            ObligationInstance.objects.filter(
-                entity=materialised, definition_code="IN-IT-ITR7", confirmed=False
-            )
+            ObligationInstance.objects.filter(entity=materialised, definition_code="IN-IT-ITR7")
             .order_by("due_date")
             .first()
         )
@@ -150,17 +152,45 @@ def test_the_badge_is_a_control_when_there_is_something_to_ask(
     assert reverse("compliance:confirm", args=[unconfirmed.pk]) in body
 
 
-def test_the_badge_is_a_control_even_with_nothing_to_ask(
-    signed_in: Client, opted_in: ObligationInstance
+def test_an_opt_in_carries_no_badge_at_all(signed_in: Client, opted_in: ObligationInstance) -> None:
+    """The user already said this applies. Asking them again is a question with
+    one honest answer, and a badge offering it reads as not believing them."""
+    assert opted_in.confirmed is True
+    assert list(opted_in.missing_facts) == []
+
+    body = signed_in.get(reverse("compliance:calendar") + "?status=all").content.decode()
+
+    assert opted_in.title in body, "fixture sanity: the opt-in is on the calendar"
+    assert reverse("compliance:confirm", args=[opted_in.pk]) not in body
+
+
+def test_an_opt_in_is_not_in_the_needs_confirming_list(
+    signed_in: Client, opted_in: ObligationInstance, unconfirmed: ObligationInstance
 ) -> None:
-    """An opt-in is unconfirmed because a person chose it, not because a rule
-    could not decide — but it must not be a dead badge either. Every
-    unconfirmed obligation offers a real Confirm control now, fact-based or
-    not."""
     body = signed_in.get(reverse("compliance:calendar") + "?status=unconfirmed").content.decode()
 
-    assert reverse("compliance:confirm", args=[opted_in.pk]) in body
-    assert "Added manually" not in body
+    assert f"obligation-{opted_in.pk}" not in body
+    assert f"obligation-{unconfirmed.pk}" in body, (
+        "fixture sanity: an obligation with a real question is still listed"
+    )
+
+
+def test_the_needs_confirming_counter_counts_only_real_questions(
+    opted_in: ObligationInstance, materialised: Entity
+) -> None:
+    """The tile and the list behind it have to agree, and the list is "rows that
+    name a fact we are missing". A counter that included the opt-in would send a
+    user to a screen that does not contain it."""
+    with platform_scope(reason="test"):
+        counted = status_counts(as_of=AS_OF, entity_ids=[materialised.pk])["unconfirmed"]
+        with_a_question = (
+            live()
+            .filter(entity=materialised, state__in=[str(state) for state in OPEN_STATES])
+            .exclude(missing_facts=[])
+            .count()
+        )
+
+    assert counted == with_a_question
 
 
 # ---------------------------------------------------------------------------
@@ -180,25 +210,9 @@ def test_opening_the_question_offers_something_answerable(
     assert "<!doctype html>" not in body.lower()
 
 
-def test_an_opt_in_offers_yes_and_no_instead_of_a_fact_question(
-    signed_in: Client, opted_in: ObligationInstance
-) -> None:
-    response = signed_in.get(reverse("compliance:confirm", args=[opted_in.pk]), headers=HTMX)
-    body = response.content.decode()
-
-    assert response.status_code == 200
-    assert 'name="decision" value="yes"' in body
-    assert 'name="decision" value="no"' in body
-    assert "<!doctype html>" not in body.lower()
-
-
-def test_an_already_settled_opt_in_is_not_reachable_again(
-    signed_in: Client, opted_in: ObligationInstance
-) -> None:
-    with platform_scope(reason="test"):
-        opted_in.confirmed_by_user = True
-        opted_in.save(update_fields=["confirmed_by_user", "updated_at"])
-
+def test_an_opt_in_has_no_question_to_open(signed_in: Client, opted_in: ObligationInstance) -> None:
+    """Nothing links here for an opt-in, so reaching it means a stale page or a
+    guessed URL. 404 rather than an invented question."""
     response = signed_in.get(reverse("compliance:confirm", args=[opted_in.pk]), headers=HTMX)
 
     assert response.status_code == 404
@@ -297,73 +311,50 @@ def test_answering_is_audited(
 
 
 # ---------------------------------------------------------------------------
-# Deciding without a fact — the opt-in's plain yes/no
+# The opt-in, once it is on the register
 # ---------------------------------------------------------------------------
 
 
-def test_saying_yes_settles_it_without_touching_the_profile(
-    signed_in: Client, opted_in: ObligationInstance, materialised: Entity
+def test_an_opt_in_is_confirmed_without_anybody_being_asked(
+    opted_in: ObligationInstance, materialised: Entity
 ) -> None:
-    """Unlike the fact-based path, "yes" here writes nothing to the entity's
-    compliance profile — there was never a fact behind this row to write."""
-    with platform_scope(reason="test"):
-        facts_before = dict(EntityProfile.objects.get(entity=materialised).facts or {})
-
-    response = signed_in.post(
-        reverse("compliance:confirm", args=[opted_in.pk]), {"decision": "yes"}, headers=HTMX
-    )
-    body = response.content.decode()
-
-    assert response.status_code == 200
-    assert "hx-swap-oob" in body, "the row was not updated out of band"
-    assert "calendar-counts" in body, "the counters were left stale"
-    assert "stacos:modal-close" in response.headers.get("HX-Trigger", "")
-
-    with platform_scope(reason="test"):
-        refreshed = ObligationInstance.objects.get(pk=opted_in.pk)
-        assert refreshed.confirmed_by_user is True
-        # The rule still never decided this — only the human did. Folding the
-        # two together would make `confirmed=True` a lie about where the
-        # answer came from.
-        assert refreshed.confirmed is False
-
-        assert dict(EntityProfile.objects.get(entity=materialised).facts or {}) == facts_before
-
-
-def test_a_yes_survives_the_next_materialisation(
-    signed_in: Client, opted_in: ObligationInstance, materialised: Entity
-) -> None:
-    """The entire point of a separate field: the planner recomputes
-    ``confirmed`` from scratch on every run and would silently flip an
-    opt-in back to unconfirmed if the "yes" lived anywhere the planner
-    touches."""
-    signed_in.post(
-        reverse("compliance:confirm", args=[opted_in.pk]), {"decision": "yes"}, headers=HTMX
-    )
+    """Confirmed by the act of adding it, and it stays that way: the planner
+    recomputes ``confirmed`` from scratch on every run, so a rebuild is where a
+    "settled" that was only settled in the database would come undone."""
+    assert opted_in.confirmed is True
 
     with platform_scope(reason="test"):
         materialise(materialised, as_of=AS_OF, trigger="MANUAL")
         refreshed = ObligationInstance.objects.get(pk=opted_in.pk)
-        assert refreshed.confirmed_by_user is True
 
-    body = signed_in.get(reverse("compliance:calendar") + "?status=unconfirmed").content.decode()
-    assert reverse("compliance:confirm", args=[opted_in.pk]) not in body
+    assert refreshed.confirmed is True
 
 
-def test_saying_no_dismisses_it_through_the_same_transition_the_detail_page_uses(
+def test_an_opt_in_still_says_where_it_came_from(opted_in: ObligationInstance) -> None:
+    """Folding "a person decided" into ``confirmed`` must not cost the
+    explanation. "Why is this on my calendar" is the product's core claim, and
+    borrowing the rule's answer for a row the rule said no to would make it a
+    lie."""
+    assert opted_in.reasons[0] == "you added this to your calendar"
+
+
+def test_changing_their_mind_is_a_dismissal_not_a_confirmation(
     signed_in: Client, opted_in: ObligationInstance
 ) -> None:
+    """The way out of an opt-in is the one every other obligation uses — "mark
+    not applicable" from the detail page — so nothing new had to be built to
+    replace the yes/no dialog."""
     response = signed_in.post(
-        reverse("compliance:confirm", args=[opted_in.pk]), {"decision": "no"}, headers=HTMX
+        reverse("compliance:transition", args=[opted_in.pk]),
+        {"target": State.NOT_APPLICABLE, "note": "Not a trust — added this by mistake."},
+        headers=HTMX,
     )
-    body = response.content.decode()
 
     assert response.status_code == 200
-    assert 'hx-swap-oob="delete"' in body
 
     with platform_scope(reason="test"):
         refreshed = ObligationInstance.objects.get(pk=opted_in.pk)
-        assert refreshed.state == State.NOT_APPLICABLE
+    assert refreshed.state == State.NOT_APPLICABLE
 
 
 def test_a_dismissed_opt_in_is_not_resurrected(
@@ -372,7 +363,8 @@ def test_a_dismissed_opt_in_is_not_resurrected(
     """Dismissing has to survive the nightly rebuild the same way any other
     "mark not applicable" does — mirrors
     ``test_materialisation.test_a_dismissed_obligation_is_not_resurrected``,
-    for the opt-in path specifically.
+    for the opt-in path specifically, where the inclusion is still live and
+    would otherwise force the row straight back on.
 
     Scoped to the exact period that was dismissed: the suppression is
     deliberately per-period (``ObligationSuppression.period_key``), not
@@ -383,7 +375,9 @@ def test_a_dismissed_opt_in_is_not_resurrected(
     """
     dismissed_period = opted_in.period_key
     signed_in.post(
-        reverse("compliance:confirm", args=[opted_in.pk]), {"decision": "no"}, headers=HTMX
+        reverse("compliance:transition", args=[opted_in.pk]),
+        {"target": State.NOT_APPLICABLE, "note": "Not a trust — added this by mistake."},
+        headers=HTMX,
     )
 
     with platform_scope(reason="test"):
@@ -400,32 +394,6 @@ def test_a_dismissed_opt_in_is_not_resurrected(
             archived_at__isnull=True,
         ).exclude(state=State.NOT_APPLICABLE)
         assert not still_live.exists(), "the dismissed opt-in came back as something live"
-
-
-def test_saying_no_without_permission_is_refused_cleanly(
-    opted_in: ObligationInstance, org: Tenant, client: Client
-) -> None:
-    """``confirm_obligation`` is gated on ``tenancy.profile.edit``, which is
-    not the same permission the underlying dismissal transition requires
-    (``compliance.obligation.dismiss``) — a role that can open this modal but
-    not dismiss must get a clean refusal, not a crash or a silent no-op."""
-    from tests.conftest import _make_member
-
-    limited = _make_member(
-        org, "manager@acme.example", "Manoj Manager", "+919800000401", "org-compliance-manager"
-    )
-    manager_client = sign_in(client, limited, step_up=True)
-
-    response = manager_client.post(
-        reverse("compliance:confirm", args=[opted_in.pk]), {"decision": "no"}, headers=HTMX
-    )
-
-    assert response.status_code == 403
-    assert "danger" in response.headers.get("HX-Trigger", "")
-
-    with platform_scope(reason="test"):
-        refreshed = ObligationInstance.objects.get(pk=opted_in.pk)
-        assert refreshed.state != State.NOT_APPLICABLE
 
 
 # ---------------------------------------------------------------------------

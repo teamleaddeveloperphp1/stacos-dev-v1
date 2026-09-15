@@ -1,0 +1,51 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Free-standing remarks on one obligation — distinct from the timeline, which is
+  the system's own record of what changed and when. A comment changes nothing,
+  so it carries no before/after and never reaches the audit log; it exists so a
+  colleague picking the work up tomorrow has the conversation, not just the
+  transitions.
+
+  Re-rendered whole after every post, the same way `detail_panel.html` is after
+  a transition — the composer is inside the swapped section, so it always comes
+  back empty.
+{% endcomment %}
+<section class="card" id="obligation-discussion" aria-live="polite">
+  <h2 class="card__title"><c-icon name="message" size="14" /> {% translate "Discussion" %}</h2>
+
+  <ol class="discussion">
+    {% for event in comments %}
+      <li class="discussion__item">
+        <span class="avatar">{% if event.actor %}{{ event.actor.initials }}{% else %}{{ event.actor_label|slice:":2"|upper }}{% endif %}</span>
+        <div class="discussion__body">
+          <div class="discussion__meta">
+            <span class="fw-medium">{{ event.actor_label|default:"STACOS" }}</span>
+            <time datetime="{{ event.occurred_at|date:'c' }}" class="text-muted">
+              {{ event.occurred_at|date:"j M, H:i" }}
+            </time>
+          </div>
+          <p class="discussion__note">{{ event.note }}</p>
+        </div>
+      </li>
+    {% empty %}
+      <li class="text-muted small">{% translate "Nothing said yet." %}</li>
+    {% endfor %}
+  </ol>
+
+  {% comment %}
+    Shaped like the comments above it — avatar, then the words — so the composer
+    reads as the next entry in the conversation rather than as a form bolted to
+    the bottom of a card. The field's label is real but visually hidden: the
+    placeholder already says what to do, and a "Comment*" label floating over a
+    one-line box in a sidebar-width column is noise a screen reader still needs.
+  {% endcomment %}
+  <form class="discussion__composer"
+        hx-post="{% url 'compliance:comment' obligation.pk %}"
+        hx-target="#obligation-discussion"
+        hx-swap="outerHTML">
+    {% csrf_token %}
+    <span class="avatar" aria-hidden="true">{{ request.user.initials }}</span>
+    {{ comment_form.note|as_crispy_field }}
+    <button class="btn btn-sm btn-primary" type="submit">{% translate "Post" %}</button>
+  </form>
+</section>

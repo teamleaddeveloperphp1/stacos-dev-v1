@@ -1,65 +1,61 @@
 {% load i18n %}
 {% comment %}
-  Per-category obligation counts for one entity, shown on the entity detail page.
-  One grouped query rather than a count per category.
-{% endcomment %}
-{% comment %}
-  The rebuild posts back into this same card. `hx-swap="none"` discarded the
-  response, so the plan ran, the toast fired, and the table the user was looking
-  at stayed exactly as it was until they reloaded the page by hand — which reads
-  as a button that does nothing. The view re-renders this fragment; swapping it
-  outerHTML is the half that was missing.
+  The entity detail page's permanent Compliance card — "what applies to you",
+  the questions that would settle the rest, and the packs other businesses like
+  this one track. Answering a question or toggling a pack re-renders this whole
+  section (`stacos.obligations.views._render_entity_preview`); building or
+  rebuilding the calendar does the same (`rebuild_calendar`) — both swap
+  outerHTML on this section's own id, so `aria-live` is the one region a screen
+  reader has to watch.
 
-  `aria-live` on the section is what tells a screen reader the numbers moved.
+  This used to be a bare per-category open/overdue count. It is now the same
+  rule-evaluated preview the setup wizard used to show once and throw away —
+  see `stacos.obligations.preview` — permanent here instead, because a business
+  keeps adding registrations and answering questions long after the first one.
 {% endcomment %}
 <section class="card" id="entity-obligations" aria-live="polite" aria-atomic="false">
   <div class="card__header">
     <h2 class="card__title">{% translate "Compliance" %}</h2>
-    <form hx-post="{% url 'compliance:rebuild' entity.pk %}"
-          hx-target="#entity-obligations"
-          hx-swap="outerHTML">
-      {% csrf_token %}
-      <button class="btn btn-sm btn-outline-secondary" type="submit">
-        {% translate "Rebuild calendar" %}
-      </button>
-    </form>
+    {% if not hide_build %}
+      {% include "obligations/_fragments/entity_build_button.html" %}
+    {% endif %}
   </div>
 
-  {% if rows %}
-    <table class="table table-sm mb-0">
-      <thead>
-        <tr>
-          <th>{% translate "Category" %}</th>
-          <th class="num">{% translate "Open" %}</th>
-          <th class="num">{% translate "Overdue" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-          <tr>
-            <td>
-              <a href="{% url 'compliance:calendar' %}?entity={{ entity.pk }}&category={{ row.category }}"
-                 hx-get="{% url 'compliance:calendar' %}?entity={{ entity.pk }}&category={{ row.category }}"
-                 hx-target="#main" hx-push-url="true">{{ row.label }}</a>
-            </td>
-            <td class="num">{{ row.total }}</td>
-            <td class="num">
-              {% if row.overdue %}
-                <span class="status-text--overdue">{{ row.overdue }}</span>
-              {% else %}—{% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <c-empty-state title="{% translate 'No obligations yet' %}"
-                   body="{% translate 'Add registrations and complete the profile, then rebuild — the calendar is generated, never typed in.' %}">
-      <form hx-post="{% url 'compliance:rebuild' entity.pk %}"
-            hx-target="#entity-obligations" hx-swap="outerHTML">
-        {% csrf_token %}
-        <button class="btn btn-sm btn-primary" type="submit">{% translate "Build the calendar" %}</button>
-      </form>
-    </c-empty-state>
-  {% endif %}
+  <div class="card-body">
+    {% comment %}
+      The headline counts stay full width — this card now spans the whole
+      page (see `entity_detail_body.html`) rather than sharing a column with
+      Registrations, which is what used to squeeze the stat row into two
+      lines. The question queue sits beside the category breakdown it feeds,
+      not above or below it, so answering a question and watching the
+      right-hand list react reads as one motion.
+    {% endcomment %}
+    {% include "obligations/_fragments/entity_preview_stats.html" %}
+
+    <div class="row g-4 mt-1">
+      <div class="col-12 col-lg-4">
+        {% include "obligations/_fragments/entity_question_queue.html" %}
+      </div>
+      <div class="col-12 col-lg-8">
+        {% include "obligations/_fragments/entity_preview_columns.html" %}
+      </div>
+    </div>
+
+    {% comment %}
+      Packs are a first-run suggestion, so they belong to the guided setup flow
+      and not to the page this card lives on permanently. Kept out of the steady
+      state deliberately: "sets other businesses like yours track" is useful once,
+      while deciding what this entity files, and turns into a standing invitation
+      to bolt on obligations nobody asked for when it never goes away.
+
+      Only the strip is conditional. `packs` is still computed either way —
+      accepted packs count toward the build button's total
+      (`total_obligation_count`), and an entity that adopted one during setup must
+      not have it silently dropped from the count afterwards. Removing an already
+      accepted pack now happens on the obligations themselves.
+    {% endcomment %}
+    {% if in_setup %}
+      {% include "obligations/_fragments/entity_pack_strip.html" %}
+    {% endif %}
+  </div>
 </section>

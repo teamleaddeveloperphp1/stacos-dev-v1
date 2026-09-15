@@ -27,4 +27,16 @@
       <button class="btn btn-sm btn-primary" type="submit">{% translate "Save date" %}</button>
     </form>
   {% endif %}
+
+  {% if obligation.assigned_to %}
+    <form hx-post="{% url 'compliance:nudge' obligation.pk %}"
+          hx-target="#obligation-panel"
+          hx-swap="outerHTML"
+          class="mt-2">
+      {% csrf_token %}
+      <button class="btn btn-sm btn-outline-secondary" type="submit">
+        {% blocktranslate with name=obligation.assigned_to %}Nudge {{ name }}{% endblocktranslate %}
+      </button>
+    </form>
+  {% endif %}
 </div>

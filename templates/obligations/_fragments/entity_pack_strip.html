@@ -1,0 +1,33 @@
+{% load i18n %}
+{% if packs %}
+  <h3 class="pack-strip__title">{% translate "Sets other businesses like yours track" %}</h3>
+  <p class="pack-strip__lead">
+    {% translate "Optional. A pack adds obligations the rules cannot infer yet — you can drop any of them later." %}
+  </p>
+  <div class="pack-strip">
+    {% for suggestion in packs %}
+      <article class="pack-card {% if suggestion.accepted %}is-accepted{% endif %}">
+        <h4 class="pack-card__name">{{ suggestion.pack.name }}</h4>
+        <p class="pack-card__summary">{{ suggestion.pack.summary }}</p>
+        {% if suggestion.pack.rationale %}
+          <p class="pack-card__why">{{ suggestion.pack.rationale }}</p>
+        {% endif %}
+        <footer class="pack-card__foot">
+          <span class="pack-card__count">
+            {% blocktranslate count counter=suggestion.adds %}
+              adds {{ counter }} obligation
+            {% plural %}
+              adds {{ counter }} obligations
+            {% endblocktranslate %}
+          </span>
+          <button class="btn btn-sm {% if suggestion.accepted %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}"
+                  hx-post="{% url 'compliance:toggle_entity_pack' entity.pk suggestion.pack.code %}{{ card_query }}"
+                  hx-target="#entity-obligations"
+                  hx-swap="outerHTML">
+            {% if suggestion.accepted %}{% translate "Remove" %}{% else %}{% translate "Add" %}{% endif %}
+          </button>
+        </footer>
+      </article>
+    {% endfor %}
+  </div>
+{% endif %}

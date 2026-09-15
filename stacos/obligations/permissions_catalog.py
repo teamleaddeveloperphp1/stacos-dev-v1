@@ -17,6 +17,8 @@ from stacos.core.permissions import Permission, permission_registry
 CATEGORY = "Compliance"
 
 VIEW = "compliance.obligation.view"
+LIBRARY_VIEW = "compliance.library.view"
+LIBRARY_MANAGE = "compliance.library.manage"
 
 permission_registry.register_many(
     [
@@ -109,6 +111,16 @@ permission_registry.register_many(
             implies=frozenset({VIEW}),
         ),
         Permission(
+            code="compliance.obligation.comment",
+            label="Comment on an obligation",
+            category=CATEGORY,
+            description=(
+                "Posts a remark to the obligation's timeline. Granted to anyone who "
+                "can see the obligation — discussion is not a workflow step."
+            ),
+            implies=frozenset({VIEW}),
+        ),
+        Permission(
             code="compliance.calendar.rebuild",
             label="Rebuild the compliance calendar",
             category=CATEGORY,
@@ -140,6 +152,26 @@ permission_registry.register_many(
                 "due dates that cannot otherwise be computed."
             ),
             implies=frozenset({VIEW}),
+        ),
+        Permission(
+            code=LIBRARY_VIEW,
+            label="Browse the compliance library",
+            category=CATEGORY,
+            description=(
+                "The full compliance catalog against one entity — every published "
+                "definition, not just what the calendar has already computed."
+            ),
+            implies=frozenset({VIEW}),
+        ),
+        Permission(
+            code=LIBRARY_MANAGE,
+            label="Add or remove a compliance definition for an entity",
+            category=CATEGORY,
+            description=(
+                "Overrides the engine for one definition. Recorded as a suppression "
+                "or inclusion so a future rebuild respects it."
+            ),
+            implies=frozenset({LIBRARY_VIEW}),
         ),
     ]
 )

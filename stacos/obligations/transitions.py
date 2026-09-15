@@ -24,9 +24,35 @@ from django.utils.translation import gettext as _
 from stacos.core.audit import record_event
 from stacos.core.models import AuditAction
 from stacos.engine.lifecycle import State, Transition, allowed_transitions, transition_for
-from stacos.obligations.models import ObligationEvent, ObligationInstance, ObligationSuppression
+from stacos.notifications.models import NotificationKind, Severity, SubjectType
+from stacos.notifications.services import raise_notification
+from stacos.obligations.models import (
+    DEFAULT_WORKFLOW_STEPS,
+    ROLE_PERMISSION,
+    ObligationEvent,
+    ObligationInstance,
+    ObligationStep,
+    ObligationSuppression,
+)
 
-__all__ = ["TransitionError", "TransitionResult", "apply_transition", "available_actions"]
+__all__ = [
+    "TransitionError",
+    "TransitionResult",
+    "add_comment",
+    "apply_transition",
+    "assign",
+    "assign_step",
+    "attach_acknowledgement",
+    "available_actions",
+    "block_step",
+    "complete_step",
+    "ensure_steps",
+    "nudge",
+    "record_completion",
+    "record_pending",
+    "reopen_step",
+    "unblock_step",
+]
 
 
 class TransitionError(Exception):
@@ -266,3 +292,507 @@ def assign(
         after={"assigned_to": str(assignee) if assignee else None},
     )
     return event
+
+
+def add_comment(
+    obligation: ObligationInstance,
+    *,
+    actor: Any,
+    note: str,
+) -> ObligationEvent:
+    """A free-standing remark, not tied to any state change.
+
+    Uses :attr:`ObligationEvent.Kind.NOTE` — defined alongside every other kind
+    but, until this, never written. Deliberately no :func:`record_event` call:
+    a comment changes nothing about the obligation, so it has no before/after
+    for a regulator's audit log, only a line on the colleague-facing timeline.
+    """
+    return ObligationEvent.objects.create(
+        tenant_id=obligation.tenant_id,
+        entity_id=obligation.entity_id,
+        obligation=obligation,
+        kind=ObligationEvent.Kind.NOTE,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=note,
+    )
+
+
+def record_completion(
+    obligation: ObligationInstance,
+    *,
+    actor: Any,
+    permissions: frozenset[str],
+    filed_on: date,
+    filing_reference: str,
+    acknowledgement: Any = None,
+    as_of: date | None = None,
+) -> TransitionResult:
+    """ "Yes, it is done" — the whole of it, in one call.
+
+    Goes through :func:`apply_transition` rather than around it. The temptation
+    is obvious — this knows the target state already — but the permission check,
+    the legality check, the timeline entry and the audit row all live in there,
+    and a second way to set ``filed_on`` is a second way to set it without any
+    of them.
+
+    The document is saved *after* the transition rather than in the same
+    ``save()``: writing bytes to disk inside the transaction would leave an
+    orphaned file behind if anything later rolled back, and the transition is
+    worth recording with or without the attachment.
+    """
+    result = apply_transition(
+        obligation,
+        target=State.FILED,
+        actor=actor,
+        permissions=permissions,
+        filing_reference=filing_reference,
+        filed_on=filed_on,
+        as_of=as_of,
+    )
+
+    # The pending answer described a filing that had not happened. Leaving it on
+    # the row would show "waiting on the client's bank statement" underneath a
+    # completed filing for the rest of the obligation's life.
+    if obligation.pending_reason or obligation.expected_completion_date:
+        obligation.pending_reason = ""
+        obligation.expected_completion_date = None
+        obligation.pending_reported_at = None
+        obligation.save(
+            update_fields=[
+                "pending_reason",
+                "expected_completion_date",
+                "pending_reported_at",
+                "updated_at",
+            ]
+        )
+
+    if acknowledgement is not None:
+        attach_acknowledgement(obligation, upload=acknowledgement, actor=actor)
+
+    return result
+
+
+def attach_acknowledgement(
+    obligation: ObligationInstance,
+    *,
+    upload: Any,
+    actor: Any,
+) -> ObligationEvent:
+    """Store the acknowledgement document and say so on the timeline.
+
+    Replacing an existing one deletes the old bytes. That is deliberate and it
+    is the one destructive act in this module: the alternative is a directory
+    that grows a copy every time somebody re-uploads a corrected scan, with no
+    way to tell from the row which of them the obligation actually points at.
+    The *event* recording the replacement survives, which is what an auditor
+    reads.
+    """
+    previous = obligation.acknowledgement.name or ""
+
+    obligation.acknowledgement.save(str(upload.name), upload, save=False)
+    obligation.acknowledgement_name = str(upload.name)[:255]
+    obligation.save(update_fields=["acknowledgement", "acknowledgement_name", "updated_at"])
+
+    if previous and previous != obligation.acknowledgement.name:
+        obligation.acknowledgement.storage.delete(previous)
+
+    event = ObligationEvent.objects.create(
+        tenant_id=obligation.tenant_id,
+        entity_id=obligation.entity_id,
+        obligation=obligation,
+        kind=ObligationEvent.Kind.EVIDENCE_ADDED,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=_("Acknowledgement attached: %(name)s.") % {"name": obligation.acknowledgement_name},
+        context={"filename": obligation.acknowledgement_name, "replaced": bool(previous)},
+    )
+
+    record_event(
+        action=AuditAction.UPDATE,
+        actor=actor,
+        obj=obligation,
+        before={"acknowledgement": previous},
+        after={"acknowledgement": obligation.acknowledgement.name},
+    )
+    return event
+
+
+@transaction.atomic
+def record_pending(
+    obligation: ObligationInstance,
+    *,
+    actor: Any,
+    permissions: frozenset[str],
+    reason: str,
+    expected_on: date | None,
+) -> ObligationEvent:
+    """ "Not yet" — why not, and when it is expected.
+
+    **This changes no state.** An obligation someone has explained is still
+    owed, still dated and still going overdue on schedule; the register would
+    stop being worth reading the day an explanation began to count as progress.
+    Deferring exists for the case where the *decision* is to postpone, and it
+    suppresses the row precisely because somebody took responsibility for that.
+
+    The answer is stamped with when it was given, so "next week" written two
+    months ago reads as stale rather than as current.
+    """
+    if "compliance.obligation.prepare" not in permissions:
+        raise TransitionError(_("You do not have permission to do that."), code="forbidden")
+
+    if obligation.is_superseded:
+        raise TransitionError(
+            _("This obligation is no longer applicable and cannot be worked on."),
+            code="superseded",
+        )
+
+    reason = reason.strip()
+    if not reason:
+        raise TransitionError(
+            _("Please say why — this is what the next person to pick it up will read."),
+            code="note_required",
+        )
+
+    before = {
+        "pending_reason": obligation.pending_reason,
+        "expected_completion_date": (
+            obligation.expected_completion_date.isoformat()
+            if obligation.expected_completion_date
+            else None
+        ),
+    }
+
+    obligation.pending_reason = reason
+    obligation.expected_completion_date = expected_on
+    obligation.pending_reported_at = timezone.now()
+    obligation.save(
+        update_fields=[
+            "pending_reason",
+            "expected_completion_date",
+            "pending_reported_at",
+            "updated_at",
+        ]
+    )
+
+    event = ObligationEvent.objects.create(
+        tenant_id=obligation.tenant_id,
+        entity_id=obligation.entity_id,
+        obligation=obligation,
+        kind=ObligationEvent.Kind.NOTE,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=(
+            _("Still pending: %(reason)s Expected by %(date)s.")
+            % {"reason": reason, "date": expected_on.isoformat()}
+            if expected_on
+            else _("Still pending: %(reason)s") % {"reason": reason}
+        ),
+        context={
+            "pending_reason": reason,
+            "expected_completion_date": expected_on.isoformat() if expected_on else None,
+        },
+    )
+
+    record_event(
+        action=AuditAction.UPDATE,
+        actor=actor,
+        obj=obligation,
+        before=before,
+        after={
+            "pending_reason": reason,
+            "expected_completion_date": expected_on.isoformat() if expected_on else None,
+        },
+    )
+    return event
+
+
+def nudge(
+    obligation: ObligationInstance,
+    *,
+    person: Any,
+    actor: Any,
+    as_of: date,
+    url: str,
+) -> ObligationEvent:
+    """Re-raise the reminder for whoever is holding this up.
+
+    ``person`` is usually ``obligation.assigned_to``, but a checklist step can
+    have its own assignee — someone specifically blocking *that* step rather
+    than the filing as a whole — so it is a parameter rather than read off the
+    obligation here. The view only offers the button when there is somebody to
+    nudge.
+
+    Reuses the same approved WhatsApp/email templates the automated reminder
+    sweep sends (``OBLIGATION_OVERDUE`` / ``OBLIGATION_DUE``), rather than
+    inventing a new notification kind: a kind is also a WhatsApp template that
+    needs Meta's approval by name, and a manual nudge says exactly the same
+    thing an automated one would.
+
+    ``dedupe_key`` carries the current timestamp so a manual nudge is never
+    silently swallowed by the sweep's own dedupe key for the same day.
+    """
+    overdue = obligation.due_date is not None and obligation.due_date < as_of
+    kind = NotificationKind.OBLIGATION_OVERDUE if overdue else NotificationKind.OBLIGATION_DUE
+
+    raise_notification(
+        tenant_id=obligation.tenant_id,
+        recipient=person,
+        kind=kind,
+        title=_("%(obligation)s needs you") % {"obligation": obligation.title},
+        body=_("%(actor)s nudged you about this filing.") % {"actor": _actor_label(actor)},
+        url=url,
+        severity=Severity.ATTENTION,
+        entity=obligation.entity,
+        subject_type=SubjectType.OBLIGATION,
+        subject_id=obligation.pk,
+        dedupe_key=f"nudge:{obligation.pk}:{person.pk}:{timezone.now().isoformat()}",
+        context={
+            "entity": obligation.entity.name,
+            "obligation": obligation.title,
+            "date": obligation.due_date.isoformat() if obligation.due_date else "",
+        },
+    )
+
+    return ObligationEvent.objects.create(
+        tenant_id=obligation.tenant_id,
+        entity_id=obligation.entity_id,
+        obligation=obligation,
+        kind=ObligationEvent.Kind.NOTE,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=_("Nudged %(person)s.") % {"person": person},
+    )
+
+
+# ---------------------------------------------------------------------------
+# The checklist — opt-in detail behind the obligations whose definition has a
+# workflow_steps template. See ObligationStep's own docstring for why this
+# exists beside, not instead of, the lifecycle state.
+# ---------------------------------------------------------------------------
+
+
+def ensure_steps(obligation: ObligationInstance) -> list[ObligationStep]:
+    """The obligation's checklist, creating it from a template on first read.
+
+    Every obligation gets one: the catalog definition's own
+    ``workflow_steps`` when it has written one (Form 24Q does), otherwise
+    ``DEFAULT_WORKFLOW_STEPS`` — the same four stages the lifecycle stepper
+    has always shown, as real per-item work instead of a status-only bar.
+    There is no "no checklist" case on the happy path any more; the detail
+    page still suppresses the section entirely off it (deferred, disputed,
+    not-applicable), the same way it always suppressed the stepper.
+
+    Idempotent and self-healing, the same shape as
+    ``tests.conftest._system_role``: called on every detail-page view, it is a
+    no-op once the rows exist, and there is nothing to reconcile if it is
+    called twice concurrently — ``ignore_conflicts`` on the identity
+    constraint means the loser of a race simply does not insert its copies.
+    """
+    existing = list(obligation.steps.select_related("assigned_to", "completed_by"))
+    if existing:
+        return existing
+
+    from stacos.catalog.models import DefinitionVersion
+
+    version = (
+        DefinitionVersion.objects.filter(
+            definition__code=obligation.definition_code, version=obligation.definition_version
+        )
+        .only("workflow_steps")
+        .first()
+    )
+    templates = (version.workflow_steps if version else None) or DEFAULT_WORKFLOW_STEPS
+
+    ObligationStep.objects.bulk_create(
+        [
+            ObligationStep(
+                tenant_id=obligation.tenant_id,
+                entity_id=obligation.entity_id,
+                obligation=obligation,
+                key=template["key"],
+                order=index,
+                label=template["label"],
+                role=template["role"],
+                assigned_to=_resolve_default_assignee(
+                    obligation.entity, template.get("default_owner_role", "")
+                ),
+                days_before_due=template.get("days_before_due"),
+                requires_evidence=bool(template.get("requires_evidence", False)),
+            )
+            for index, template in enumerate(templates)
+        ],
+        ignore_conflicts=True,
+    )
+    return list(obligation.steps.select_related("assigned_to", "completed_by"))
+
+
+def _resolve_default_assignee(entity: Any, role_code: str) -> Any | None:
+    """Whoever holds ``role_code`` in this entity's tenant, deterministically.
+
+    Several members can hold the same role, so this is not "the" holder in
+    any absolute sense — it is the earliest-joined active one, picked
+    consistently rather than arbitrarily. An unresolvable or empty code is
+    not an error: the step is simply left unassigned, the same outcome as a
+    definition that names no default at all. Not entity-scoped (does not
+    check ``Membership.all_entities``/``entities``) — a person scoped away
+    from this specific entity could still be picked; a v1 simplification.
+    """
+    if not role_code:
+        return None
+
+    from stacos.tenancy.models import Membership
+
+    membership = (
+        Membership.objects.filter(
+            tenant_id=entity.tenant_id,
+            role__code=role_code,
+            status=Membership.Status.ACTIVE,
+        )
+        .select_related("user")
+        .order_by("created_at")
+        .first()
+    )
+    return membership.user if membership else None
+
+
+def _require_step_permission(step: ObligationStep, permissions: frozenset[str]) -> None:
+    if ROLE_PERMISSION[step.role] not in permissions:
+        raise TransitionError(_("You do not have permission to do that."), code="forbidden")
+
+
+def complete_step(
+    step: ObligationStep, *, actor: Any, permissions: frozenset[str], evidence_note: str = ""
+) -> ObligationStep:
+    """Mark one checklist item done.
+
+    ``evidence_note`` is required, not optional, when the step's own template
+    asked for one (``requires_evidence``) — the same shape as a blocked
+    step's reason: a judgement call gets a sentence recorded with it, not a
+    silent click.
+    """
+    _require_step_permission(step, permissions)
+
+    evidence_note = evidence_note.strip()
+    if step.requires_evidence and not evidence_note:
+        raise TransitionError(
+            _("Say what evidence confirms this — it is recorded with the step."),
+            code="note_required",
+        )
+
+    step.state = ObligationStep.State.DONE
+    step.completed_at = timezone.now()
+    step.completed_by = actor if getattr(actor, "is_authenticated", False) else None
+    step.blocked_reason = ""
+    if evidence_note:
+        step.evidence_note = evidence_note
+    step.save(
+        update_fields=[
+            "state",
+            "completed_at",
+            "completed_by",
+            "blocked_reason",
+            "evidence_note",
+            "updated_at",
+        ]
+    )
+    ObligationEvent.objects.create(
+        tenant_id=step.tenant_id,
+        entity_id=step.entity_id,
+        obligation_id=step.obligation_id,
+        kind=ObligationEvent.Kind.STEP_COMPLETED,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=_('Completed "%(label)s".') % {"label": step.label},
+    )
+    return step
+
+
+def reopen_step(step: ObligationStep, *, actor: Any, permissions: frozenset[str]) -> ObligationStep:
+    """Undo a completed step — it becomes pending again, evidence and all."""
+    _require_step_permission(step, permissions)
+
+    step.state = ObligationStep.State.PENDING
+    step.completed_at = None
+    step.completed_by = None
+    step.save(update_fields=["state", "completed_at", "completed_by", "updated_at"])
+    ObligationEvent.objects.create(
+        tenant_id=step.tenant_id,
+        entity_id=step.entity_id,
+        obligation_id=step.obligation_id,
+        kind=ObligationEvent.Kind.STEP_REOPENED,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=_('Reopened "%(label)s".') % {"label": step.label},
+    )
+    return step
+
+
+def block_step(
+    step: ObligationStep, *, actor: Any, permissions: frozenset[str], reason: str
+) -> ObligationStep:
+    """Say what a step is waiting on, so "blocked" means something specific."""
+    _require_step_permission(step, permissions)
+    reason = reason.strip()
+    if not reason:
+        raise TransitionError(
+            _("Say what this is waiting on — it is shown to whoever can unblock it."),
+            code="note_required",
+        )
+
+    step.state = ObligationStep.State.BLOCKED
+    step.blocked_reason = reason
+    step.save(update_fields=["state", "blocked_reason", "updated_at"])
+    ObligationEvent.objects.create(
+        tenant_id=step.tenant_id,
+        entity_id=step.entity_id,
+        obligation_id=step.obligation_id,
+        kind=ObligationEvent.Kind.STEP_BLOCKED,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=_('Blocked "%(label)s" — %(reason)s') % {"label": step.label, "reason": reason},
+    )
+    return step
+
+
+def unblock_step(
+    step: ObligationStep, *, actor: Any, permissions: frozenset[str]
+) -> ObligationStep:
+    """Clear a block without marking the step done — the thing it was waiting
+    on came through, the work itself has not."""
+    _require_step_permission(step, permissions)
+
+    step.state = ObligationStep.State.PENDING
+    step.blocked_reason = ""
+    step.save(update_fields=["state", "blocked_reason", "updated_at"])
+    ObligationEvent.objects.create(
+        tenant_id=step.tenant_id,
+        entity_id=step.entity_id,
+        obligation_id=step.obligation_id,
+        kind=ObligationEvent.Kind.STEP_UNBLOCKED,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=_('Unblocked "%(label)s".') % {"label": step.label},
+    )
+    return step
+
+
+def assign_step(step: ObligationStep, *, assignee: Any, actor: Any) -> ObligationStep:
+    """Hand one checklist item to someone — independent of who owns the
+    obligation as a whole."""
+    step.assigned_to = assignee
+    step.save(update_fields=["assigned_to", "updated_at"])
+    ObligationEvent.objects.create(
+        tenant_id=step.tenant_id,
+        entity_id=step.entity_id,
+        obligation_id=step.obligation_id,
+        kind=ObligationEvent.Kind.STEP_ASSIGNED,
+        actor=actor if getattr(actor, "is_authenticated", False) else None,
+        actor_label=_actor_label(actor),
+        note=(
+            _('Assigned "%(label)s" to %(name)s.') % {"label": step.label, "name": assignee}
+            if assignee is not None
+            else _('Cleared the assignee on "%(label)s".') % {"label": step.label}
+        ),
+    )
+    return step

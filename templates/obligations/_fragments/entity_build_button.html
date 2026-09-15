@@ -1,0 +1,45 @@
+{% load i18n %}
+{% comment %}
+  "Build" reads as an offer and "Rebuild" reads as a correction — confusing the
+  two the first time somebody opens a brand-new entity would be the whole first
+  impression of the product, so the label is decided by `has_calendar`
+  (`stacos.obligations.views.entity_preview_context`), not repeated in two
+  places.
+
+  The number is `preview.applies_count` plus whatever accepted packs add on top
+  (`stacos.obligations.preview.total_obligation_count`) — the count of rows a
+  build will actually create, not just the rule-evaluated ones. Posting to
+  `compliance:rebuild` either way: the planner never destroys an obligation
+  carrying history, so a "build" on an entity that already has a calendar is
+  exactly as safe as a "rebuild".
+
+  `finish_setup` tells `rebuild_calendar` to send the browser on to the
+  dashboard once this succeeds, which is what turns this button into the last
+  step of the guided setup flow instead of an in-place refresh with nowhere
+  further to go. Exactly one template sets it: the setup flow's Build step,
+  which renders this button in its wizard footer. It was briefly a flag on the
+  card in the header here, and had to be threaded back through the querystring
+  on every re-render because this card swaps itself out; rendering the button
+  outside the swapped region instead is what removed the need.
+
+  `button_class` lets that footer ask for a full-size primary button, matching
+  the "Next" button every earlier step of the wizard ends with. The card header
+  wants the small one, so that is the default.
+{% endcomment %}
+<form hx-post="{% url 'compliance:rebuild' entity.pk %}{% if finish_setup %}?finish_setup=1{% endif %}"
+      hx-target="#entity-obligations" hx-swap="outerHTML">
+  {% csrf_token %}
+  <button type="submit"
+          class="{{ button_class|default:'btn btn-sm' }} {% if has_calendar %}btn-outline-secondary{% else %}btn-primary{% endif %}"
+          hx-disabled-elt="this">
+    {% if has_calendar %}
+      {% translate "Rebuild calendar" %}
+    {% else %}
+      {% blocktranslate count counter=total_count %}
+        Create my calendar with {{ counter }} obligation
+      {% plural %}
+        Create my calendar with {{ counter }} obligations
+      {% endblocktranslate %}
+    {% endif %}
+  </button>
+</form>

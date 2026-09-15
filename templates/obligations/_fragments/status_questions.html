@@ -1,0 +1,156 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The whole of "where has this got to", as two questions.
+
+  It replaces a checklist of named steps and a row of lifecycle buttons, and the
+  reason is not simplification for its own sake: almost every filing in this
+  product is done by one person in one sitting on a government portal, and a
+  four-stage maker-checker rail asked them to narrate work they had already
+  finished. What the register actually needs back is the acknowledgement number —
+  the row an assessment is defended with — and, when there is no number yet, why
+  not.
+
+  So: one question, two answers, and each answer asks only for what it needs.
+
+  A "no" records an explanation and changes no state. That is deliberate and it
+  is the thing most easily "improved" into a bug — an obligation somebody has
+  explained is still owed, still dated, and still goes overdue on schedule.
+  Deferring is what exists for a decision to postpone, and it suppresses the row
+  precisely because somebody took responsibility for that.
+{% endcomment %}
+
+<section class="ask" x-data="{ answer: '{{ open_answer }}' }">
+  {% if obligation.filed_on %}
+    {% comment %}
+      Already answered. The record itself is the answer — restating the question
+      under it would invite a second, contradictory one. Correcting a mistyped
+      number is a reversal, which lives with the other judgement calls below and
+      is recorded as one.
+    {% endcomment %}
+    <h3 class="ask__question">
+      <c-icon name="check" size="14" /> {% translate "Recorded as filed" %}
+    </h3>
+    <dl class="key-values">
+      <dt>{% translate "Date of completion" %}</dt>
+      <dd>{{ obligation.filed_on|date:"j M Y" }}</dd>
+      <dt>{% translate "Acknowledgement number" %}</dt>
+      <dd>{{ obligation.filing_reference|default:"—" }}</dd>
+      <dt>{% translate "Acknowledgement document" %}</dt>
+      <dd>
+        {% if obligation.acknowledgement %}
+          <a class="ask__file" href="{% url 'compliance:acknowledgement' obligation.pk %}">
+            <c-icon name="document" size="13" />
+            {{ obligation.acknowledgement_name|default:_("Download") }}
+          </a>
+        {% else %}
+          <span class="text-muted">{% translate "Not attached" %}</span>
+        {% endif %}
+      </dd>
+    </dl>
+
+    {% if can_record_filing %}
+      {% comment %}
+        The one thing still worth offering on a filed obligation: the number was
+        recorded from memory and the PDF turned up afterwards. Attaching it is
+        not a state change, so it is a disclosure rather than a second question.
+      {% endcomment %}
+      <details class="ask__more">
+        <summary class="btn btn-sm btn-outline-secondary">
+          {% if obligation.acknowledgement %}
+            {% translate "Replace the document" %}
+          {% else %}
+            {% translate "Attach the acknowledgement" %}
+          {% endif %}
+        </summary>
+        <form class="ask__form" hx-post="{% url 'compliance:acknowledgement' obligation.pk %}"
+              hx-encoding="multipart/form-data"
+              hx-target="#obligation-panel" hx-swap="outerHTML">
+          {% csrf_token %}
+          <label for="ack-late-{{ obligation.pk }}">{% translate "Acknowledgement document" %}</label>
+          <input class="form-control form-control-sm" type="file" required
+                 id="ack-late-{{ obligation.pk }}" name="acknowledgement"
+                 accept=".pdf,.png,.jpg,.jpeg">
+          <p class="ask__hint">{% translate "PDF or photo, up to 10 MB." %}</p>
+          <button class="btn btn-sm btn-primary" type="submit">{% translate "Attach" %}</button>
+        </form>
+      </details>
+    {% endif %}
+
+  {% elif can_record_filing or can_record_pending %}
+    <fieldset class="ask__choices">
+      <legend class="ask__question">{% translate "Is this filing completed?" %}</legend>
+
+      {% comment %}
+        Real radios rather than two buttons with `aria-pressed`. Arrow-key
+        navigation, the grouped announcement and the "one of these" semantics all
+        come free from the element, and none of them survive being rebuilt.
+      {% endcomment %}
+      {% if can_record_filing %}
+        <label class="ask__choice">
+          <input type="radio" name="answer-{{ obligation.pk }}" value="yes" x-model="answer">
+          <span class="ask__choice-label">{% translate "Yes, it is done" %}</span>
+          <span class="ask__choice-hint">{% translate "Record the date and acknowledgement" %}</span>
+        </label>
+      {% endif %}
+      {% if can_record_pending %}
+        <label class="ask__choice">
+          <input type="radio" name="answer-{{ obligation.pk }}" value="no" x-model="answer">
+          <span class="ask__choice-label">{% translate "Not yet" %}</span>
+          <span class="ask__choice-hint">{% translate "Say why, and when you expect it" %}</span>
+        </label>
+      {% endif %}
+    </fieldset>
+
+    {% if can_record_filing %}
+      <form class="ask__form" x-show="answer === 'yes'" x-cloak
+            hx-post="{% url 'compliance:status' obligation.pk %}"
+            hx-encoding="multipart/form-data"
+            hx-target="#obligation-panel" hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="answer" value="yes">
+        {{ completed_form|crispy }}
+        <button class="btn btn-sm btn-primary" type="submit">
+          <c-icon name="check" size="14" /> {% translate "Record it as filed" %}
+        </button>
+      </form>
+    {% endif %}
+
+    {% if can_record_pending %}
+      <form class="ask__form" x-show="answer === 'no'" x-cloak
+            hx-post="{% url 'compliance:status' obligation.pk %}"
+            hx-target="#obligation-panel" hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="answer" value="no">
+        {{ pending_form|crispy }}
+        <button class="btn btn-sm btn-outline-secondary" type="submit">
+          {% translate "Record where it stands" %}
+        </button>
+      </form>
+    {% endif %}
+
+  {% else %}
+    <p class="text-muted small mb-0">
+      {% translate "You can see this filing but not record where it has got to." %}
+    </p>
+  {% endif %}
+
+  {% if obligation.pending_reason and not obligation.filed_on %}
+    {% comment %}
+      The last answer, shown under the question rather than instead of it — the
+      point of asking again is that the situation moves. Dated, because "waiting
+      on the client's bank statement" written nine weeks ago is a different fact
+      from the same sentence written this morning.
+    {% endcomment %}
+    <div class="ask__last">
+      <p class="ask__last-note">{{ obligation.pending_reason }}</p>
+      <p class="ask__hint">
+        {% if obligation.expected_completion_date %}
+          {% blocktranslate with expected=obligation.expected_completion_date|date:"j M Y" %}Expected by {{ expected }}.{% endblocktranslate %}
+        {% endif %}
+        {% if obligation.pending_reported_at %}
+          {% blocktranslate with when=obligation.pending_reported_at|date:"j M Y" %}Told to us on {{ when }}.{% endblocktranslate %}
+        {% endif %}
+      </p>
+    </div>
+  {% endif %}
+</section>

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import date
+from pathlib import Path
 from typing import Any
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Column, Layout, Row
 from django import forms
+from django.utils import timezone
 from django.utils.functional import Promise
 from django.utils.translation import gettext_lazy as _
 
@@ -51,6 +54,142 @@ class TransitionForm(forms.Form):
         self.helper = FormHelper()
         self.helper.form_tag = False
         self.helper.layout = Layout("note", "filing_reference", "filed_on")
+
+
+#: What an acknowledgement may be. A portal hands back a PDF; a phone hands back
+#: a photograph of the screen. Nothing else is worth accepting, and an allowlist
+#: is the only form of this check that is not a guessing game — the extension is
+#: checked as well as the browser-declared type, because the latter is simply
+#: whatever the client chose to claim.
+ACKNOWLEDGEMENT_SUFFIXES: frozenset[str] = frozenset({".pdf", ".png", ".jpg", ".jpeg"})
+ACKNOWLEDGEMENT_TYPES: frozenset[str] = frozenset({"application/pdf", "image/png", "image/jpeg"})
+#: Ten megabytes. An acknowledgement is one page; anything larger is a mistake or
+#: an attempt to fill the disk.
+ACKNOWLEDGEMENT_MAX_BYTES = 10 * 1024 * 1024
+
+
+class FilingCompletedForm(forms.Form):
+    """ "Yes, it is done" — when, under what number, and the proof.
+
+    The detail page asks one question and this is half the answer. Deliberately
+    three fields: the date and the acknowledgement number are what an assessment
+    is defended with, and the document is what makes the number checkable
+    without logging into the portal.
+    """
+
+    filed_on = forms.DateField(
+        label=_("Date of completion"),
+        widget=forms.DateInput(attrs={"type": "date"}),
+        help_text=_("The date it was actually filed, not the date you are recording it."),
+    )
+    filing_reference = forms.CharField(
+        label=_("Acknowledgement number"),
+        max_length=120,
+        help_text=_("The reference the portal gave back."),
+    )
+    acknowledgement = forms.FileField(
+        label=_("Acknowledgement document"),
+        required=False,
+        help_text=_("PDF or photo, up to 10 MB. You can add it later."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(Column("filed_on"), Column("filing_reference")), "acknowledgement"
+        )
+
+    def clean_filed_on(self) -> date:
+        """A filing cannot have happened tomorrow.
+
+        Caught here rather than left to the database: a future date would sail
+        past ``filed_late`` — which compares two dates and asks no questions
+        about either — and quietly report a late filing as on time.
+        """
+        filed_on: date = self.cleaned_data["filed_on"]
+        if filed_on > timezone.localdate():
+            raise forms.ValidationError(_("That date is in the future."))
+        return filed_on
+
+    def clean_acknowledgement(self) -> Any:
+        return validate_acknowledgement(self.cleaned_data.get("acknowledgement"))
+
+
+class AcknowledgementForm(forms.Form):
+    """Just the document, for the case where the number was recorded first.
+
+    Shares :func:`validate_acknowledgement` with :class:`FilingCompletedForm`
+    rather than restating the rules: two upload paths reaching the same field
+    with two different ideas of what is acceptable is how the stricter one gets
+    quietly bypassed.
+    """
+
+    acknowledgement = forms.FileField(label=_("Acknowledgement document"))
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("acknowledgement")
+
+    def clean_acknowledgement(self) -> Any:
+        return validate_acknowledgement(self.cleaned_data.get("acknowledgement"))
+
+
+def validate_acknowledgement(upload: Any) -> Any:
+    """Size and type, checked on every path that accepts one of these.
+
+    Both halves of the type check earn their place. The browser-declared content
+    type is whatever the client chose to claim, so it cannot be trusted alone;
+    the extension is what the filename ends in, which says nothing about the
+    bytes. Requiring both to be plausible is not proof of anything — it is the
+    cheap half of the job, and the expensive half is a virus scanner this
+    product does not have yet.
+    """
+    if not upload:
+        return upload
+
+    if upload.size > ACKNOWLEDGEMENT_MAX_BYTES:
+        raise forms.ValidationError(
+            _("That file is larger than 10 MB. An acknowledgement should be one page.")
+        )
+
+    suffix = Path(str(upload.name)).suffix.lower()
+    declared = (getattr(upload, "content_type", "") or "").split(";")[0].strip().lower()
+    if suffix not in ACKNOWLEDGEMENT_SUFFIXES or (
+        declared and declared not in ACKNOWLEDGEMENT_TYPES
+    ):
+        raise forms.ValidationError(_("Attach a PDF or a photo (PNG or JPEG)."))
+    return upload
+
+
+class FilingPendingForm(forms.Form):
+    """ "Not yet" — why not, and when it will be.
+
+    Both fields are required. "Pending" on its own is what the register already
+    knew; the answer only earns its place on the timeline if it says something
+    the due date did not.
+    """
+
+    pending_reason = forms.CharField(
+        label=_("Why is it still pending?"),
+        max_length=300,
+        widget=forms.Textarea(attrs={"rows": 2}),
+        help_text=_("Recorded on the timeline, so whoever picks this up knows where it stands."),
+    )
+    expected_completion_date = forms.DateField(
+        label=_("When do you expect it done?"),
+        widget=forms.DateInput(attrs={"type": "date"}),
+        help_text=_("An estimate. It does not move the statutory due date."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("pending_reason", "expected_completion_date")
 
 
 class EntityEventForm(forms.ModelForm[EntityEvent]):
@@ -189,6 +328,22 @@ class AssignForm(forms.Form):
         self.helper.layout = Layout("assigned_to")
 
 
+class CommentForm(forms.Form):
+    """A remark on the obligation's timeline — not a state change."""
+
+    note = forms.CharField(
+        label=_("Comment"),
+        widget=forms.TextInput(attrs={"placeholder": _("Write a comment")}),
+        max_length=2000,
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("note")
+
+
 def _attribute_field(attribute: Any) -> forms.Field:
     if attribute.type == "ENUM":
         field: forms.Field = forms.ChoiceField(
@@ -220,6 +375,7 @@ STATUS_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
     ("", _("Everything open")),
     ("overdue", _("Overdue")),
     ("due_soon", _("Due in 7 days")),
+    ("due_30", _("Due in 30 days")),
     ("pending", _("Pending")),
     ("unconfirmed", _("Needs confirming")),
     ("needs_input", _("Waiting on a date")),
@@ -236,3 +392,49 @@ def obligation_display(instance: ObligationInstance) -> str:
     if instance.period_label:
         parts.append(instance.period_label)
     return " · ".join(parts)
+
+
+class LibraryReasonForm(forms.Form):
+    """The payload behind removing or force-adding a library definition.
+
+    One form for both actions, the same way :class:`TransitionForm` is one
+    form for every lifecycle transition — the guard logic (which state a
+    definition has to be in, and whether the engine can actually compute a due
+    date) lives in ``stacos.obligations.library``, not duplicated per form.
+    """
+
+    reason = forms.CharField(
+        label=_("Reason"),
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=_("Recorded on the audit trail."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("reason")
+
+
+#: The three library states, as data so the toolbar, the query builder and the
+#: empty state cannot drift out of step — same convention as ``STATUS_FILTERS``.
+LIBRARY_STATE_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
+    ("", _("Every state")),
+    ("added", _("Added")),
+    ("removed", _("Removed")),
+    ("not_added", _("Not added yet")),
+)
+
+#: The universal status vocabulary (``DisplayStatus``), offered as a filter
+#: only over "added" rows — a "removed" or "not added" row has no progress to
+#: filter on.
+LIBRARY_PROGRESS_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
+    ("", _("Every progress status")),
+    ("overdue", _("Overdue")),
+    ("due-soon", _("Due soon")),
+    ("on-track", _("On track")),
+    ("in-progress", _("In progress")),
+    ("waiting", _("Waiting")),
+    ("complete", _("Complete")),
+    ("disputed", _("Disputed")),
+)

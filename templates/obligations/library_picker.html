@@ -1,0 +1,6 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Compliance library" %} · STACOS{% endblock %}
+
+{% block main %}{% include "obligations/_fragments/library_picker_body.html" %}{% endblock %}

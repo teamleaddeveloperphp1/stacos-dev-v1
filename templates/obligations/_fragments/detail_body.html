@@ -2,18 +2,103 @@
 
 <c-page-header title="{{ obligation.title }}"
                subtitle="{{ obligation.entity.name }}{% if obligation.scope_label %} · {{ obligation.scope_label }}{% endif %} · {{ obligation.period_label|default:obligation.period_key }}">
+  {% comment %}
+    The filing portal is the one link a reader leaves this page *to act* on, so
+    it sits in the header beside the title rather than four cards down the
+    reference rail. "Full definition" stays in the law card: it is something you
+    read, not something you do.
+  {% endcomment %}
+  {% if definition.filing_portal_url %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ definition.filing_portal_url }}"
+       target="_blank" rel="noopener noreferrer">
+      <c-icon name="link" size="14" /> {% translate "Open the filing portal" %}
+    </a>
+  {% endif %}
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}"
      hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
     {% translate "Back to calendar" %}
   </a>
 </c-page-header>
 
-<div class="detail-grid">
+<div class="detail-grid detail-grid--obligation">
   <div class="detail-grid__main">
     {% include "obligations/_fragments/detail_panel.html" %}
+    {% include "obligations/_fragments/discussion.html" %}
   </div>
 
   <aside class="detail-grid__aside">
+    <section class="card">
+      <h2 class="card__title"><c-icon name="user" size="14" /> {% translate "Who's responsible" %}</h2>
+      {% if obligation.assigned_to %}
+        <div class="person-row">
+          <span class="avatar">{{ obligation.assigned_to.initials }}</span>
+          <div class="person-row__who">
+            <p class="person-row__name">{{ obligation.assigned_to }}</p>
+            {% if obligation.owner_role %}
+              <span class="person-row__meta">{{ obligation.owner_role }}</span>
+            {% endif %}
+          </div>
+          <button type="button" class="btn btn-sm btn-link person-row__state"
+                  hx-get="{% url 'compliance:assign' obligation.pk %}"
+                  hx-target="#modal-container" hx-swap="innerHTML">
+            {% translate "Change" %}
+          </button>
+        </div>
+      {% else %}
+        <p class="text-muted small mb-2">{% translate "Nobody is holding this obligation yet." %}</p>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                hx-get="{% url 'compliance:assign' obligation.pk %}"
+                hx-target="#modal-container" hx-swap="innerHTML">
+          {% translate "Assign someone" %}
+        </button>
+      {% endif %}
+    </section>
+
+    {% if definition.penalty_summary or computed_penalties %}
+      {% comment %}
+        The one card in this rail that is allowed to carry real colour. Everything
+        else here is reference material a reader consults; this is the answer to
+        "what does it cost me if I get this wrong", which is the question that
+        makes the rest of the page worth reading.
+      {% endcomment %}
+      <section class="card card--exposure">
+        <h2 class="card__title"><c-icon name="alert" size="14" /> {% translate "If this is missed" %}</h2>
+
+        {% for penalty in computed_penalties %}
+          <div class="exposure-line">
+            {% if penalty.computed_minor is not None %}
+              <span class="exposure-line__amount display-figure">{{ penalty.computed_minor|minor|inr }}</span>
+              <span class="exposure-line__note">
+                {% if penalty.capped %}{% translate "capped" %} — {% endif %}
+                {{ penalty.rate_minor|minor|inr }}/{% translate "day" %} · {{ penalty.statutory_reference }}
+              </span>
+            {% elif penalty.kind == "PER_DAY_CAPPED" %}
+              {% comment %}
+                A real rate with no total — the statute caps it at an amount
+                (e.g. "the TDS amount") this obligation doesn't record, so a
+                summed figure here would be invented, not computed.
+              {% endcomment %}
+              <span class="exposure-line__amount display-figure">
+                {{ penalty.rate_minor|minor|inr }}<span class="exposure-line__unit">/{% translate "day" %}</span>
+              </span>
+              <span class="exposure-line__note">
+                {% blocktranslate with reference=penalty.statutory_reference %}under {{ reference }}, capped by statute{% endblocktranslate %}
+              </span>
+            {% else %}
+              <span class="exposure-line__note">
+                {{ penalty.min_minor|minor|inr }} – {{ penalty.max_minor|minor|inr }}
+                {% translate "under" %} {{ penalty.statutory_reference }}
+              </span>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        {% if definition.penalty_summary %}
+          <p class="exposure-summary">{{ definition.penalty_summary }}</p>
+        {% endif %}
+      </section>
+    {% endif %}
+
     {% comment %}
       "Why is this on my calendar" always has an answer. The reasons are the
       pruned minimal trace the rule evaluator produced — not a hardcoded string,
@@ -26,11 +111,11 @@
           {% for reason in obligation.reasons %}<li>{{ reason }}</li>{% endfor %}
         </ul>
       {% else %}
-        <p class="text-muted small">{% translate "This applies to every entity of this type." %}</p>
+        <p class="text-muted small mb-0">{% translate "This applies to every entity of this type." %}</p>
       {% endif %}
 
       {% if not obligation.confirmed %}
-        <p class="callout callout--attention small">
+        <p class="callout callout--attention small mt-3 mb-0">
           {% translate "Some details are missing, so we are not certain this applies. It is on your calendar anyway — we would rather show it and be wrong than hide it and be wrong." %}
         </p>
       {% endif %}
@@ -40,7 +125,7 @@
       <section class="card">
         <h2 class="card__title"><c-icon name="document" size="14" /> {% translate "What the law says" %}</h2>
         {% if definition.plain_language_summary %}
-          <p class="small">{{ definition.plain_language_summary }}</p>
+          <p class="card__lede">{{ definition.plain_language_summary }}</p>
         {% endif %}
         <dl class="key-values small">
           {% if definition.statutory_reference %}
@@ -49,27 +134,19 @@
           {% if definition.definition.authority %}
             <dt>{% translate "Authority" %}</dt><dd>{{ definition.definition.authority }}</dd>
           {% endif %}
-          {% if definition.penalty_summary %}
-            <dt>{% translate "If missed" %}</dt><dd>{{ definition.penalty_summary }}</dd>
+          {% if definition.periodicity %}
+            <dt>{% translate "Frequency" %}</dt><dd>{{ definition.periodicity|title }}</dd>
           {% endif %}
         </dl>
 
-        <div class="d-flex gap-2 flex-wrap">
-          {% if definition.filing_portal_url %}
-            <a class="btn btn-sm btn-outline-secondary" href="{{ definition.filing_portal_url }}"
-               target="_blank" rel="noopener noreferrer">
-              {% translate "Open the filing portal" %}
-            </a>
-          {% endif %}
-          {% if "catalog.view" in access_scope.permissions %}
-            <a class="btn btn-sm btn-outline-secondary"
-               href="{% url 'compliance:definition' obligation.definition_code %}?from={{ obligation.pk }}"
-               hx-get="{% url 'compliance:definition' obligation.definition_code %}?from={{ obligation.pk }}"
-               hx-target="#main" hx-push-url="true">
-              {% translate "Full definition" %}
-            </a>
-          {% endif %}
-        </div>
+        {% if "catalog.view" in access_scope.permissions %}
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{% url 'compliance:definition' obligation.definition_code %}?from={{ obligation.pk }}"
+             hx-get="{% url 'compliance:definition' obligation.definition_code %}?from={{ obligation.pk }}"
+             hx-target="#main" hx-push-url="true">
+            {% translate "Full definition" %}
+          </a>
+        {% endif %}
 
         {% comment %}
           The review caveat is not decoration. `plain_language_summary` is
@@ -78,21 +155,41 @@
           presenting it as current.
         {% endcomment %}
         {% if definition.review_is_stale %}
-          <p class="callout callout--warning small">
+          <p class="callout callout--warning small mt-3 mb-0">
             {% translate "This summary has not been reviewed against the statute recently. Treat it as a guide and check the reference." %}
           </p>
         {% else %}
-          <p class="text-muted small">
+          <p class="verified-note">
+            <c-icon name="shield" size="13" />
             {% blocktranslate with who=definition.reviewed_by when=definition.reviewed_at|date:"j M Y" %}
-              Reviewed by {{ who }} on {{ when }}.
+              Checked by {{ who }} on {{ when }}
             {% endblocktranslate %}
           </p>
         {% endif %}
       </section>
     {% endif %}
 
+    {% if registrations is not None %}
+      <section class="card">
+        <h2 class="card__title"><c-icon name="briefcase" size="14" /> {% translate "Registrations on file" %}</h2>
+        <div class="data-table__scroll">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>{% translate "Type" %}</th>
+                <th>{% translate "Number" %}</th>
+                <th>{% translate "Jurisdiction" %}</th>
+                <th>{% translate "Valid" %}</th>
+              </tr>
+            </thead>
+            {% include "tenancy/_fragments/registration_rows.html" with entity=obligation.entity %}
+          </table>
+        </div>
+      </section>
+    {% endif %}
+
     <section class="card">
-      <h2 class="card__title"><c-icon name="history" size="14" /> {% translate "History" %}</h2>
+      <h2 class="card__title"><c-icon name="history" size="14" /> {% translate "Audit trail" %}</h2>
       {% include "obligations/_fragments/timeline.html" %}
     </section>
   </aside>

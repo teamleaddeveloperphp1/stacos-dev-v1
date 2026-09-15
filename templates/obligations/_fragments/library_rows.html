@@ -1,0 +1,30 @@
+{% load i18n %}
+{% comment %}
+  The catalog, grouped by category. Swapped as a whole by the filter toolbar;
+  each row also carries its own id so a single action (remove/force-add/
+  restore) can update just its row via an out-of-band swap.
+{% endcomment %}
+{% if groups %}
+  {% for code, label, rows in groups %}
+    <div class="library-category">
+      <h3 class="library-category__title">{{ label }}</h3>
+      <div class="data-table__scroll">
+        <table class="table mb-0">
+          <tbody>
+            {% for row in rows %}
+              {% include "obligations/_fragments/library_row.html" %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <c-empty-state title="{% translate 'Nothing matches that filter' %}"
+                 body="{% translate 'Try a different search term, or clear a filter.' %}">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:library' entity.pk %}"
+       hx-get="{% url 'compliance:library' entity.pk %}" hx-target="#main" hx-push-url="true">
+      {% translate "Clear filters" %}
+    </a>
+  </c-empty-state>
+{% endif %}

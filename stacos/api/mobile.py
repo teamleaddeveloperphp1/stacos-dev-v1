@@ -24,6 +24,7 @@ from datetime import date, timedelta
 from typing import Any
 from uuid import UUID
 
+from django.conf import settings
 from django.http import Http404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
@@ -214,8 +215,12 @@ class ObligationTransitionView(ScopedAPIView):
         # letting them through here would make the web-side step-up decorative,
         # and the whole point of it is that certifying a filing is a deliberate,
         # freshly-authenticated act.
+        #
+        # That reasoning is conditional on the web actually prompting, so this
+        # follows STEP_UP_ENABLED. With the prompt off, refusing here would deny
+        # on mobile what the browser grants without challenge.
         move = transition_for(obligation.state, target)
-        if move is not None and is_sensitive(move.permission):
+        if settings.STEP_UP_ENABLED and move is not None and is_sensitive(move.permission):
             return Response(
                 {
                     "detail": (

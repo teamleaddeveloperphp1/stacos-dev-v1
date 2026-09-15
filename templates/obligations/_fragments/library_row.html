@@ -1,0 +1,64 @@
+{% load i18n %}
+{% comment %}
+  One definition, against one entity. Carries its own id so remove/force-add/
+  restore can update just this row via an out-of-band swap, the same
+  convention `obligation_row.html` follows for the calendar.
+{% endcomment %}
+<tr id="library-row-{{ row.code }}">
+  <td>
+    <div class="d-flex align-items-center flex-wrap gap-2">
+      <a class="link-strong" href="{% url 'compliance:definition' row.code %}"
+         hx-get="{% url 'compliance:definition' row.code %}"
+         hx-target="#main" hx-push-url="true">{{ row.title }}</a>
+    </div>
+    <div class="text-muted small">{{ row.code }}{% if row.family %} · {{ row.family }}{% endif %}</div>
+  </td>
+  <td>
+    {% if row.state == "added" and row.occurrence %}
+      <c-status-chip :status="row.occurrence.display_status" />
+      {% if row.occurrence.due_date %}
+        <div class="mt-1">
+          <c-due-badge :date="row.occurrence.due_date" :days="row.occurrence.days_to_due"
+                       :original="row.occurrence.original_due_date"
+                       :notification="row.occurrence.applied_extension_reference" />
+        </div>
+      {% endif %}
+    {% elif row.state == "removed" %}
+      <span class="badge-soft">{% translate "Removed" %}</span>
+    {% elif row.blocked_reason %}
+      <span class="badge-soft" title="{{ row.blocked_reason }}">
+        {% translate "Not added yet" %}
+      </span>
+    {% else %}
+      <span class="text-muted small">{% translate "Not added yet" %}</span>
+    {% endif %}
+  </td>
+  <td class="text-end">
+    {% if can_manage %}
+      {% if row.state == "added" %}
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                hx-get="{% url 'compliance:library_remove' entity.pk row.code %}"
+                hx-target="#modal-container" hx-swap="innerHTML">
+          {% translate "Remove" %}
+        </button>
+      {% elif row.state == "removed" %}
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                hx-post="{% url 'compliance:library_restore' entity.pk row.code %}"
+                hx-swap="none">
+          {% translate "Restore" %}
+        </button>
+      {% elif row.blocked_reason %}
+        <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                title="{{ row.blocked_reason }}">
+          {% translate "Add" %}
+        </button>
+      {% else %}
+        <button type="button" class="btn btn-sm btn-outline-primary"
+                hx-get="{% url 'compliance:library_force_add' entity.pk row.code %}"
+                hx-target="#modal-container" hx-swap="innerHTML">
+          {% translate "Add" %}
+        </button>
+      {% endif %}
+    {% endif %}
+  </td>
+</tr>

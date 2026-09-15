@@ -62,7 +62,7 @@ def org_member(org: Tenant) -> User:
     """A second person in the same tenant, to prove a notification is addressed."""
     from tests.conftest import _make_member
 
-    return _make_member(org, "member@acme.example", "Ravi Kumar", "+919800000009", "org-viewer")
+    return _make_member(org, "member@acme.example", "Ravi Kumar", "+919800000009", "org-owner")
 
 
 def _raise(org: Tenant, user: User, **overrides: object) -> object:

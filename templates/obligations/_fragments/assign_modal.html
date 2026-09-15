@@ -12,7 +12,7 @@
      aria-labelledby="assign-modal-title">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
-      <form hx-post="{% url 'compliance:assign' obligation.pk %}"
+      <form hx-post="{% if step %}{% url 'compliance:step_assign' step.pk %}{% else %}{% url 'compliance:assign' obligation.pk %}{% endif %}"
             hx-target="#obligation-rows" hx-swap="none">
         {% csrf_token %}
 
@@ -24,9 +24,15 @@
 
         <div class="modal-body">
           <p class="text-muted small">
-            {% blocktranslate with title=obligation.title %}
-              Who is holding <strong>{{ title }}</strong>?
-            {% endblocktranslate %}
+            {% if step %}
+              {% blocktranslate with label=step.label %}
+                Who is doing <strong>{{ label }}</strong>?
+              {% endblocktranslate %}
+            {% else %}
+              {% blocktranslate with title=obligation.title %}
+                Who is holding <strong>{{ title }}</strong>?
+              {% endblocktranslate %}
+            {% endif %}
           </p>
 
           {% if form.non_field_errors %}

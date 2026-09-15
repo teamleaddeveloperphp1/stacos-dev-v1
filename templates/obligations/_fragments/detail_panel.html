@@ -19,37 +19,96 @@
 
   <div class="detail-header">
     <c-status-chip :status="obligation.display_status" :label="obligation.get_state_display" />
-
-    {% if obligation.due_date %}
-      <c-due-badge :date="obligation.due_date"
-                   :days="obligation.days_to_due"
-                   :original="obligation.original_due_date"
-                   :notification="obligation.applied_extension_reference" />
-    {% endif %}
-
     {% if obligation.filed_late %}
       <span class="badge-soft badge-soft--danger">{% translate "Filed late" %}</span>
     {% endif %}
+    {% if obligation.applied_extension_reference %}
+      <span class="badge-soft">{% translate "Date extended by notification" %}</span>
+    {% endif %}
   </div>
 
-  {% if obligation.progress_steps %}
+  {% comment %}
+    The four facts someone re-opening this page reads before anything else, as
+    one joined instrument strip rather than four floating tiles. Joined is the
+    point: dividers say "these four belong together and describe one thing,"
+    where four bordered boxes say "four unrelated counters," which is what the
+    calendar's `.stat-row` legitimately is and this is not. Only the cells that
+    lead somewhere are interactive.
+  {% endcomment %}
+  <div class="ob-strip">
+    <div class="ob-strip__cell ob-strip__cell--deadline{% if obligation.due_date %}{% if obligation.days_to_due < 0 %} ob-strip__cell--overdue{% elif obligation.days_to_due <= 7 %} ob-strip__cell--due-soon{% endif %}{% endif %}">
+      <span class="ob-strip__label">{% translate "Due date" %}</span>
+      {% if obligation.due_date %}
+        {% comment %}
+          The component, not a hand-rolled date. It is the one place that knows
+          to show the statutory date struck through beside the extended one —
+          and an obligation moved by notification is exactly the case where a
+          page that quietly shows only the new date misleads a client.
+        {% endcomment %}
+        <c-due-badge :date="obligation.due_date"
+                     :days="obligation.days_to_due"
+                     :original="obligation.original_due_date"
+                     :notification="obligation.applied_extension_reference" />
+      {% else %}
+        <span class="ob-strip__value display-figure">—</span>
+        <span class="ob-strip__sub">{% translate "No statutory date recorded" %}</span>
+      {% endif %}
+    </div>
+
+    <div class="ob-strip__cell">
+      <span class="ob-strip__label">{% translate "Owner" %}</span>
+      {% if obligation.assigned_to %}
+        <span class="ob-strip__person">
+          <span class="avatar avatar--xs">{{ obligation.assigned_to.initials }}</span>
+          <span class="ob-strip__value">{{ obligation.assigned_to }}</span>
+        </span>
+      {% else %}
+        <span class="ob-strip__person">
+          <span class="avatar avatar--xs avatar--empty" aria-hidden="true">+</span>
+          <span class="ob-strip__value ob-strip__value--muted">{% translate "Nobody yet" %}</span>
+        </span>
+      {% endif %}
+      <button type="button" class="btn btn-sm btn-link p-0 ob-strip__link"
+              hx-get="{% url 'compliance:assign' obligation.pk %}"
+              hx-target="#modal-container" hx-swap="innerHTML">
+        {% if obligation.assigned_to %}{% translate "Change" %}{% else %}{% translate "Assign" %}{% endif %}
+      </button>
+    </div>
+
     {% comment %}
-      Absent off the happy path — deferred, disputed and not-applicable already
-      have their own answer in the status chip above, and a stepper would claim
-      a place on a line these are not on.
+      The fourth cell answers "and what is stopping it", which since the step
+      rail went is one of three things: a date this obligation cannot be
+      scheduled without, the answer somebody gave to "not yet", or — once it is
+      done — when it was filed.
     {% endcomment %}
-    <ol class="stepper">
-      {% for step in obligation.progress_steps %}
-        <li class="stepper__step{% if step.done %} stepper__step--done{% elif step.current %} stepper__step--current{% endif %}"
-            {% if step.current %}aria-current="step"{% endif %}>
-          <span class="stepper__marker">
-            {% if step.done %}<c-icon name="check" size="12" />{% else %}{{ forloop.counter }}{% endif %}
-          </span>
-          <span class="stepper__label">{{ step.label }}</span>
-        </li>
-      {% endfor %}
-    </ol>
-  {% endif %}
+    {% if obligation.needs_input %}
+      <a href="#needs-input" class="ob-strip__cell ob-strip__cell--attention">
+        <span class="ob-strip__label">{% translate "Waiting on" %}</span>
+        <span class="ob-strip__value">{% translate "Needs input" %}</span>
+        <span class="ob-strip__sub">{% translate "An answer about this entity" %}</span>
+      </a>
+    {% elif obligation.filed_on %}
+      <div class="ob-strip__cell">
+        <span class="ob-strip__label">{% translate "Filed" %}</span>
+        <span class="ob-strip__value">{{ obligation.filed_on|date:"j M Y" }}</span>
+        {% if obligation.filing_reference %}
+          <span class="ob-strip__sub ob-strip__sub--ref">{{ obligation.filing_reference }}</span>
+        {% endif %}
+      </div>
+    {% elif obligation.pending_reason %}
+      <div class="ob-strip__cell ob-strip__cell--attention">
+        <span class="ob-strip__label">{% translate "Still pending" %}</span>
+        <span class="ob-strip__value">
+          {% if obligation.expected_completion_date %}
+            {% blocktranslate with expected=obligation.expected_completion_date|date:"j M" %}Expected {{ expected }}{% endblocktranslate %}
+          {% else %}
+            {% translate "No date given" %}
+          {% endif %}
+        </span>
+        <span class="ob-strip__sub">{{ obligation.pending_reason|truncatechars:60 }}</span>
+      </div>
+    {% endif %}
+  </div>
 
   {% if obligation.applied_extension_reference %}
     <p class="callout callout--info small">
@@ -72,7 +131,41 @@
     {% include "obligations/_fragments/needs_input.html" %}
   {% endif %}
 
-  <dl class="key-values">
+  {% comment %}
+    The two questions replace what used to be here: a checklist of named steps,
+    a four-stage stepper, and a row of lifecycle buttons. See the fragment's own
+    note for why. Absent off the happy path (deferred, disputed, not applicable)
+    for the same reason the stepper was — those already have their answer in the
+    status chip above, and asking "is this filed?" about an obligation somebody
+    has ruled out is asking the wrong question.
+  {% endcomment %}
+  {% if obligation.progress_steps %}
+    {% include "obligations/_fragments/status_questions.html" %}
+  {% endif %}
+
+  {% comment %}
+    What is left of the old action bar. The workflow moves it used to carry —
+    start work, request information, submit for review, approve — went with the
+    checklist; these are the ones that are not part of that flow at all: closing
+    a filed obligation, and bringing a deferred one back.
+  {% endcomment %}
+  {% if plain_actions %}
+    <div class="action-bar">
+      {% for action in plain_actions %}
+        <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+              hx-target="#obligation-panel"
+              hx-swap="outerHTML"
+              {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
+              class="action-bar__form">
+          {% csrf_token %}
+          <input type="hidden" name="target" value="{{ action.target }}">
+          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ action.label }}</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <dl class="key-values key-values--foot">
     <dt>{% translate "Period" %}</dt>
     <dd>{{ obligation.period_label|default:obligation.period_key }}</dd>
     {% if obligation.scope_label %}
@@ -83,114 +176,46 @@
       <dt>{% translate "Acknowledgement" %}</dt>
       <dd>{{ obligation.filing_reference|default:"—" }}</dd>
     {% endif %}
-    <dt>{% translate "Assigned to" %}</dt>
-    <dd>
-      {% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}{% translate "Nobody yet" %}{% endif %}
-      <button type="button" class="btn btn-sm btn-link p-0 ms-1"
-              hx-get="{% url 'compliance:assign' obligation.pk %}"
-              hx-target="#modal-container" hx-swap="innerHTML">
-        {% translate "Change" %}
-      </button>
-    </dd>
   </dl>
 
-  {% if actions %}
+  {% if not actions %}
+    <p class="text-muted small">
+      {% translate "You do not have permission to change this obligation." %}
+    </p>
+  {% elif note_actions %}
     {% comment %}
-      Three shapes for three kinds of move — grouped once in the view
-      (`_action_context`) from the same generic `Transition` flags the engine
-      already exposes, so a new definition's transitions render correctly with
-      no template change.
-
-      1. A plain state change (`plain_actions`) — a button, first is primary.
-      2. Filing (`filing_actions`) — the acknowledgement is evidence, so it
-         gets its own boxed form rather than a button-triggered popover.
-      3. A judgement call (`note_actions`) — deferring, disputing, marking not
-         applicable. Collapsed into a tile so the reason field is not sitting
-         open and empty before it is chosen.
+      Judgement calls — deferring, disputing, marking not applicable — collapsed
+      into a tile so the reason field is not sitting open and empty before it is
+      chosen. Kept separate from the step rail above: these do not advance the
+      obligation, they take it off the happy path entirely.
     {% endcomment %}
-    {% if plain_actions %}
-      <div class="action-bar">
-        {% for action in plain_actions %}
+    <h3 class="card__title card__title--section">{% translate "Doesn't apply?" %}</h3>
+    <p class="text-muted small mb-0">
+      {% translate "Each of these needs a reason, and it goes into the audit trail." %}
+    </p>
+    <div class="action-tiles">
+      {% for action in note_actions %}
+        <details class="action-tile">
+          <summary>
+            <span class="action-tile__label">{{ action.label }}</span>
+            <span class="action-tile__hint">{% translate "Provide a reason" %}</span>
+          </summary>
           <form hx-post="{% url 'compliance:transition' obligation.pk %}"
                 hx-target="#obligation-panel"
                 hx-swap="outerHTML"
                 {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
-                class="action-bar__form">
+                class="action-tile__form">
             {% csrf_token %}
             <input type="hidden" name="target" value="{{ action.target }}">
-            <button class="btn btn-sm {% if action == actions.0 %}btn-primary{% else %}btn-outline-secondary{% endif %}"
-                    type="submit">{{ action.label }}</button>
+            <label class="visually-hidden" for="tile-note-{{ forloop.counter }}">{% translate "Reason" %}</label>
+            <textarea class="form-control form-control-sm" id="tile-note-{{ forloop.counter }}"
+                      name="note" required rows="2"
+                      placeholder="{% translate 'Why? (recorded)' %}"></textarea>
+            <button class="btn btn-sm btn-outline-secondary" type="submit">{{ action.label }}</button>
           </form>
-        {% endfor %}
-      </div>
-    {% endif %}
-
-    {% for action in filing_actions %}
-      <section class="filing-card">
-        <h3 class="filing-card__title"><c-icon name="document" size="14" /> {{ action.label }}</h3>
-        <form hx-post="{% url 'compliance:transition' obligation.pk %}"
-              hx-target="#obligation-panel"
-              hx-swap="outerHTML"
-              {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}>
-          {% csrf_token %}
-          <input type="hidden" name="target" value="{{ action.target }}">
-          <div class="filing-card__fields">
-            <div>
-              <label for="filing-ack-{{ forloop.counter }}">{% translate "Acknowledgement number" %}</label>
-              <input class="form-control form-control-sm" id="filing-ack-{{ forloop.counter }}"
-                     name="filing_reference" required
-                     placeholder="{% translate 'Enter acknowledgement number' %}">
-            </div>
-            <div>
-              <label for="filing-date-{{ forloop.counter }}">{% translate "Filing date" %}</label>
-              <input class="form-control form-control-sm" id="filing-date-{{ forloop.counter }}"
-                     type="date" name="filed_on">
-            </div>
-          </div>
-
-          {% if action.requires_note %}
-            <label class="visually-hidden" for="filing-note-{{ forloop.counter }}">{% translate "Reason" %}</label>
-            <input class="form-control form-control-sm mb-3" id="filing-note-{{ forloop.counter }}"
-                   name="note" required
-                   placeholder="{% translate 'Why? (recorded)' %}">
-          {% endif %}
-
-          <button class="btn btn-sm btn-primary" type="submit">
-            <c-icon name="check" size="14" /> {{ action.label }}
-          </button>
-        </form>
-      </section>
-    {% endfor %}
-
-    {% if note_actions %}
-      <div class="action-tiles">
-        {% for action in note_actions %}
-          <details class="action-tile">
-            <summary>
-              <span class="action-tile__label">{{ action.label }}</span>
-              <span class="action-tile__hint">{% translate "Provide a reason" %}</span>
-            </summary>
-            <form hx-post="{% url 'compliance:transition' obligation.pk %}"
-                  hx-target="#obligation-panel"
-                  hx-swap="outerHTML"
-                  {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
-                  class="action-tile__form">
-              {% csrf_token %}
-              <input type="hidden" name="target" value="{{ action.target }}">
-              <label class="visually-hidden" for="tile-note-{{ forloop.counter }}">{% translate "Reason" %}</label>
-              <textarea class="form-control form-control-sm" id="tile-note-{{ forloop.counter }}"
-                        name="note" required rows="2"
-                        placeholder="{% translate 'Why? (recorded)' %}"></textarea>
-              <button class="btn btn-sm btn-outline-secondary" type="submit">{{ action.label }}</button>
-            </form>
-          </details>
-        {% endfor %}
-      </div>
-    {% endif %}
-  {% else %}
-    <p class="text-muted small">
-      {% translate "You do not have permission to change this obligation." %}
-    </p>
+        </details>
+      {% endfor %}
+    </div>
   {% endif %}
 
 </section>

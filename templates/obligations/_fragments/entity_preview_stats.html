@@ -1,0 +1,28 @@
+{% load i18n %}
+{% comment %}
+  The three headline counts, full width above the question queue and the
+  category breakdown — split out of what used to be one file
+  (`entity_preview_columns.html`) so this row keeps the whole card's width to
+  itself instead of being squeezed into whichever column the category
+  breakdown ends up sharing space with.
+
+  ``applies_count`` and the number on the build button come from the full,
+  untruncated set — see ``stacos.obligations.preview.EntityPreview``.
+{% endcomment %}
+<div class="stat-row">
+  <div class="stat-card">
+    <span class="stat-card__count">{{ preview.applies_count }}</span>
+    <c-status-chip status="complete" label="{% translate 'Applies' %}" />
+  </div>
+  <div class="stat-card">
+    <span class="stat-card__count">{{ preview.might_count }}</span>
+    <c-status-chip status="waiting" label="{% translate 'Might apply' %}" />
+  </div>
+  <div class="stat-card">
+    <span class="stat-card__count">{{ preview.excluded_count }}</span>
+    <c-status-chip status="na" label="{% translate "Doesn't apply" %}" />
+  </div>
+</div>
+<p class="verdict-grid__footnote">
+  {% blocktranslate with n=preview.considered %}{{ n }} rules considered.{% endblocktranslate %}
+</p>

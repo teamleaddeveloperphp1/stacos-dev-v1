@@ -1,0 +1,78 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Compliance library' %}"
+               subtitle="{{ entity.name }}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:library_picker' %}"
+     hx-get="{% url 'compliance:library_picker' %}" hx-target="#main" hx-push-url="true">
+    {% translate "Change entity" %}
+  </a>
+</c-page-header>
+
+{% comment %}
+  Entity-wide totals, computed from the full, unfiltered row set — a filter
+  below narrows which rows are shown, never these numbers.
+{% endcomment %}
+<div class="stat-row" id="library-totals" aria-live="polite" aria-atomic="true">
+  <a class="stat-tile" href="?state=added" hx-get="?state=added" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ totals.added }}</span>
+    <span class="stat-tile__label">{% translate "Added" %}</span>
+  </a>
+  <a class="stat-tile stat-tile--quiet" href="?state=removed" hx-get="?state=removed" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ totals.removed }}</span>
+    <span class="stat-tile__label">{% translate "Removed" %}</span>
+  </a>
+  <a class="stat-tile stat-tile--quiet" href="?state=not_added" hx-get="?state=not_added" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ totals.not_added }}</span>
+    <span class="stat-tile__label">{% translate "Not added yet" %}</span>
+  </a>
+  <a class="stat-tile stat-tile--quiet" href="?" hx-get="?" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ totals.total }}</span>
+    <span class="stat-tile__label">{% translate "In the catalog" %}</span>
+  </a>
+</div>
+
+<div class="data-table">
+  <div class="data-table__toolbar">
+    <form class="d-flex gap-2 flex-grow-1 flex-wrap"
+          hx-get="{% url 'compliance:library' entity.pk %}"
+          hx-target="#library-rows" hx-select="#library-rows" hx-swap="morph"
+          hx-push-url="true"
+          hx-trigger="keyup changed delay:250ms from:find input, change"
+          hx-indicator="#library-spinner">
+      <input type="search" name="q" value="{{ search }}"
+             class="form-control form-control-sm" style="max-width: 18rem"
+             placeholder="{% translate 'Search the catalog…' %}"
+             aria-label="{% translate 'Search the catalog' %}">
+
+      <select name="state" class="form-select form-select-sm" style="max-width: 12rem"
+              aria-label="{% translate 'Filter by state' %}">
+        {% for value, label in state_filters %}
+          <option value="{{ value }}" {% if state == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="progress" class="form-select form-select-sm" style="max-width: 14rem"
+              aria-label="{% translate 'Filter by progress' %}">
+        {% for value, label in progress_filters %}
+          <option value="{{ value }}" {% if progress == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="category" class="form-select form-select-sm" style="max-width: 16rem"
+              aria-label="{% translate 'Filter by category' %}">
+        <option value="">{% translate "Every category" %}</option>
+        {% for value, label in categories %}
+          <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <span class="htmx-indicator align-self-center" id="library-spinner">
+        <span class="spinner-inline"></span>
+      </span>
+    </form>
+  </div>
+
+  <div id="library-rows" aria-live="polite" aria-atomic="false">
+    {% include "obligations/_fragments/library_rows.html" %}
+  </div>
+</div>

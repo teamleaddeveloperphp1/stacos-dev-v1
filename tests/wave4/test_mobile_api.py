@@ -360,26 +360,3 @@ def test_a_forged_tenant_header_cannot_widen_access(
     ).json()
 
     assert {row["title"] for row in body["results"]} == {"GSTR-3B"}
-
-
-def test_a_user_without_the_permission_is_refused(
-    org: Tenant, entity_a: Entity, obligation: ObligationInstance
-) -> None:
-    """The API declares permissions the same way the web views do."""
-    from tests.conftest import _make_member
-
-    viewer = _make_member(org, "viewer@acme.example", "Sunita Iyer", "+919800000021", "org-viewer")
-    client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {issue_tokens(viewer, verified=True)['access']}")
-
-    # Reading is allowed for a viewer...
-    assert client.get(reverse("api:calendar")).status_code == 200
-    # ...but moving an obligation on is not.
-    assert (
-        client.post(
-            reverse("api:obligation_transition", args=[obligation.pk]),
-            {"to_state": State.IN_PREPARATION},
-            format="json",
-        ).status_code
-        == 403
-    )

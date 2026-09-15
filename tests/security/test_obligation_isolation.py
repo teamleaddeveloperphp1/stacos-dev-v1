@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from django.core.files.base import ContentFile
 from django.test import Client
 from django.urls import reverse
 
@@ -25,6 +26,7 @@ from stacos.obligations.models import (
     MaterialisationRun,
     ObligationEvent,
     ObligationInstance,
+    ObligationStep,
     ObligationSuppression,
 )
 from stacos.obligations.queries import live, status_counts
@@ -38,6 +40,7 @@ AS_OF = date(2026, 8, 12)
 SCOPED_MODELS = (
     ObligationInstance,
     ObligationEvent,
+    ObligationStep,
     ObligationSuppression,
     EntityEvent,
     MaterialisationRun,
@@ -172,6 +175,124 @@ def test_another_tenants_obligation_cannot_be_transitioned(
     with platform_scope(reason="test"):
         an_obligation.refresh_from_db()
     assert an_obligation.state == State.NOT_STARTED
+
+
+def test_another_tenants_filing_cannot_be_answered_for(
+    rival_signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """The detail page's one question is a write, and a hostile client can post
+    it directly.
+
+    Both answers, because they take different branches and only one of them
+    changes the lifecycle state — an unscoped "no" would write a client's
+    business into another tenant's register just as surely.
+    """
+    for payload in (
+        {
+            "answer": "yes",
+            "filed_on": "2026-08-10",
+            "filing_reference": "FORGED-ACK-0001",
+        },
+        {
+            "answer": "no",
+            "pending_reason": "Fishing for a way in.",
+            "expected_completion_date": "2026-09-30",
+        },
+    ):
+        response = rival_signed_in.post(
+            reverse("compliance:status", args=[an_obligation.pk]),
+            payload,
+            headers={"HX-Request": "true"},
+        )
+        assert response.status_code == 404
+
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+    assert an_obligation.state == State.NOT_STARTED
+    assert an_obligation.filing_reference == ""
+    assert an_obligation.pending_reason == ""
+
+
+def test_another_tenants_acknowledgement_cannot_be_downloaded(
+    rival_signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """The one endpoint in this app that hands back raw bytes.
+
+    404 rather than 403 for the same reason as everywhere else here: confirming
+    that a document exists in another tenant is itself a disclosure.
+    """
+    with platform_scope(reason="test"):
+        an_obligation.acknowledgement.save(
+            "ack.pdf", ContentFile(b"%PDF-1.4 confidential"), save=False
+        )
+        an_obligation.acknowledgement_name = "ack.pdf"
+        an_obligation.save(update_fields=["acknowledgement", "acknowledgement_name"])
+
+    response = rival_signed_in.get(reverse("compliance:acknowledgement", args=[an_obligation.pk]))
+    assert response.status_code == 404
+
+
+def test_another_tenants_obligation_cannot_be_commented_on(
+    rival_signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    response = rival_signed_in.post(
+        reverse("compliance:comment", args=[an_obligation.pk]),
+        {"note": "Fishing for a way in."},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 404
+
+    with platform_scope(reason="test"):
+        assert not an_obligation.events.filter(kind=ObligationEvent.Kind.NOTE).exists()
+
+
+@pytest.fixture
+def a_24q_step(materialised: Entity) -> ObligationStep:
+    from stacos.obligations.transitions import ensure_steps
+
+    with platform_scope(reason="test-fixture"):
+        obligation = (
+            ObligationInstance.objects.filter(entity=materialised, definition_code="IN-TDS-24Q")
+            .order_by("due_date")
+            .first()
+        )
+        assert obligation is not None
+        return ensure_steps(obligation)[0]
+
+
+def test_another_tenants_checklist_step_is_a_404_not_a_403(
+    rival_signed_in: Client, a_24q_step: ObligationStep
+) -> None:
+    response = rival_signed_in.get(
+        reverse("compliance:step_assign", args=[a_24q_step.pk]), headers={"HX-Request": "true"}
+    )
+    assert response.status_code == 404
+
+
+def test_another_tenants_checklist_step_cannot_be_mutated(
+    rival_signed_in: Client, a_24q_step: ObligationStep
+) -> None:
+    for url in (
+        reverse("compliance:step_toggle", args=[a_24q_step.pk]),
+        reverse("compliance:step_block", args=[a_24q_step.pk]),
+        reverse("compliance:step_nudge", args=[a_24q_step.pk]),
+        reverse("compliance:step_assign", args=[a_24q_step.pk]),
+    ):
+        response = rival_signed_in.post(url, headers={"HX-Request": "true"})
+        assert response.status_code == 404, url
+
+    with platform_scope(reason="test"):
+        a_24q_step.refresh_from_db()
+    assert a_24q_step.state == ObligationStep.State.PENDING
+
+
+def test_another_tenants_obligation_cannot_be_nudged(
+    rival_signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    response = rival_signed_in.post(
+        reverse("compliance:nudge", args=[an_obligation.pk]), headers={"HX-Request": "true"}
+    )
+    assert response.status_code == 404
 
 
 def test_another_tenants_calendar_cannot_be_rebuilt(

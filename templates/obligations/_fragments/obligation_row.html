@@ -15,15 +15,19 @@
       <a class="link-strong" href="{% url 'compliance:detail' obligation.pk %}"
          hx-get="{% url 'compliance:detail' obligation.pk %}"
          hx-target="#main" hx-push-url="true">{{ obligation.title }}</a>
-      {% if not obligation.confirmed and not obligation.confirmed_by_user %}
+      {% if not obligation.confirmed %}
         {% comment %}
-          UNKNOWN applicability, or opted into by hand — materialised anyway
-          and flagged, because silently dropping an obligation is what gets a
-          client penalised. Either way "Confirm" is a real control now: with
-          `missing_facts` it opens the fact-based question; without one (a
-          pack, or a manual add) it opens a plain "does this apply?" yes/no
-          instead of a dead badge — a button that does nothing is worse than
-          no button, so there is no longer an inert state here at all.
+          UNKNOWN applicability — materialised anyway and flagged, because
+          silently dropping an obligation is what gets a client penalised.
+          "Confirm" is a real control: it opens the question behind the row,
+          named by `missing_facts`, and a row only reaches this branch when
+          there is one to ask.
+
+          An obligation somebody added by hand never appears here. It is
+          confirmed the moment it is added (`stacos.engine.planner`): they
+          have already said it applies, and asking them again reads as not
+          believing them. Changing their mind is the detail page's "mark not
+          applicable", not a second confirmation.
 
           Inline with the title rather than on its own line beneath the
           scope label: a badge stacked under "GST 27AB...Z5" read as a
@@ -33,7 +37,7 @@
                 hx-get="{% url 'compliance:confirm' obligation.pk %}"
                 hx-target="#modal-container"
                 hx-swap="innerHTML"
-                title="{% if obligation.missing_facts %}{% translate 'We think this may apply. Answer one question and we will be sure.' %}{% else %}{% translate 'Added by hand — say whether it actually applies.' %}{% endif %}">
+                title="{% translate 'We think this may apply. Answer one question and we will be sure.' %}">
           {% translate "Confirm" %}
         </button>
       {% endif %}

@@ -1,0 +1,40 @@
+{% load i18n %}
+
+<c-page-header title="{% translate 'Compliance library' %}"
+               subtitle="{% translate 'Browse the full compliance catalog against one entity — pick one to start.' %}" />
+
+<div class="data-table">
+  <div class="data-table__toolbar">
+    <form class="d-flex gap-2 flex-grow-1 flex-wrap"
+          hx-get="{% url 'compliance:library_picker' %}"
+          hx-target="#library-entities" hx-select="#library-entities" hx-swap="morph"
+          hx-push-url="true" hx-trigger="keyup changed delay:250ms from:find input">
+      <input type="search" name="q" value="{{ search }}"
+             class="form-control form-control-sm" style="max-width: 20rem"
+             placeholder="{% translate 'Search entities…' %}"
+             aria-label="{% translate 'Search entities' %}">
+    </form>
+  </div>
+
+  <div class="data-table__scroll" id="library-entities" aria-live="polite" aria-atomic="false">
+    {% if entities %}
+      <table class="table mb-0">
+        <tbody>
+          {% for entity in entities %}
+            <tr>
+              <td>
+                <a class="link-strong" href="{% url 'compliance:library' entity.pk %}"
+                   hx-get="{% url 'compliance:library' entity.pk %}"
+                   hx-target="#main" hx-push-url="true">{{ entity.name }}</a>
+              </td>
+              <td class="text-muted small">{{ entity.entity_type }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <c-empty-state title="{% translate 'No entities match' %}"
+                     body="{% translate 'Try a different search term.' %}" />
+    {% endif %}
+  </div>
+</div>

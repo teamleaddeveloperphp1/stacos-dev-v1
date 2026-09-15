@@ -5,22 +5,30 @@
   Distinct from the tenant-wide audit log, which exists for a regulator. This is
   the story a colleague picking the work up tomorrow needs: who moved it, when,
   and what they said about it. Both are written on every transition.
+
+  Free-standing comments (`Kind.NOTE`) live in the discussion card instead —
+  `timeline_events` is the same 50-row fetch with those already filtered out, so
+  a remark does not show up twice.
+
+  What happened leads and the timestamp follows, not the other way round. A
+  trail is read for its events; leading each row with a timestamp makes a reader
+  scan a column of dates to find the one sentence that tells them what changed.
 {% endcomment %}
 <ol class="timeline">
-  {% for event in events %}
+  {% for event in timeline_events %}
     <li class="timeline__item timeline__item--{{ event.kind|lower }}">
+      <div class="timeline__body">
+        <span class="timeline__actor">{{ event.actor_label|default:"STACOS" }}</span>
+        {% if event.kind == "TRANSITION" %}
+          {{ event.context.label|default:event.get_kind_display|lower }}
+        {% else %}
+          {{ event.get_kind_display|lower }}
+        {% endif %}
+      </div>
       <div class="timeline__meta">
         <time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:"j M Y, H:i" }}</time>
-        <span class="text-muted">{{ event.actor_label|default:"STACOS" }}</span>
       </div>
-      <div class="timeline__body">
-        {% if event.kind == "TRANSITION" %}
-          {{ event.context.label|default:event.get_kind_display }}
-        {% else %}
-          {{ event.get_kind_display }}
-        {% endif %}
-        {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
-      </div>
+      {% if event.note %}<p class="timeline__note">{{ event.note }}</p>{% endif %}
     </li>
   {% empty %}
     <li class="text-muted small">{% translate "Nothing has happened yet." %}</li>

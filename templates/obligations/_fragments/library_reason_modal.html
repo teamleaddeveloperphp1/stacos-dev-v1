@@ -1,0 +1,65 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  The reason behind removing or force-adding one definition. Same shape as
+  `assign_modal.html`: `hx-swap="none"` because the real update travels as an
+  out-of-band row fragment plus a toast.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="library-reason-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form hx-post="{% if action == 'remove' %}{% url 'compliance:library_remove' entity.pk row.code %}{% else %}{% url 'compliance:library_force_add' entity.pk row.code %}{% endif %}"
+            hx-swap="none">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="library-reason-modal-title">
+            {% if action == "remove" %}
+              {% translate "Remove from the library" %}
+            {% else %}
+              {% translate "Add to the library" %}
+            {% endif %}
+          </h2>
+          <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                  @click="$dispatch('stacos:modal-close')"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small">
+            {% if action == "remove" %}
+              {% blocktranslate with title=row.title %}
+                Rules out <strong>{{ title }}</strong> for this entity. Any open
+                filings for it are dismissed, and a future rebuild will not bring
+                it back until this is reversed.
+              {% endblocktranslate %}
+            {% else %}
+              {% blocktranslate with title=row.title %}
+                Adds <strong>{{ title }}</strong> for this entity, even though the
+                rules have not selected it. The engine still has to compute a real
+                due date — if it cannot, this will be refused.
+              {% endblocktranslate %}
+            {% endif %}
+          </p>
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 small" role="alert">
+              {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+
+          {% crispy form %}
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary"
+                  @click="$dispatch('stacos:modal-close')">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">
+            {% if action == "remove" %}{% translate "Remove" %}{% else %}{% translate "Add" %}{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

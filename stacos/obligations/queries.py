@@ -214,11 +214,17 @@ def status_counts(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> d
             & Q(due_date__gte=as_of)
             & Q(due_date__lte=as_of + timedelta(days=DUE_SOON_DAYS)),
         ),
+        # Independent of `due_soon` above — a wider, separately-filterable
+        # window, not a replacement for the 7-day one used by `display_status`.
+        due_30=Count(
+            "id",
+            filter=open_q & Q(due_date__gte=as_of) & Q(due_date__lte=as_of + timedelta(days=30)),
+        ),
         completed=Count("id", filter=Q(state__in=_CLOSED)),
-        # A human's own "yes, this applies" (`confirmed_by_user`) settles an
-        # opted-in row the rule itself will never confirm — it must stop
-        # counting as "needs confirming" once someone has actually looked.
-        unconfirmed=Count("id", filter=open_q & Q(confirmed=False) & Q(confirmed_by_user=False)),
+        # Only rows where the rule could not decide and nobody has decided for
+        # it. An obligation somebody opted into by hand is confirmed the moment
+        # it is added (`stacos.engine.planner`), so it never lands here.
+        unconfirmed=Count("id", filter=open_q & Q(confirmed=False)),
         needs_input=Count("id", filter=open_q & ~Q(needs_input="")),
     )
     return {key: int(value or 0) for key, value in row.items()}
