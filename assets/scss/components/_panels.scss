@@ -54,6 +54,16 @@
     color: var(--stacos-text-muted);
   }
 
+  // A second, quieter line under `__value` — which step a "Waiting on" name
+  // belongs to, say. Optional; most tiles have no need of it.
+  &__sub {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   // The status edge is the only colour on the tile, and it is always paired
   // with a word — status is never encoded by colour alone.
   &--overdue    { border-left-color: var(--stacos-status-overdue); }
@@ -96,6 +106,100 @@
 .app-nav__count--alert:not(:empty) {
   background: var(--stacos-status-overdue-bg);
   color: var(--stacos-status-overdue);
+}
+
+// -----------------------------------------------------------------------------
+// The obligation working page's own hierarchy.
+//
+// `.detail-grid` is shared with notices, returns and billing, so anything
+// page-specific is scoped under this modifier rather than changed on the
+// shared pattern itself.
+//
+// This rail used to be un-boxed — dividers instead of borders, uppercase
+// section labels instead of card titles — on the reasoning that six cards of
+// identical weight competed with the working panel. That fixed the competition
+// by making the reference material look unfinished: a column of grey uppercase
+// labels over borderless text reads as a page that failed to load, not as
+// deference. Hierarchy comes from *contrast between* the two columns instead.
+// The panel is a raised instrument surface (stronger border, a real shadow, a
+// white ground against the paper); the rail is a set of quiet cards that share
+// the panel's frame but none of its emphasis. And exactly one card in the rail
+// is allowed colour — the penalty exposure, because that is the only thing in
+// the column a reader needs to *feel* rather than look up.
+// -----------------------------------------------------------------------------
+.detail-grid--obligation {
+  // No `background` here on purpose: `.card` already paints one, and setting
+  // it again at this specificity would beat `.card--exposure`'s tint and
+  // silently flatten the one card in the rail that is meant to carry colour.
+  .detail-grid__aside > .card {
+    border-radius: var(--stacos-radius-lg);
+    box-shadow: var(--stacos-shadow-xs);
+  }
+
+  // Sentence case at reading size, not a shouted micro-label. These name a
+  // section of a document ("Why this applies"), and a document's section
+  // headings are written the way sentences are.
+  .detail-grid__aside .card__title {
+    font-size: $stacos-text-md;
+    font-weight: 600;
+    color: var(--stacos-text);
+    padding-bottom: $stacos-space-3;
+    border-bottom: 1px solid var(--stacos-border);
+
+    svg { color: var(--stacos-text-subtle); }
+  }
+
+  // Bootstrap's `.card` is a flex column, so a button dropped straight into one
+  // stretches edge to edge and reads as a banner rather than an action. These
+  // are single secondary actions at the foot of a reference card — they take
+  // their own width.
+  .detail-grid__aside .card > .btn,
+  .detail-grid__aside .card > a.btn {
+    align-self: flex-start;
+  }
+
+  // The working panel is the one surface a reader is meant to act on. It sits
+  // proud of the paper; everything else sits on it.
+  .detail-grid__main > .card {
+    border-radius: var(--stacos-radius-lg);
+    box-shadow: var(--stacos-shadow-sm);
+  }
+}
+
+// A short introductory paragraph inside a card, above its key/value rows.
+// Reading matter, so it gets the looser leading body text wants and the
+// tighter measure a sidebar can hold.
+.card__lede {
+  font-size: $stacos-text-sm;
+  line-height: $stacos-leading-loose;
+  color: var(--stacos-text-muted);
+  margin-bottom: $stacos-space-3;
+}
+
+// A heading *inside* a panel, below other content rather than at the top of
+// it — "Doesn't apply?" under the action bar. Needs the rule above it that a
+// card title at the top of a card gets for free from the card's own edge.
+.card__title--section {
+  margin-top: $stacos-space-5;
+  padding-top: $stacos-space-4;
+  border-top: 1px solid var(--stacos-border);
+}
+
+// "Checked by the compliance desk on 1 June" — a provenance line, which is a
+// reassurance rather than a warning, so it is tinted with the on-track hue
+// instead of sitting in the same grey as the metadata around it.
+.verified-note {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  margin: $stacos-space-3 0 0;
+  padding: $stacos-space-2 $stacos-space-3;
+  border-radius: var(--stacos-radius-md);
+  background: var(--stacos-status-on-track-bg);
+  color: var(--stacos-status-on-track);
+  font-size: $stacos-text-xs;
+
+  svg { flex: none; }
 }
 
 // -----------------------------------------------------------------------------
@@ -276,6 +380,17 @@
     font-size: $stacos-text-sm;
     font-variant-numeric: tabular-nums;
   }
+
+  // The same list, used as a footer under a working panel's actions: period,
+  // what it was filed for, the acknowledgement number. It is reference matter
+  // below the things you do, so it is ruled off from them rather than sitting
+  // in the same visual block.
+  &--foot {
+    margin-top: $stacos-space-4;
+    padding-top: $stacos-space-3;
+    border-top: 1px solid var(--stacos-border);
+    margin-bottom: 0;
+  }
 }
 
 // A short list of things falling due, used on the dashboard and in sidebars.
@@ -382,6 +497,141 @@
       color: var(--stacos-text-muted);
       margin-bottom: $stacos-space-1;
     }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// "Is this filing completed?" — the two-answer card that replaced the step rail.
+//
+// The two answers are weighted equally on purpose. Making "yes" the primary and
+// "no" a quiet link would be a nudge towards the answer that closes the row, in
+// a product whose whole value is that the register tells the truth about what is
+// outstanding.
+// -----------------------------------------------------------------------------
+.ask {
+  margin-top: $stacos-space-4;
+  padding: $stacos-space-4;
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  background: var(--stacos-surface-sunken);
+
+  &__question {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    font-size: $stacos-text-sm;
+    font-weight: 600;
+    margin-bottom: $stacos-space-3;
+    padding: 0;
+  }
+
+  &__choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $stacos-space-3;
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  &__choice {
+    flex: 1 1 12rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    cursor: pointer;
+    padding: $stacos-space-2 $stacos-space-3;
+    border: 1px solid var(--stacos-border);
+    border-radius: var(--stacos-radius-md);
+    background: var(--stacos-surface);
+    transition: border-color 0.12s ease, background 0.12s ease;
+
+    // The radio itself carries the state and the keyboard behaviour, and the
+    // label draws it. Hidden with `clip` rather than `display: none`, which
+    // takes an input out of the tab order and out of the accessibility tree
+    // along with it.
+    input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      overflow: hidden;
+    }
+
+    &:hover {
+      border-color: var(--stacos-border-strong);
+    }
+
+    // `:focus-within` rather than `:focus-visible`: the focused element is the
+    // visually hidden radio, so the ring has to be drawn by its label.
+    &:focus-within {
+      outline: 2px solid var(--stacos-accent);
+      outline-offset: 2px;
+    }
+
+    &:has(input:checked) {
+      border-color: var(--stacos-accent);
+      background: var(--stacos-accent-subtle);
+    }
+  }
+
+  &__choice-label {
+    font-size: $stacos-text-sm;
+    font-weight: 500;
+  }
+
+  &__choice-hint {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  &__form {
+    margin-top: $stacos-space-3;
+    padding-top: $stacos-space-3;
+    border-top: 1px solid var(--stacos-border);
+
+    label {
+      display: block;
+      font-size: $stacos-text-xs;
+      color: var(--stacos-text-muted);
+      margin-bottom: $stacos-space-1;
+    }
+  }
+
+  &__hint {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+    margin: $stacos-space-1 0 $stacos-space-2;
+  }
+
+  &__more {
+    margin-top: $stacos-space-3;
+
+    > summary {
+      display: inline-flex;
+      list-style: none;
+      cursor: pointer;
+
+      &::-webkit-details-marker { display: none; }
+      &::marker { content: ""; }
+    }
+  }
+
+  &__file {
+    display: inline-flex;
+    align-items: center;
+    gap: $stacos-space-1;
+  }
+
+  &__last {
+    margin-top: $stacos-space-3;
+    padding-top: $stacos-space-3;
+    border-top: 1px solid var(--stacos-border);
+  }
+
+  &__last-note {
+    font-size: $stacos-text-sm;
+    margin: 0;
   }
 }
 

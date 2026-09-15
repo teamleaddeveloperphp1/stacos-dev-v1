@@ -10,6 +10,13 @@
 // confident accent; semantic colour reserved strictly for status. Bootstrap's
 // stock radius and shadows read as "prototype" to enterprise buyers, so both
 // are tightened here.
+//
+// The accent is blue, and it sits in the same family as the status vocabulary's
+// "in progress" hue. That is worth knowing rather than worth fixing: the accent
+// is the deeper, more saturated `blue-600`, status is the lighter `#175cd3`, and
+// they never appear in the same role — chrome is accent, a state is a chip with
+// an icon and a word. Colour is never the only signal anywhere in this product,
+// so two neighbouring blues cannot be the thing a reader has to tell apart.
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -30,6 +37,11 @@ $stacos-blue-900:  #1c3271;
 $stacos-grey-0:    #ffffff;
 $stacos-grey-25:   #fcfcfd;
 $stacos-grey-50:   #f8fafc;
+// The ground the application sits on — a shade cooler and deeper than grey-50,
+// which is the inset colour *inside* a card. A card has to read as raised off
+// the page, and it cannot do that when the page is the same colour as its own
+// sunken regions.
+$stacos-grey-75:   #f3f5f7;
 $stacos-grey-100:  #f1f5f9;
 $stacos-grey-200:  #e2e8f0;
 $stacos-grey-300:  #cbd5e1;
@@ -87,12 +99,27 @@ $stacos-category-6: #334155;  // slate
 // -----------------------------------------------------------------------------
 // Typography
 //
-// One clean sans. Tabular numerals everywhere a figure appears: without them,
-// a column of rupee amounts fails to align and the table stops being scannable.
+// Two families doing two jobs. IBM Plex Sans is the working face: it was drawn
+// for dense interface text, its figures are unambiguous at 13px, and it carries
+// a table of rupee amounts without the dithering Inter's tighter forms produce
+// at that size. Fraunces is the display face, reserved for page titles and for
+// the handful of figures a screen exists to state — a due date, an exposure
+// amount. Used anywhere else it turns a working tool into a brochure.
+//
+// These are loaded, not merely named. The previous stack asked for "Inter" and
+// nothing ever fetched it, so every screen in the product silently rendered in
+// whatever the operating system happened to offer — which is most of why the
+// application looked unfinished next to its own design work. The `<link>` lives
+// in the three layouts, and `tests/test_templates.py` asserts it is there.
+//
+// Tabular numerals everywhere a figure appears: without them a column of rupee
+// amounts fails to align and the table stops being scannable.
 // -----------------------------------------------------------------------------
-$stacos-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                   "Helvetica Neue", Arial, sans-serif;
-$stacos-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+$stacos-font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   Roboto, "Helvetica Neue", Arial, sans-serif;
+$stacos-font-display: "Fraunces", "Iowan Old Style", Georgia, "Times New Roman",
+                      serif;
+$stacos-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono",
                    Menlo, Consolas, monospace;
 
 $stacos-text-xs:   0.75rem;    // 12px — metadata, table captions
@@ -167,6 +194,7 @@ $stacos-row-height: 42px;
 
   --stacos-surface:        #{$stacos-grey-0};
   --stacos-surface-sunken: #{$stacos-grey-50};
+  --stacos-paper:          #{$stacos-grey-75};
   --stacos-surface-raised: #{$stacos-grey-0};
   --stacos-border:         #{$stacos-grey-200};
   --stacos-border-strong:  #{$stacos-grey-300};
@@ -174,6 +202,11 @@ $stacos-row-height: 42px;
   --stacos-text:        #{$stacos-grey-900};
   --stacos-text-muted:  #{$stacos-grey-500};
   --stacos-text-subtle: #{$stacos-grey-400};
+
+  // The required-field asterisk. Its own token rather than a borrowed status
+  // hue: "you must fill this in" is not "this filing is overdue", and the two
+  // would drift apart the moment either red is retuned.
+  --stacos-form-required: #{$stacos-status-overdue};
 
   --stacos-status-overdue:     #{$stacos-status-overdue};
   --stacos-status-due-soon:    #{$stacos-status-due-soon};
@@ -202,6 +235,8 @@ $stacos-row-height: 42px;
   --stacos-category-5: #{$stacos-category-5};
   --stacos-category-6: #{$stacos-category-6};
 
+  --stacos-font-display: #{$stacos-font-display};
+
   --stacos-radius-sm: #{$stacos-radius-sm};
   --stacos-radius-md: #{$stacos-radius-md};
   --stacos-radius-lg: #{$stacos-radius-lg};
@@ -227,6 +262,9 @@ $stacos-row-height: 42px;
 
   --stacos-surface:        #{$stacos-grey-900};
   --stacos-surface-sunken: #{$stacos-grey-950};
+  // No separate paper shade in the dark theme: `surface-sunken` is already the
+  // darkest ground available, and a fourth near-black would be indistinguishable.
+  --stacos-paper:          #{$stacos-grey-950};
   --stacos-surface-raised: #{$stacos-grey-800};
   --stacos-border:         #{$stacos-grey-700};
   --stacos-border-strong:  #{$stacos-grey-600};
@@ -234,6 +272,9 @@ $stacos-row-height: 42px;
   --stacos-text:        #{$stacos-grey-100};
   --stacos-text-muted:  #{$stacos-grey-400};
   --stacos-text-subtle: #{$stacos-grey-500};
+
+  // Lightened for the same contrast reason as the status hues below.
+  --stacos-form-required: #fda29b;
 
   // Status hues lighten so they hold contrast on a dark ground; the vocabulary
   // itself — which colour means which state — never changes.

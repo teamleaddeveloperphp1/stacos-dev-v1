@@ -2,8 +2,40 @@
 
 body {
   -webkit-font-smoothing: antialiased;
-  background: var(--stacos-surface-sunken);
+  background: var(--stacos-paper);
   color: var(--stacos-text);
+}
+
+// -----------------------------------------------------------------------------
+// Where the display face is, and is not.
+//
+// Bootstrap puts `$headings-font-family` on every `h1`–`h6`, and this product
+// spends those tags on two unrelated jobs: the title of a page (display) and
+// the label on a card (furniture). A serif at 13px inside a dense panel reads
+// as a mistake, so everything small goes back to the working face here — one
+// list, rather than a `font-family` scattered across nine component partials.
+// -----------------------------------------------------------------------------
+.card__title,
+.filing-card__title,
+.section-title,
+.board__column-header,
+.empty-state__title,
+.plan-card__name,
+.toast__title {
+  font-family: $stacos-font-sans;
+}
+
+// The opposite direction: figures a screen exists to state. A due date and a
+// penalty exposure are the two numbers a compliance officer opens this product
+// to read, and the display face at a large optical size is what separates them
+// from the dozen supporting figures around them. Not a decoration to sprinkle —
+// if everything is set in it, nothing is emphasised.
+.display-figure {
+  font-family: $stacos-font-display;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 // Tabular numerals for every figure. Without them a column of rupee amounts

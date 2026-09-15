@@ -201,64 +201,27 @@
 }
 
 // -----------------------------------------------------------------------------
-// The information-request checklist.
-//
-// Each item carries its own state, because a request for six documents that
-// comes back with five is neither done nor not-done.
+// The role a checklist step is gated on — PREPARE/REVIEW/APPROVE/SIGN, mapped
+// to the matching `compliance.obligation.*` permission by
+// `ObligationStep.ROLE_PERMISSION`. Four quiet hues borrowed from the status
+// palette rather than new colours, since a role is not itself a health signal.
 // -----------------------------------------------------------------------------
-.checklist {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 $stacos-space-4;
-  counter-reset: checklist;
+.step-role {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--stacos-radius-sm);
+  background: var(--stacos-surface-sunken);
+  color: var(--stacos-text-muted);
 
-  &__item {
-    position: relative;
-    padding: $stacos-space-3 0 $stacos-space-3 $stacos-space-6;
-    border-bottom: 1px solid var(--stacos-border);
-    counter-increment: checklist;
-
-    &:last-child { border-bottom: 0; }
-
-    // The marker is generated, so an item's number never has to be maintained
-    // in the template and reordering cannot desynchronise it.
-    &::before {
-      content: counter(checklist);
-      position: absolute;
-      left: 0;
-      top: $stacos-space-3;
-      width: 1.5rem;
-      height: 1.5rem;
-      display: grid;
-      place-items: center;
-      border-radius: var(--stacos-radius-pill);
-      border: 1px solid var(--stacos-border-strong);
-      font-size: $stacos-text-xs;
-      color: var(--stacos-text-muted);
-    }
-
-    &--done::before {
-      content: "✓";
-      background: var(--stacos-status-complete-bg);
-      border-color: var(--stacos-status-complete);
-      color: var(--stacos-status-complete);
-    }
-  }
-
-  &__label {
-    font-size: $stacos-text-sm;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: $stacos-space-2;
-  }
-
-  &__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: $stacos-space-3;
-    margin-top: $stacos-space-2;
-  }
+  &--prepare { background: var(--stacos-status-in-progress-bg); color: var(--stacos-status-in-progress); }
+  &--review  { background: var(--stacos-status-waiting-bg); color: var(--stacos-status-waiting); }
+  &--approve { background: var(--stacos-status-due-soon-bg); color: var(--stacos-status-due-soon); }
+  &--sign    { background: var(--stacos-status-on-track-bg); color: var(--stacos-status-on-track); }
 }
 
 // -----------------------------------------------------------------------------
@@ -292,6 +255,113 @@
   margin-top: $stacos-space-4;
   padding-top: $stacos-space-3;
   border-top: 1px solid var(--stacos-border);
+}
+
+// -----------------------------------------------------------------------------
+// A single person's row — the obligation workspace's "who's responsible" card.
+//
+// Three columns: who, what they hold, where it has got to. The state sits hard
+// right so the column can be scanned on its own — "is anyone stuck?" is the
+// question this card is opened to answer, and it should be answerable without
+// reading a single name.
+// -----------------------------------------------------------------------------
+.person-row {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-3;
+  padding: $stacos-space-3 0;
+  border-bottom: 1px solid var(--stacos-border);
+
+  &:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  &__who {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__name {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    flex-wrap: wrap;
+    margin: 0;
+    font-size: $stacos-text-sm;
+    font-weight: 600;
+  }
+
+  &__meta {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  &__state {
+    margin-left: auto;
+    flex: none;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Discussion — free-standing remarks on an obligation. Visually a sibling of
+// `.timeline` (border-bottom rows, quiet metadata line) but never the same
+// list: a comment changes nothing, so it does not belong in the system's own
+// history of what changed and when.
+// -----------------------------------------------------------------------------
+.discussion {
+  list-style: none;
+  margin: 0 0 $stacos-space-3;
+  padding: 0;
+}
+
+.discussion__item {
+  display: flex;
+  gap: $stacos-space-3;
+  padding: $stacos-space-3 0;
+  border-bottom: 1px solid var(--stacos-border);
+
+  &:first-child { padding-top: 0; }
+  &:last-child { border-bottom: 0; }
+}
+
+.discussion__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.discussion__meta {
+  display: flex;
+  gap: $stacos-space-2;
+  align-items: baseline;
+  font-size: $stacos-text-xs;
+  margin-bottom: 0.125rem;
+}
+
+.discussion__note {
+  margin: 0;
+  font-size: $stacos-text-sm;
+}
+
+.discussion__composer {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  padding-top: $stacos-space-3;
+  border-top: 1px solid var(--stacos-border);
+
+  .mb-3 { flex: 1 1 auto; margin-bottom: 0 !important; }
+
+  // See the note in `discussion.html`: hidden from the eye, not from the
+  // accessibility tree, which is why this is a clip rather than `display: none`.
+  label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -332,4 +402,645 @@
       &:last-child { border-bottom: 0; }
     }
   }
+}
+
+// -----------------------------------------------------------------------------
+// The penalty exposure card, and one computed line inside it.
+//
+// A rule with a real total gets a large figure; one that only has a rate and a
+// reference (an uncapped per-day rule, or a fixed range) is text-only — never a
+// number standing in for "we don't actually know".
+//
+// This is the only card in the obligation's reference rail with a tint. That is
+// the whole mechanism by which it draws the eye: surround one coloured surface
+// with five quiet ones and it needs no further decoration, whereas six
+// competing surfaces make the important one invisible.
+// -----------------------------------------------------------------------------
+.card--exposure {
+  background: linear-gradient(
+    180deg,
+    var(--stacos-status-overdue-bg) 0%,
+    var(--stacos-surface) 65%
+  );
+  border-color: color-mix(in srgb, var(--stacos-status-overdue) 24%, var(--stacos-border));
+
+  .card__title { color: var(--stacos-status-overdue); }
+  .card__title svg { color: currentColor; }
+}
+
+.exposure-line {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+
+  & + & {
+    margin-top: $stacos-space-3;
+    padding-top: $stacos-space-3;
+    border-top: 1px solid var(--stacos-border);
+  }
+
+  &__amount {
+    font-size: $stacos-text-2xl;
+    color: var(--stacos-status-overdue);
+  }
+
+  // "/day" rides with the figure but is not part of it — a rate is a figure
+  // plus a unit, and setting the unit at the same size reads as ₹200/day being
+  // one very long number.
+  &__unit {
+    font-family: $stacos-font-sans;
+    font-size: $stacos-text-md;
+    font-weight: 500;
+    color: var(--stacos-text-muted);
+  }
+
+  &__note {
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+}
+
+// The statute's own words about the consequence, under the computed figures.
+.exposure-summary {
+  margin: $stacos-space-3 0 0;
+  font-size: $stacos-text-sm;
+  line-height: $stacos-leading-loose;
+  color: var(--stacos-text-muted);
+}
+
+
+// =============================================================================
+// The obligation workspace.
+//
+// The one screen in the product a compliance officer keeps open all day, so it
+// is the one screen worth building components for rather than assembling out of
+// the generic list patterns. Everything below is scoped to it by name.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// The instrument strip: due date, progress, owner, blocker.
+//
+// One joined surface with dividers, not four separate tiles. Four bordered
+// boxes say "four unrelated counters" — which is what the calendar's
+// `.stat-row` legitimately is, and this is not: these four facts describe one
+// filing and are read together, left to right, as a sentence about where it
+// stands.
+// -----------------------------------------------------------------------------
+.ob-strip {
+  display: grid;
+  // Not four equal columns: the due date carries a long date in a display face
+  // and the progress cell carries a ring beside two lines of text, so both need
+  // more room than a name does.
+  grid-template-columns: 1.15fr 1.3fr minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--stacos-surface);
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  overflow: hidden;
+  margin-bottom: $stacos-space-4;
+
+  @media (max-width: 62em) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 36em) { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ob-strip__cell {
+  // Named so the progress ring's centre can match whatever ground the cell is
+  // painted with — see `.progress-ring` below.
+  --ring-hole: var(--stacos-surface);
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  padding: $stacos-space-3 $stacos-space-4;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--stacos-border);
+  transition: background var(--stacos-duration-fast) var(--stacos-ease);
+
+  &:last-child { border-right: 0; }
+
+  @media (max-width: 62em) {
+    border-bottom: 1px solid var(--stacos-border);
+  }
+
+  &__label { display: block; }
+}
+
+// Only the cells that lead somewhere respond to a pointer. A tile that lights
+// up and then does nothing when clicked is worse than one that never moved.
+a.ob-strip__cell,
+button.ob-strip__cell {
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    --ring-hole: var(--stacos-surface-sunken);
+    background: var(--stacos-surface-sunken);
+    color: inherit;
+  }
+}
+
+.ob-strip__label {
+  font-size: $stacos-text-xs;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--stacos-text-subtle);
+}
+
+.ob-strip__value {
+  display: block;
+  font-size: $stacos-text-md;
+  font-weight: 600;
+  line-height: $stacos-leading-tight;
+
+  // "Nothing blocked", "Nobody yet" — the absence of a fact, not a fact. It
+  // drops a size so it stops wrapping in a narrow cell and stops competing with
+  // the cells that do carry something.
+  &--muted {
+    font-size: $stacos-text-sm;
+    color: var(--stacos-text-muted);
+    font-weight: 500;
+  }
+}
+
+.ob-strip__sub {
+  display: block;
+  font-size: $stacos-text-xs;
+  color: var(--stacos-text-muted);
+
+  &--ref {
+    font-family: $stacos-font-mono;
+    font-size: 0.6875rem;
+  }
+}
+
+.ob-strip__person {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  min-width: 0;
+
+  .ob-strip__value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.ob-strip__link {
+  font-size: $stacos-text-xs;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+// The date the whole product exists to protect. It is the only figure on the
+// page set in the display face at this size, and the countdown beside it
+// becomes a pill so urgency is carried by a shape as well as a colour.
+.ob-strip__cell--deadline {
+  .due-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+
+  // Never wrapped. "31 Oct 2026" broken across two lines stops being a date and
+  // becomes two fragments, and this is the one figure on the page that has to
+  // be legible at a glance from across a desk.
+  .due-badge__date {
+    font-family: $stacos-font-display;
+    font-size: $stacos-text-xl;
+    font-weight: 500;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+    white-space: nowrap;
+  }
+
+  .due-badge__count {
+    padding: 0.05rem 0.45rem;
+    border-radius: $stacos-radius-pill;
+
+    &.status-text--overdue  { background: var(--stacos-status-overdue-bg); }
+    &.status-text--due-soon { background: var(--stacos-status-due-soon-bg); }
+    &.status-text--on-track { background: var(--stacos-status-on-track-bg); }
+  }
+}
+
+.ob-strip__cell--overdue {
+  --ring-hole: var(--stacos-status-overdue-bg);
+  background: var(--stacos-status-overdue-bg);
+
+  .due-badge__date { color: var(--stacos-status-overdue); }
+}
+
+.ob-strip__cell--due-soon {
+  --ring-hole: var(--stacos-status-due-soon-bg);
+  background: var(--stacos-status-due-soon-bg);
+
+  .due-badge__date { color: var(--stacos-status-due-soon); }
+}
+
+// Somebody is holding this up. Marked with the waiting hue on its inner edge,
+// and always paired with that person's name — never colour alone.
+.ob-strip__cell--attention {
+  box-shadow: inset 0 3px 0 0 var(--stacos-status-waiting);
+}
+
+// -----------------------------------------------------------------------------
+// The progress ring.
+//
+// A conic gradient driven by one custom property the template sets from
+// `widthratio`, rather than an SVG whose dash offset something would have to
+// compute after paint. The hole is painted rather than masked so the ring works
+// on a tinted cell; `--ring-hole` is what keeps it matching its ground.
+// -----------------------------------------------------------------------------
+.progress-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--stacos-accent) calc(var(--progress, 0) * 1%),
+    var(--stacos-border) 0
+  );
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: var(--ring-hole, var(--stacos-surface));
+  }
+
+  &__label {
+    position: relative;
+    z-index: 1;
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: var(--stacos-accent);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.ob-strip__progress {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-3;
+  min-width: 0;
+
+  // "4 done · 3 pending" is one fact, not three words to be broken across
+  // lines beside a 40px ring. It drops to the dense size rather than wrapping.
+  .ob-strip__value {
+    font-size: $stacos-text-sm;
+    white-space: nowrap;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// The alert bar.
+//
+// Distinct from `.callout`, which is a standing explanation attached to the
+// thing it explains and carries no controls. An alert bar names something that
+// is *stopping work*, and it carries the action that unsticks it — which is why
+// it has an icon column, a body and an action column rather than being a
+// paragraph with a coloured edge.
+// -----------------------------------------------------------------------------
+.alertbar {
+  display: flex;
+  align-items: flex-start;
+  gap: $stacos-space-3;
+  padding: $stacos-space-3 $stacos-space-4;
+  margin-bottom: $stacos-space-3;
+  border: 1px solid var(--stacos-border);
+  border-left: 3px solid var(--stacos-border-strong);
+  border-radius: var(--stacos-radius-md);
+  background: var(--stacos-surface-sunken);
+
+  &--warning {
+    border-color: color-mix(in srgb, var(--stacos-status-due-soon) 28%, var(--stacos-border));
+    border-left-color: var(--stacos-status-due-soon);
+    background: var(--stacos-status-due-soon-bg);
+
+    .alertbar__icon { color: var(--stacos-status-due-soon); }
+  }
+
+  &--danger {
+    border-color: color-mix(in srgb, var(--stacos-status-overdue) 28%, var(--stacos-border));
+    border-left-color: var(--stacos-status-overdue);
+    background: var(--stacos-status-overdue-bg);
+
+    .alertbar__icon { color: var(--stacos-status-overdue); }
+  }
+
+  &__icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    margin-top: 0.1rem;
+    color: var(--stacos-text-subtle);
+  }
+
+  &__body {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $stacos-text-sm;
+    font-weight: 600;
+  }
+
+  &__note {
+    margin: 0.15rem 0 0;
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+
+  &__actions {
+    flex: none;
+    align-self: center;
+  }
+
+  @media (max-width: 48em) {
+    flex-wrap: wrap;
+
+    &__actions { margin-left: calc(16px + #{$stacos-space-3}); }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// The checklist's filter strip.
+//
+// Tabs, not five outline buttons. Five equally-weighted buttons read as five
+// actions to take; a tab strip reads as one control with a current selection,
+// which is what this is.
+// -----------------------------------------------------------------------------
+.wf-tabs {
+  display: flex;
+  gap: $stacos-space-1;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--stacos-border);
+  margin-bottom: $stacos-space-2;
+
+  &__tab {
+    flex: none;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: $stacos-space-2 $stacos-space-3;
+    font-size: $stacos-text-sm;
+    font-weight: 600;
+    color: var(--stacos-text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover { color: var(--stacos-text); }
+
+    &--active {
+      color: var(--stacos-accent);
+      border-bottom-color: var(--stacos-accent);
+    }
+  }
+
+  &__count {
+    display: inline-block;
+    margin-left: $stacos-space-1;
+    padding: 0 0.35rem;
+    border-radius: $stacos-radius-pill;
+    background: var(--stacos-surface-sunken);
+    font-size: 0.625rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__tab--active &__count {
+    background: var(--stacos-accent-subtle);
+    color: var(--stacos-accent);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// The checklist itself, drawn as a rail.
+//
+// A checklist behind a filing is a *sequence* — step 6 cannot start until step 5
+// clears — and a flat list of identical rows with identical buttons states none
+// of that. The connector line carries the sequence, the marker carries each
+// step's state, and exactly one step at a time gets a primary button, because
+// exactly one step at a time is the one to pick up.
+// -----------------------------------------------------------------------------
+.wf {
+  list-style: none;
+  margin: 0 0 $stacos-space-4;
+  padding: 0;
+}
+
+.wf__step {
+  display: flex;
+  gap: $stacos-space-3;
+  padding: $stacos-space-3 0;
+  border-bottom: 1px solid var(--stacos-border);
+
+  &:last-child { border-bottom: 0; }
+}
+
+.wf__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  width: 1.5rem;
+}
+
+.wf__dot {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--stacos-border-strong);
+  background: var(--stacos-surface);
+  font-size: $stacos-text-xs;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--stacos-text-muted);
+}
+
+.wf__line {
+  flex: 1 1 auto;
+  width: 1.5px;
+  min-height: 0.5rem;
+  margin-top: $stacos-space-1;
+  background: var(--stacos-border);
+}
+
+.wf__step:last-child .wf__line { display: none; }
+
+.wf__step--done {
+  .wf__dot {
+    background: var(--stacos-status-on-track);
+    border-color: var(--stacos-status-on-track);
+    color: #fff;
+  }
+
+  .wf__line { background: color-mix(in srgb, var(--stacos-status-on-track) 35%, transparent); }
+
+  // Struck through, and muted: a finished step should still be readable — it is
+  // the evidence that the work happened — but it must not compete with the one
+  // that is next.
+  .wf__name {
+    color: var(--stacos-text-muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--stacos-border-strong);
+  }
+}
+
+.wf__step--blocked .wf__dot {
+  background: var(--stacos-status-waiting-bg);
+  border-color: var(--stacos-status-waiting);
+  color: var(--stacos-status-waiting);
+}
+
+.wf__step--next .wf__dot {
+  border-color: var(--stacos-accent);
+  color: var(--stacos-accent);
+  box-shadow: 0 0 0 3px var(--stacos-accent-subtle);
+}
+
+.wf__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wf__top {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  flex-wrap: wrap;
+}
+
+.wf__name {
+  margin: 0;
+  font-size: $stacos-text-base;
+  font-weight: 600;
+}
+
+.wf__desc {
+  margin: 0.2rem 0 0;
+  font-size: $stacos-text-sm;
+  color: var(--stacos-text-muted);
+}
+
+.wf__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $stacos-space-2 $stacos-space-3;
+  margin-top: $stacos-space-2;
+}
+
+// The assignee is a control, not a label — clicking it opens the assign modal —
+// so it is shaped like a chip you can press rather than a name you cannot.
+.wf__assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  max-width: 14rem;
+  padding: 0.15rem $stacos-space-2 0.15rem 0.15rem;
+  border: 1px solid var(--stacos-border);
+  border-radius: $stacos-radius-pill;
+  background: var(--stacos-surface);
+  font-size: $stacos-text-xs;
+  font-weight: 500;
+  color: var(--stacos-text);
+  cursor: pointer;
+  transition: border-color var(--stacos-duration-fast) var(--stacos-ease);
+
+  &:hover,
+  &:focus-visible { border-color: var(--stacos-accent); }
+
+  &--empty {
+    border-style: dashed;
+    color: var(--stacos-text-muted);
+  }
+
+  &-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.wf__when {
+  font-size: $stacos-text-xs;
+  color: var(--stacos-text-subtle);
+  font-variant-numeric: tabular-nums;
+
+  &--late {
+    color: var(--stacos-status-overdue);
+    font-weight: 600;
+  }
+}
+
+.wf__cta {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: $stacos-space-2;
+  margin-left: auto;
+}
+
+// A step action whose form only appears once it is chosen — completing a step
+// that needs evidence, or blocking one, both of which need a sentence typed
+// before they can happen. The summary already reads as a button, so the
+// disclosure's own marker would be a second, conflicting affordance.
+.wf__disclosure {
+  > summary {
+    list-style: none;
+    cursor: pointer;
+
+    &::-webkit-details-marker { display: none; }
+    &::marker { content: ""; }
+  }
+}
+
+.wf__disclosure-form {
+  display: flex;
+  flex-direction: column;
+  gap: $stacos-space-2;
+  width: 17rem;
+  max-width: 100%;
+  margin-top: $stacos-space-2;
+  padding: $stacos-space-3;
+  border: 1px solid var(--stacos-border);
+  border-radius: var(--stacos-radius-md);
+  background: var(--stacos-surface-sunken);
+}
+
+.wf__empty {
+  margin: 0;
+  padding: $stacos-space-5 0;
+  text-align: center;
+  font-size: $stacos-text-sm;
+  color: var(--stacos-text-subtle);
+}
+
+// An avatar with nobody behind it — an unassigned step, an empty signatory
+// slot. Dashed rather than filled, so "nobody yet" does not read as a person
+// whose initials happen to be a plus sign.
+.avatar--empty {
+  background: var(--stacos-surface-sunken);
+  border: 1px dashed var(--stacos-border-strong);
+  color: var(--stacos-text-subtle);
+  font-weight: 500;
 }

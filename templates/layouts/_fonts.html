@@ -1,0 +1,22 @@
+{% comment %}
+  The two webfaces, loaded once and identically by all three layouts.
+
+  It lives in its own partial because it has to be the same in the app shell,
+  the auth layout and the public site: a product whose sign-in screen renders in
+  a different face from the screen behind it looks broken before the user has
+  typed anything. `tests/test_templates.py` asserts every layout includes it.
+
+  `display=swap` is deliberate. These are working screens, not a magazine — text
+  the user can read in the fallback face immediately beats text that is invisible
+  for 3s while a webfont arrives over a patchy mobile connection. The fallback
+  stacks in `_tokens.scss` are chosen to be close enough in metrics that the swap
+  is not a jolt.
+
+  Fraunces is requested as its variable font across the full optical-size axis,
+  because it is used both at 27px (a page title) and at 30px (an exposure
+  figure); a static cut would be optically wrong at one of them.
+{% endcomment %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">

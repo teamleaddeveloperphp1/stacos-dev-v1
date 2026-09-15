@@ -95,9 +95,6 @@
     background: var(--stacos-surface);
     text-align: left;
     font-size: $stacos-text-sm;
-    transition: border-color var(--stacos-duration-fast) var(--stacos-ease);
-
-    &:hover { border-color: var(--stacos-border-strong); }
   }
 
   &__name {
@@ -175,10 +172,15 @@
   gap: $stacos-space-4;
   margin-bottom: $stacos-space-5;
 
+  // Set in the display face (inherited from `$headings-font-family`) at a size
+  // that can carry it. 650 was a synthetic weight — the browser was faux-bolding
+  // a face that only ships 400/500/600, which is why titles looked smeared
+  // rather than set. 600 is a real cut.
   &__title {
-    font-size: $stacos-text-xl;
-    font-weight: 650;
+    font-size: $stacos-text-2xl;
+    font-weight: 600;
     letter-spacing: -0.015em;
+    line-height: $stacos-leading-tight;
     margin: 0;
   }
 

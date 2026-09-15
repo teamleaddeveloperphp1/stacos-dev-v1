@@ -9,6 +9,19 @@
   margin-bottom: 0.25rem;
 }
 
+// The required-field marker. crispy-forms already emits
+// `<span class="asteriskField">*</span>` inside the label of every field whose
+// `required` is True — including the ones set in `__init__` rather than on the
+// model — so nothing in a form class or a template needs to say "mandatory"
+// twice. Until this rule existed it rendered as an unspaced black `*` and read
+// as a typo. Colour is the emphasis, never the signal: the asterisk itself is
+// what carries the meaning, so it still reads without it.
+.asteriskField {
+  color: var(--stacos-form-required);
+  font-weight: 600;
+  margin-left: 0.15rem;
+}
+
 .form-text {
   font-size: $stacos-text-xs;
   color: var(--stacos-text-muted);
@@ -28,6 +41,37 @@
 }
 
 .invalid-feedback { font-size: $stacos-text-xs; }
+
+// Show/hide toggle sitting inside a password field. The button overlaps the
+// input rather than sitting beside it, so the field keeps the same width as
+// every other form-control on the page.
+.password-field {
+  &__control {
+    position: relative;
+
+    .form-control { padding-right: 2.75rem; }
+  }
+
+  &__toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--stacos-text-subtle);
+
+    &:hover,
+    &:focus-visible { color: var(--stacos-text-muted); }
+
+    &:focus-visible { outline: 2px solid var(--stacos-border-strong); outline-offset: -2px; }
+  }
+}
 
 // The dual-OTP screen. Two codes, one submission — the inputs are deliberately
 // large and monospaced because they are typed from a phone in a hurry.

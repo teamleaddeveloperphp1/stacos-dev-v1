@@ -1,3 +1,18 @@
+// The compliance library: one category at a time, each its own small table
+// inside the same data-table shell.
+.library-category {
+  border-bottom: 1px solid var(--stacos-border);
+
+  &:last-child { border-bottom: none; }
+
+  &__title {
+    margin: 0;
+    padding: $stacos-space-3 $stacos-space-3 0;
+    font-size: $stacos-text-sm;
+    font-weight: 600;
+  }
+}
+
 // The data table: dense, scannable, and the same everywhere.
 
 .data-table {
@@ -112,6 +127,11 @@
 
 .timeline {
   position: relative;
+  // An ordered list for the reader's sake — a trail has a sequence — but the
+  // markers were never turned off, so each row rendered its own "1." beside the
+  // dot this component draws.
+  list-style: none;
+  margin: 0;
   padding-left: $stacos-space-5;
 
   &::before {
@@ -149,15 +169,25 @@
     &--note::before { background: var(--stacos-status-in-progress); }
   }
 
+  // The timestamp, which follows the event rather than leading it — see the
+  // note in `obligations/_fragments/timeline.html`.
   &__meta {
     font-size: $stacos-text-xs;
-    color: var(--stacos-text-muted);
+    color: var(--stacos-text-subtle);
     display: flex;
     gap: $stacos-space-2;
     flex-wrap: wrap;
+    margin-top: 0.125rem;
   }
 
-  &__body { font-size: $stacos-text-sm; }
+  &__body {
+    font-size: $stacos-text-sm;
+    line-height: $stacos-leading-normal;
+  }
+
+  // Who did it. Bold enough to be the scan target in a column of otherwise
+  // identical sentences, without becoming a second heading.
+  &__actor { font-weight: 600; }
 
   // What a person typed, as opposed to what the system recorded. Set apart so a
   // reviewer scanning a trail can find the human sentences.

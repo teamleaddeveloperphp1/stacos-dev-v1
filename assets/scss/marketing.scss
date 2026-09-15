@@ -6,6 +6,12 @@
 
 $primary: $stacos-blue-600;
 $font-family-sans-serif: $stacos-font-sans;
+// The same display face the product uses, for the same reason: the public site
+// and the application have to look like one company made both, and the first
+// thing a visitor compares is the headline on the pricing page against the page
+// title they land on after signing in.
+$headings-font-family: $stacos-font-display;
+$headings-font-weight: 500;
 $font-size-base: 1rem;              // roomier than the app: this is read, not worked in
 $border-radius: $stacos-radius-lg;
 $enable-shadows: false;

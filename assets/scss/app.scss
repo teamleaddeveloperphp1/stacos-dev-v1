@@ -33,6 +33,15 @@ $font-family-monospace:  $stacos-font-mono;
 $font-size-base:  $stacos-text-base;
 $line-height-base: $stacos-leading-normal;
 
+// Headings take the display face. Note that a "heading" in Bootstrap's sense is
+// an `<h1>`–`<h6>` element, and this product uses those for two different jobs:
+// the title of a page, which is display material, and the label on a card,
+// which is interface furniture. The component layer puts the small ones back to
+// the sans face — see `.card__title` and friends in components/_base.scss.
+$headings-font-family: $stacos-font-display;
+$headings-font-weight: 500;
+$headings-line-height: $stacos-leading-tight;
+
 // Tighter than stock. Bootstrap's defaults read as a prototype.
 $border-radius:    $stacos-radius-md;
 $border-radius-sm: $stacos-radius-sm;

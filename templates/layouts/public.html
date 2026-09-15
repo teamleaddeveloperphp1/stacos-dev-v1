@@ -21,6 +21,7 @@
   <meta name="robots" content="{% if meta %}{{ meta.robots }}{% else %}index,follow{% endif %}">
 
   <link rel="canonical" href="{{ canonical_url|default:request.build_absolute_uri }}">
+  {% include "layouts/_fonts.html" %}
   <link rel="stylesheet" href="{% static 'css/marketing.css' %}">
   <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
   <link rel="sitemap" type="application/xml" href="{% url 'sitemap' %}">
