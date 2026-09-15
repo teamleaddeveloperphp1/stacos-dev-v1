@@ -27,6 +27,15 @@ MIDDLEWARE.insert(
 )
 INTERNAL_IPS = ["127.0.0.1"]
 DEBUG_TOOLBAR_CONFIG = {
+    # Start collapsed to the handle. Expanded, the toolbar is a fixed 220px
+    # panel pinned to the right edge at z-index 100000000 — and every card in
+    # this product puts its primary action in the card header, top right, which
+    # is exactly what that panel lands on. Clicks then hit the toolbar instead
+    # of the button, with no error and no request: the observed symptom was
+    # "Create my calendar" doing nothing at all on the setup flow's last step.
+    # This only sets the default; the toolbar remembers its own open/closed
+    # state per browser in `localStorage["djdt.show"]` afterwards.
+    "SHOW_COLLAPSED": True,
     # The toolbar tries to inject itself into HTMX fragment responses, which
     # corrupts them. Only show it on full-page renders.
     "SHOW_TOOLBAR_CALLBACK": lambda request: (
