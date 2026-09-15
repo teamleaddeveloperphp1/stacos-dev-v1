@@ -310,6 +310,18 @@ OTP_PHONE_CHANNEL = "whatsapp"
 
 TRUSTED_DEVICE_DAYS = env.int("TRUSTED_DEVICE_DAYS", default=30)
 TRUSTED_DEVICE_COOKIE = "stacos_td"
+#: Step-up re-authentication — asking for the password again before a sensitive
+#: action (approving a return, changing a role or payment method, granting or
+#: revoking an engagement).
+#:
+#: OFF by default, deliberately: the prompt was removed as a product decision,
+#: not because the mechanism is broken. Everything behind it is intact and stays
+#: covered by ``tests/test_htmx_navigation.py`` and ``tests/accounts/test_stepup.py``,
+#: which force it on, so turning it back on is ``STEP_UP_ENABLED=True`` and
+#: nothing else. Worth revisiting before this handles real filings for real
+#: clients: it is the only thing between an unlocked laptop and a certified
+#: filing made in somebody else's name.
+STEP_UP_ENABLED = env.bool("STEP_UP_ENABLED", default=False)
 STEP_UP_MAX_AGE_SECONDS = env.int("STEP_UP_MAX_AGE_SECONDS", default=600)
 
 # --- WhatsApp -----------------------------------------------------------------

@@ -37,6 +37,14 @@ DATABASES["default"]["CONN_MAX_AGE"] = 0
 
 STACOS_RLS_ENABLED = env.bool("STACOS_RLS_ENABLED", default=True)
 
+# Step-up re-authentication is OFF in the running application (see the setting's
+# comment in base.py) but stays ON here, for the same reason RLS does: the suite
+# is the specification of the mechanism, not a description of today's
+# configuration. Keeping it exercised is what makes `STEP_UP_ENABLED=True` a
+# one-line change rather than an archaeology project. `test_stepup.py` overrides
+# this back to False to cover the disabled path itself.
+STEP_UP_ENABLED = True
+
 # Fast, deterministic hashing — Argon2 in tests wastes minutes per run.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 

@@ -9,6 +9,12 @@ an engagement.
 Freshness is tracked in the session. It is deliberately *not* a permission — a
 user may hold ``return.approve`` all day and still be asked to re-authenticate
 before each approval window.
+
+**Currently switched off**: ``STEP_UP_ENABLED`` defaults to ``False``, so
+:func:`step_up_is_fresh` short-circuits to ``True`` and nothing ever raises
+:class:`~stacos.core.exceptions.StepUpRequired`. The decorators, the prompt view
+and its tests are all kept working so the switch is the only thing that has to
+change to bring it back. See the setting's comment in ``config/settings/base.py``.
 """
 
 from __future__ import annotations
@@ -31,7 +37,17 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def step_up_is_fresh(request: HttpRequest, *, max_age_seconds: int | None = None) -> bool:
-    """True when the user re-authenticated recently enough."""
+    """True when the user re-authenticated recently enough.
+
+    Also true — unconditionally — when ``STEP_UP_ENABLED`` is off, which is the
+    default. Disabling is done here rather than at each call site on purpose:
+    this is the single funnel both :func:`require_step_up` and
+    ``permissions._enforce_step_up`` pass through, so one check cannot leave a
+    second, forgotten path still prompting.
+    """
+    if not getattr(settings, "STEP_UP_ENABLED", False):
+        return True
+
     stamp = request.session.get(SESSION_KEY)
     if not stamp:
         return False
