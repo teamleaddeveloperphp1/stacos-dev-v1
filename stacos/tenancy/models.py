@@ -196,6 +196,19 @@ class Entity(TenantScopedModel, SoftDeleteModel):
         STRUCK_OFF = "STRUCK_OFF", _("Struck off")
         CLOSED = "CLOSED", _("Closed")
 
+    class SetupStep(models.TextChoices):
+        """How far the guided first-run setup has got for this entity.
+
+        The step keys match the url-name suffixes in
+        :mod:`stacos.tenancy.entity_setup`, because they name the same four
+        screens and two spellings of one list is one spelling too many.
+        """
+
+        REGISTRATIONS = "registrations", _("Registrations")
+        ANSWERS = "answers", _("Answer what applies")
+        PACKS = "packs", _("Optional add-ons")
+        BUILD = "build", _("Review and create")
+
     name = models.CharField(max_length=200)
     legal_name = models.CharField(max_length=250, blank=True)
     short_code = models.CharField(max_length=20, blank=True)
@@ -212,6 +225,27 @@ class Entity(TenantScopedModel, SoftDeleteModel):
     #: Group structure inside one tenant — a holding company and its subsidiaries.
     parent = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="subsidiaries"
+    )
+
+    #: The furthest step of the guided setup this entity has reached.
+    #:
+    #: Persisted rather than derived, because the thing being remembered is a
+    #: *navigation* fact — "you were on the questions screen" — and nothing in
+    #: the data model records it. Without this, closing the browser halfway
+    #: through setup and coming back put the user at step one again, with no
+    #: sign that anything they had already done had been kept. It had been; the
+    #: product just never said so.
+    #:
+    #: Not a completion flag. Setup is finished when a ``MaterialisationRun``
+    #: exists for the entity — which is what
+    #: ``tenancy.views.entity_detail`` and ``obligations`` have always checked,
+    #: and what keeps every entity that predates this column (default
+    #: ``registrations``, calendar long since built) out of the resume path.
+    setup_step = models.CharField(
+        max_length=16,
+        choices=SetupStep.choices,
+        default=SetupStep.REGISTRATIONS,
+        help_text="Furthest step reached in the guided first-run setup.",
     )
 
     class Meta:
