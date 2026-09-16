@@ -62,7 +62,6 @@ ENTITY_FORM_TEMPLATE = "tenancy/_fragments/entity_form_modal.html"
 AUDITED_ENTITY_FIELDS = list(EntityForm.Meta.fields)
 
 
-
 def _donut_geometry(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Attach SVG ring geometry to a list of ``{status, label, value}`` segments.
 

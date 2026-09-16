@@ -149,7 +149,7 @@ def test_an_answered_question_stays_in_the_queue_pre_selected(
 def test_choosing_not_sure_yet_again_clears_a_previous_answer(
     signed_in: Client, entity_with_gst: Entity
 ) -> None:
-    """"Not sure yet" used to be a no-op placeholder, never a real value a
+    """ "Not sure yet" used to be a no-op placeholder, never a real value a
     request could submit — reachable only as the untouched default. Now that
     an answered question stays on screen with "Not sure yet" as one of its
     three real choices, picking it again has to mean "go back to not

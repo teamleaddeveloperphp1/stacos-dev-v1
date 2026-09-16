@@ -575,11 +575,15 @@ def sibling_instances(
     """
     if not obligation.period_key:
         return {"previous": None, "next": None}
-    siblings = live().filter(
-        entity_id=obligation.entity_id,
-        definition_code=obligation.definition_code,
-        scope_ref=obligation.scope_ref,
-    ).exclude(pk=obligation.pk)
+    siblings = (
+        live()
+        .filter(
+            entity_id=obligation.entity_id,
+            definition_code=obligation.definition_code,
+            scope_ref=obligation.scope_ref,
+        )
+        .exclude(pk=obligation.pk)
+    )
     previous = (
         annotate_status(siblings.filter(period_key__lt=obligation.period_key), as_of=as_of)
         .order_by("-period_key")

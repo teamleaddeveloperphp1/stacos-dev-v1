@@ -100,7 +100,11 @@ def outstanding_mandatory_evidence(obligation: ObligationInstance) -> list[str]:
     )
     if not requirements:
         return []
-    return [item["label"] for item in requirements if item.get("mandatory_for_close") and item.get("label")]
+    return [
+        item["label"]
+        for item in requirements
+        if item.get("mandatory_for_close") and item.get("label")
+    ]
 
 
 def available_actions(
@@ -191,8 +195,7 @@ def apply_transition(
         missing = outstanding_mandatory_evidence(obligation)
         if missing:
             raise TransitionError(
-                _("Attach the required evidence first: %(items)s.")
-                % {"items": ", ".join(missing)},
+                _("Attach the required evidence first: %(items)s.") % {"items": ", ".join(missing)},
                 code="evidence_required",
             )
 

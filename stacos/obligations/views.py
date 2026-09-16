@@ -502,18 +502,16 @@ def calendar_subscribe(request: HttpRequest) -> HttpResponse:
     rather than recovers one.
     """
     has_token = CalendarFeedToken.objects.filter(
-        user=request.user, revoked_at__isnull=True
+        user=current_user(request), revoked_at__isnull=True
     ).exists()
-    return render(
-        request, "obligations/_fragments/subscribe_modal.html", {"has_token": has_token}
-    )
+    return render(request, "obligations/_fragments/subscribe_modal.html", {"has_token": has_token})
 
 
 @require_permission("compliance.obligation.view")
 @require_http_methods(["POST"])
 def calendar_subscribe_create(request: HttpRequest) -> HttpResponse:
     """Issue a fresh subscription link, replacing any the user already had."""
-    _token, raw = create_feed_token(request.user)
+    _token, raw = create_feed_token(current_user(request))
     feed_path = reverse("compliance:feed", args=[raw])
     feed_url = request.build_absolute_uri(feed_path)
     # `webcal://` is what makes "Subscribe to calendar" a one-click affair in
@@ -532,17 +530,17 @@ def calendar_subscribe_create(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["POST"])
 def calendar_subscribe_revoke(request: HttpRequest) -> HttpResponse:
     """Stop sharing: any calendar app already subscribed stops updating."""
-    token = CalendarFeedToken.objects.filter(user=request.user, revoked_at__isnull=True).first()
+    token = CalendarFeedToken.objects.filter(
+        user=current_user(request), revoked_at__isnull=True
+    ).first()
     if token is not None:
         revoke_feed_token(token)
-    return render(
-        request, "obligations/_fragments/subscribe_modal.html", {"has_token": False}
-    )
+    return render(request, "obligations/_fragments/subscribe_modal.html", {"has_token": False})
 
 
 @public_view
 @require_http_methods(["GET", "HEAD"])
-def calendar_feed(request: HttpRequest, token: str) -> HttpResponse:
+def calendar_feed(_request: HttpRequest, token: str) -> HttpResponse:
     """The feed itself. No session, no permission decorator — the token in the
     URL *is* the credential, verified and scoped inside ``feed_events_for_user``
     rather than by anything Django's session middleware provides here.
@@ -798,9 +796,7 @@ def _action_context(obligation: ObligationInstance, permissions: frozenset[str])
         ),
         "complete_action": by_target.get(State.CLOSED),
         "undo_submission_action": by_target.get(State.READY_TO_FILE),
-        "reopen_action": (
-            by_target.get(State.FILED) if obligation.state == State.CLOSED else None
-        ),
+        "reopen_action": (by_target.get(State.FILED) if obligation.state == State.CLOSED else None),
         "resume_action": (
             by_target.get(State.NOT_STARTED)
             if obligation.state in {State.DEFERRED, State.NOT_APPLICABLE}
@@ -895,9 +891,7 @@ def _off_path_context(obligation: ObligationInstance) -> dict[str, Any]:
     if obligation.state not in _OFF_PATH_STATES:
         return {}
     event = (
-        obligation.events.filter(
-            kind=ObligationEvent.Kind.TRANSITION, to_state=obligation.state
-        )
+        obligation.events.filter(kind=ObligationEvent.Kind.TRANSITION, to_state=obligation.state)
         .select_related("actor")
         .order_by("-occurred_at")
         .first()
@@ -927,13 +921,10 @@ def _evidence_fragment(obligation: ObligationInstance) -> Fragment | None:
     when the definition names nothing to attach, so a caller can drop it from
     ``also=`` with a plain truthiness check.
     """
-    definition = (
-        DefinitionVersion.objects.filter(
-            definition__code=obligation.definition_code,
-            version=obligation.definition_version,
-        )
-        .first()
-    )
+    definition = DefinitionVersion.objects.filter(
+        definition__code=obligation.definition_code,
+        version=obligation.definition_version,
+    ).first()
     if definition is None or not definition.evidence_requirements:
         return None
     return Fragment(
@@ -1100,7 +1091,7 @@ def obligation_transition(request: HttpRequest, pk: str) -> HttpResponse:
 
 @require_permission("compliance.obligation.view")
 def obligation_complete_modal(request: HttpRequest, pk: str) -> HttpResponse:
-    """"Mark as completed" — reviewed, not just clicked.
+    """ "Mark as completed" — reviewed, not just clicked.
 
     A ``GET`` only: the actual change still goes through
     :func:`obligation_transition` (target ``CLOSED``), which already does the
@@ -1117,12 +1108,10 @@ def obligation_complete_modal(request: HttpRequest, pk: str) -> HttpResponse:
     action = _action_context(obligation, _permissions(request))["complete_action"]
     if action is None:
         raise Http404
-    definition = (
-        DefinitionVersion.objects.filter(
-            definition__code=obligation.definition_code,
-            version=obligation.definition_version,
-        ).first()
-    )
+    definition = DefinitionVersion.objects.filter(
+        definition__code=obligation.definition_code,
+        version=obligation.definition_version,
+    ).first()
     return render(
         request,
         "obligations/_fragments/complete_modal.html",
@@ -1137,7 +1126,7 @@ def obligation_complete_modal(request: HttpRequest, pk: str) -> HttpResponse:
 
 @require_permission("compliance.obligation.view")
 def obligation_reopen_modal(request: HttpRequest, pk: str) -> HttpResponse:
-    """"Reopen" — a completed compliance, corrected without erasing that it
+    """ "Reopen" — a completed compliance, corrected without erasing that it
     was ever marked done.
 
     Same shape as :func:`obligation_complete_modal`: a ``GET`` that shows what

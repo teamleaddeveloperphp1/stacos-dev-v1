@@ -218,9 +218,7 @@ def test_another_tenants_complete_modal_is_a_404(
         an_obligation.state = State.FILED
         an_obligation.filed_on = AS_OF
         an_obligation.filing_reference = "AA240812000000X"
-        an_obligation.acknowledgement.save(
-            "ack.pdf", ContentFile(b"%PDF-1.4"), save=False
-        )
+        an_obligation.acknowledgement.save("ack.pdf", ContentFile(b"%PDF-1.4"), save=False)
         an_obligation.save(
             update_fields=["state", "filed_on", "filing_reference", "acknowledgement"]
         )

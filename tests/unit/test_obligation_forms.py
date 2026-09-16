@@ -10,7 +10,7 @@ from stacos.obligations.forms import FilingPendingForm
 
 
 def test_a_past_expected_completion_date_is_rejected() -> None:
-    """"When do you expect it done?" answered with a date already behind us
+    """ "When do you expect it done?" answered with a date already behind us
     is not an estimate, it is a typo — reject it rather than recording a
     pending filing that is already overdue by its own answer."""
     yesterday = timezone.localdate() - timedelta(days=1)

@@ -25,7 +25,6 @@ from stacos.engine.lifecycle import State
 from stacos.obligations.models import ObligationInstance
 from stacos.obligations.services import materialise
 from stacos.tenancy.models import Entity, EntityRegistration, Tenant
-from tests.obligations.test_views import signed_in  # noqa: F401
 
 pytestmark = pytest.mark.django_db
 
@@ -215,8 +214,7 @@ def test_bulk_not_applicable_drops_ids_outside_the_callers_scope(
     response = signed_in.post(
         reverse("compliance:bulk_not_applicable"),
         {
-            "ids": [str(o.pk) for o in two_obligations]
-            + [str(an_obligation_in_another_tenant.pk)],
+            "ids": [str(o.pk) for o in two_obligations] + [str(an_obligation_in_another_tenant.pk)],
             "reason": "Entity deregistered from this scheme.",
         },
         headers={"HX-Request": "true"},

@@ -25,7 +25,6 @@ from stacos.obligations.feed import create_feed_token
 from stacos.obligations.models import CalendarFeedToken
 from stacos.obligations.services import materialise
 from stacos.tenancy.models import Entity, EntityRegistration
-from tests.obligations.test_views import signed_in  # noqa: F401
 
 pytestmark = pytest.mark.django_db
 
@@ -98,9 +97,7 @@ def test_regenerating_invalidates_the_old_link(org_owner: User, materialised: En
     assert client.get(reverse("compliance:feed", args=[second_raw])).status_code == 200
 
 
-def test_subscribe_modal_reflects_whether_a_link_exists(
-    signed_in: Client, org_owner: User
-) -> None:
+def test_subscribe_modal_reflects_whether_a_link_exists(signed_in: Client, org_owner: User) -> None:
     response = signed_in.get(reverse("compliance:subscribe"), headers={"HX-Request": "true"})
     assert response.status_code == 200
     assert "Generate calendar link" in response.content.decode()

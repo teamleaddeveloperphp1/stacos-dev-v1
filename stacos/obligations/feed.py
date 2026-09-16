@@ -136,8 +136,9 @@ def feed_events_for_user(user: User, *, as_of: date) -> list[ObligationInstance]
     ):
         entity_ids = list(scope.entity_ids) if scope.entity_ids is not None else None
         return list(
-            upcoming(as_of=as_of, within_days=FEED_WINDOW_DAYS, entity_ids=entity_ids)
-            .select_related("entity")
+            upcoming(
+                as_of=as_of, within_days=FEED_WINDOW_DAYS, entity_ids=entity_ids
+            ).select_related("entity")
         )
 
 
@@ -204,9 +205,7 @@ def _stamp(value: datetime) -> str:
 
 
 def _escape(value: str) -> str:
-    return (
-        value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
-    )
+    return value.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
 
 def _fold(line: str) -> str:

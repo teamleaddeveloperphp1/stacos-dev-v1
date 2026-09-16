@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from django.core.management import call_command
+from django.test import Client
 
 from stacos.accounts.models import User
 from stacos.core.scope import AccessScope, platform_scope, tenant_context
@@ -363,6 +364,17 @@ def _make_member(tenant: Tenant, email: str, name: str, phone: str, role_code: s
 @pytest.fixture
 def org_owner(org: Tenant) -> User:
     return _make_member(org, "owner@acme.example", "Anita Rao", "+919800000001", "org-owner")
+
+
+@pytest.fixture
+def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
+    from stacos.accounts.middleware import SESSION_VERIFIED_KEY
+
+    client.force_login(org_owner)
+    session = client.session
+    session[SESSION_VERIFIED_KEY] = True
+    session.save()
+    return client
 
 
 @pytest.fixture

@@ -228,7 +228,7 @@ def test_display_status_matrix(state: State, due: date | None, expected: Display
 
 
 def test_not_started_with_a_recorded_reason_reads_as_pending() -> None:
-    """"Not started, nothing said" and "not started, here is why" are different
+    """ "Not started, nothing said" and "not started, here is why" are different
     enough to read differently — see ``stacos.obligations.transitions.record_pending``.
     """
     assert (

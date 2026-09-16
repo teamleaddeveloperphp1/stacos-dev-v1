@@ -39,17 +39,6 @@ pytestmark = pytest.mark.django_db
 AS_OF = date(2026, 8, 12)
 
 
-@pytest.fixture
-def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
-    from stacos.accounts.middleware import SESSION_VERIFIED_KEY
-
-    client.force_login(org_owner)
-    session = client.session
-    session[SESSION_VERIFIED_KEY] = True
-    session.save()
-    return client
-
-
 # ===========================================================================
 # Both render paths
 # ===========================================================================
@@ -1167,7 +1156,7 @@ def test_start_compliance_moves_to_in_progress_and_is_reflected_on_reload(
 def test_complete_modal_shows_the_submission_summary_and_evidence(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
-    """"Mark as completed" is a review, not a bare click: what was submitted,
+    """ "Mark as completed" is a review, not a bare click: what was submitted,
     when, under what reference, and which evidence this definition asked
     for — reachable at all only once that evidence is actually on file (see
     ``test_completing_is_refused_without_the_required_evidence`` for the
@@ -1220,7 +1209,7 @@ def test_completing_is_refused_without_the_required_evidence(
 
 
 def test_reopen_requires_a_reason(signed_in: Client, an_obligation: ObligationInstance) -> None:
-    """"Reopen" is the one transition that has always needed a note — the
+    """ "Reopen" is the one transition that has always needed a note — the
     modal cannot be bypassed into skipping it."""
     signed_in.post(
         reverse("compliance:status", args=[an_obligation.pk]),
@@ -1229,7 +1218,11 @@ def test_reopen_requires_a_reason(signed_in: Client, an_obligation: ObligationIn
     )
     signed_in.post(
         reverse("compliance:acknowledgement", args=[an_obligation.pk]),
-        {"acknowledgement": SimpleUploadedFile("ack.pdf", b"%PDF-1.4", content_type="application/pdf")},
+        {
+            "acknowledgement": SimpleUploadedFile(
+                "ack.pdf", b"%PDF-1.4", content_type="application/pdf"
+            )
+        },
         headers={"HX-Request": "true"},
     )
     signed_in.post(

@@ -381,12 +381,6 @@ class BulkNotApplicableForm(forms.Form):
         self.helper.form_tag = False
         self.helper.layout = Layout("reason")
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.helper = FormHelper()
-        self.helper.form_tag = False
-        self.helper.layout = Layout("note")
-
 
 def _attribute_field(attribute: Any) -> forms.Field:
     if attribute.type == "ENUM":
