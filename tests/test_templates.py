@@ -167,6 +167,8 @@ def test_every_component_is_covered() -> None:
 STATUSES = (
     "overdue",
     "due-soon",
+    "not-started",
+    "pending",
     "on-track",
     "in-progress",
     "waiting",

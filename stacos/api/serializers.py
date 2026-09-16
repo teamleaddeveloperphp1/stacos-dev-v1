@@ -66,6 +66,7 @@ class ObligationSerializer(serializers.ModelSerializer[ObligationInstance]):
                 state=obligation.state,
                 due_date=obligation.due_date,
                 as_of=self.context["as_of"],
+                pending_reason=obligation.pending_reason,
             )
         )
 

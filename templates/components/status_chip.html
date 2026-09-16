@@ -8,15 +8,15 @@
   component appears on every list, card and detail page in the product, so the
   vocabulary has to be identical everywhere.
 
-  Valid statuses: overdue, due-soon, pending, on-track, in-progress, waiting,
-  complete, na, disputed.
+  Valid statuses: overdue, due-soon, not-started, pending, on-track,
+  in-progress, waiting, complete, na, disputed.
 
   Usage:  <c-status-chip status="overdue" />
           <c-status-chip status="due-soon" label="Due in 3 days" />
 {% endcomment %}
 <span class="status-chip status-chip--{{ status }}"
       role="status"
-      aria-label="{% translate 'Status' %}: {{ label|default:status }}">
+      aria-label="{% translate 'Status' %}: {% if label %}{{ label }}{% else %}{{ status|display_status_label }}{% endif %}">
   <svg class="status-chip__icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     {% if status == "overdue" %}
       <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
@@ -24,6 +24,11 @@
     {% elif status == "due-soon" %}
       <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
       <path d="M8 4.5V8l2.5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    {% elif status == "not-started" %}
+      {# A hollow, dashed ring — nothing recorded yet, as distinct from #}
+      {# "overdue"'s solid ring with a mark: the colour says urgent, the #}
+      {# shape says why — there is simply nothing here to show. #}
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2.2"/>
     {% elif status == "pending" %}
       <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4"/>
       <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
@@ -44,5 +49,5 @@
       <path d="M5.25 10.75l5.5-5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
     {% endif %}
   </svg>
-  <span>{% if label %}{{ label }}{% else %}{{ status|capfirst }}{% endif %}</span>
+  <span>{% if label %}{{ label }}{% else %}{{ status|display_status_label }}{% endif %}</span>
 </span>

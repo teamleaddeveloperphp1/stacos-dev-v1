@@ -93,6 +93,67 @@ def absolute(value: Any) -> Any:
         return value
 
 
+_PERIODICITY_LABELS = {
+    "MONTHLY": "Month",
+    "QUARTERLY": "Quarter",
+    "HALF_YEARLY": "Half-year",
+    "ANNUAL": "Year",
+    "EVENT_BASED": "Event-based",
+    "ONE_TIME": "One-time",
+}
+
+
+@register.filter(name="periodicity_label")
+def periodicity_label(value: str | None) -> str:
+    """``{{ definition.periodicity|periodicity_label }}`` -> ``Month``.
+
+    Reads as "Frequency: Month", not "Frequency: Monthly": the generic word
+    for how often a filing recurs, not an adjective describing one occurrence
+    of it — the occurrence itself is ``obligation.period_label``.
+    """
+    if not value:
+        return ""
+    return _PERIODICITY_LABELS.get(str(value).upper(), str(value).title())
+
+
+@register.filter(name="display_status_label")
+def display_status_label_filter(value: str | None) -> str:
+    """``{{ obligation.display_status|display_status_label }}`` -> ``Pending``.
+
+    Wraps ``stacos.engine.lifecycle.display_status_label`` so a status chip's
+    word always tracks its colour and icon, both driven by the same
+    ``display_status`` value — never a caller's own guess (like
+    ``obligation.get_state_display``, which reads the stored workflow state
+    and drifts the moment ``display_status`` diverges from it, e.g. once a
+    "why not yet" reason turns ``NOT_STARTED`` into ``PENDING`` without the
+    state itself moving).
+    """
+    if not value:
+        return ""
+    from stacos.engine.lifecycle import display_status_label
+
+    return display_status_label(str(value))
+
+
+@register.filter(name="state_label")
+def state_label_filter(value: str | None) -> str:
+    """``{{ obligation.state|state_label }}`` -> ``In progress``.
+
+    The raw workflow state, in words — distinct from ``display_status_label``
+    above on purpose. ``display_status`` answers "what is the one most urgent
+    true thing about this row" (it collapses lateness and a "why not yet" note
+    into the word it shows); this answers "where does the user's own work
+    actually stand," which a due date going overdue must not silently rename.
+    Showing both side by side is how the detail page keeps the two concepts
+    separate instead of letting one variable pretend to be both.
+    """
+    if not value:
+        return ""
+    from stacos.engine.lifecycle import state_label
+
+    return state_label(str(value))
+
+
 # ---------------------------------------------------------------------------
 # Permissions
 # ---------------------------------------------------------------------------

@@ -63,7 +63,12 @@ $stacos-grey-950:  #020617;
 // -----------------------------------------------------------------------------
 $stacos-status-overdue:    #b42318;  // red    — past its statutory date
 $stacos-status-due-soon:   #b54708;  // amber  — inside the warning window
-$stacos-status-pending:    #ca8a04;  // yellow — not due yet, nothing done
+// Same red as overdue: nothing recorded is as much an attention state as
+// being late is, and this is what a not-yet-late obligation with zero
+// progress reads as until somebody says otherwise. The dashed-ring icon and
+// the word "Not started" are what keep it from being read as overdue itself.
+$stacos-status-not-started:#b42318;  // red    — nothing recorded yet
+$stacos-status-pending:    #ca8a04;  // yellow — not due yet, an answer is on file
 $stacos-status-on-track:   #067647;  // green  — comfortably ahead
 $stacos-status-in-progress:#175cd3;  // blue   — someone is working on it
 $stacos-status-waiting:    #6941c6;  // purple — blocked on someone else
@@ -73,6 +78,7 @@ $stacos-status-disputed:   #c11574;  // pink   — under challenge
 
 $stacos-status-overdue-bg:     #fef3f2;
 $stacos-status-due-soon-bg:    #fffaeb;
+$stacos-status-not-started-bg: #fef3f2;
 $stacos-status-pending-bg:     #fefce8;
 $stacos-status-on-track-bg:    #ecfdf3;
 $stacos-status-in-progress-bg: #eff8ff;
@@ -210,6 +216,7 @@ $stacos-row-height: 42px;
 
   --stacos-status-overdue:     #{$stacos-status-overdue};
   --stacos-status-due-soon:    #{$stacos-status-due-soon};
+  --stacos-status-not-started: #{$stacos-status-not-started};
   --stacos-status-pending:     #{$stacos-status-pending};
   --stacos-status-on-track:    #{$stacos-status-on-track};
   --stacos-status-in-progress: #{$stacos-status-in-progress};
@@ -220,6 +227,7 @@ $stacos-row-height: 42px;
 
   --stacos-status-overdue-bg:     #{$stacos-status-overdue-bg};
   --stacos-status-due-soon-bg:    #{$stacos-status-due-soon-bg};
+  --stacos-status-not-started-bg: #{$stacos-status-not-started-bg};
   --stacos-status-pending-bg:     #{$stacos-status-pending-bg};
   --stacos-status-on-track-bg:    #{$stacos-status-on-track-bg};
   --stacos-status-in-progress-bg: #{$stacos-status-in-progress-bg};
@@ -280,6 +288,7 @@ $stacos-row-height: 42px;
   // itself — which colour means which state — never changes.
   --stacos-status-overdue:     #fda29b;
   --stacos-status-due-soon:    #fec84b;
+  --stacos-status-not-started: #fda29b;
   --stacos-status-pending:     #fde047;
   --stacos-status-on-track:    #75e0a7;
   --stacos-status-in-progress: #84caff;
@@ -290,6 +299,7 @@ $stacos-row-height: 42px;
 
   --stacos-status-overdue-bg:     #{rgba(#fda29b, 0.12)};
   --stacos-status-due-soon-bg:    #{rgba(#fec84b, 0.12)};
+  --stacos-status-not-started-bg: #{rgba(#fda29b, 0.12)};
   --stacos-status-pending-bg:     #{rgba(#fde047, 0.12)};
   --stacos-status-on-track-bg:    #{rgba(#75e0a7, 0.12)};
   --stacos-status-in-progress-bg: #{rgba(#84caff, 0.12)};

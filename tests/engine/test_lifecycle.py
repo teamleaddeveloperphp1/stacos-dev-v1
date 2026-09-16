@@ -214,8 +214,8 @@ def test_filed_late_compares_against_the_effective_date() -> None:
         (State.PENDING_CLIENT_APPROVAL, TODAY + timedelta(days=30), DisplayStatus.WAITING),
         (State.NOT_STARTED, TODAY + timedelta(days=3), DisplayStatus.DUE_SOON),
         (State.IN_PREPARATION, TODAY + timedelta(days=30), DisplayStatus.IN_PROGRESS),
-        (State.NOT_STARTED, TODAY + timedelta(days=90), DisplayStatus.ON_TRACK),
-        (State.NOT_STARTED, None, DisplayStatus.ON_TRACK),
+        (State.NOT_STARTED, TODAY + timedelta(days=90), DisplayStatus.NOT_STARTED),
+        (State.NOT_STARTED, None, DisplayStatus.NOT_STARTED),
     ],
 )
 def test_display_status_matrix(state: State, due: date | None, expected: DisplayStatus) -> None:
@@ -225,6 +225,44 @@ def test_display_status_matrix(state: State, due: date | None, expected: Display
     not the most recent thing that happened to it.
     """
     assert derive_display_status(state=state, due_date=due, as_of=TODAY) is expected
+
+
+def test_not_started_with_a_recorded_reason_reads_as_pending() -> None:
+    """"Not started, nothing said" and "not started, here is why" are different
+    enough to read differently — see ``stacos.obligations.transitions.record_pending``.
+    """
+    assert (
+        derive_display_status(
+            state=State.NOT_STARTED,
+            due_date=TODAY + timedelta(days=90),
+            as_of=TODAY,
+            pending_reason="Waiting on the client's bank statement.",
+        )
+        is DisplayStatus.PENDING
+    )
+
+
+def test_overdue_and_due_soon_still_beat_a_recorded_reason() -> None:
+    """An explanation does not make a late filing calmer, or an imminent one
+    less urgent — see :func:`derive_display_status`'s docstring."""
+    assert (
+        derive_display_status(
+            state=State.NOT_STARTED,
+            due_date=TODAY - timedelta(days=1),
+            as_of=TODAY,
+            pending_reason="Waiting on the client's bank statement.",
+        )
+        is DisplayStatus.OVERDUE
+    )
+    assert (
+        derive_display_status(
+            state=State.NOT_STARTED,
+            due_date=TODAY + timedelta(days=3),
+            as_of=TODAY,
+            pending_reason="Waiting on the client's bank statement.",
+        )
+        is DisplayStatus.DUE_SOON
+    )
 
 
 def test_days_to_due_is_signed_and_null_safe() -> None:

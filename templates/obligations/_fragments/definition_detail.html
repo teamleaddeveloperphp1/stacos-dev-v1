@@ -27,7 +27,7 @@
     {% if definition.authority %}
       <dt>{% translate "Authority" %}</dt><dd>{{ definition.authority }}</dd>
     {% endif %}
-    <dt>{% translate "Frequency" %}</dt><dd>{{ version.periodicity|title }}</dd>
+    <dt>{% translate "Frequency" %}</dt><dd>{{ version.periodicity|periodicity_label }}</dd>
     <dt>{% translate "In force from" %}</dt>
     <dd>
       {{ version.effective_from|date:"j M Y" }}

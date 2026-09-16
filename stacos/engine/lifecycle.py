@@ -40,9 +40,11 @@ __all__ = [
     "allowed_transitions",
     "days_late",
     "derive_display_status",
+    "display_status_label",
     "filed_late",
     "is_overdue",
     "path_to",
+    "state_label",
     "transition_for",
 ]
 
@@ -108,6 +110,15 @@ class DisplayStatus(StrEnum):
 
     OVERDUE = "overdue"
     DUE_SOON = "due-soon"
+    #: Nothing recorded yet, and nobody has said why. Distinct from
+    #: ``PENDING`` — see :func:`derive_display_status` — and from ``OVERDUE``:
+    #: it is not yet late, but nothing about "on track" was true of it either,
+    #: which is what this replaced.
+    NOT_STARTED = "not-started"
+    #: ``NOT_STARTED``, but somebody has said why and when — see
+    #: :func:`derive_display_status`. The stored ``state`` does not move for
+    #: this; see ``stacos.obligations.transitions.record_pending``.
+    PENDING = "pending"
     ON_TRACK = "on-track"
     IN_PROGRESS = "in-progress"
     WAITING = "waiting"
@@ -452,18 +463,29 @@ def derive_display_status(
     state: str,
     due_date: date | None,
     as_of: date,
+    pending_reason: str = "",
 ) -> DisplayStatus:
-    """Collapse a state and a date into the one word shown to a user.
+    """Collapse a state, a date and an explanation into the one word shown to a user.
 
     The ordering matters: overdue beats everything except being finished. A user
     scanning a list of two hundred rows needs the worst true thing about each one,
-    not the most recent.
+    not the most recent. Overdue and due-soon both still beat ``NOT_STARTED`` and
+    ``PENDING`` for the same reason — an explanation does not make a filing due in
+    three days less urgent, and it must never make one already late look calmer
+    than it is.
 
     Lateness is deliberately *not* an input. A filing submitted after its date is
     still complete — the work is done — so it reads ``COMPLETE`` here and carries
     a separate "filed late" badge from :func:`filed_late`. Folding the two into
     one word would leave no way to say "done, but late", which is exactly what a
     penalty computation needs to know.
+
+    ``pending_reason`` is likewise not a state (see
+    ``stacos.obligations.transitions.record_pending``'s docstring — recording an
+    explanation changes no state, deliberately, so an obligation someone has
+    explained is still owed and still going overdue on schedule). It only
+    changes what ``NOT_STARTED`` reads as: nothing said yet is ``NOT_STARTED``,
+    something said is ``PENDING``. Either way ``state`` is untouched.
     """
     if state in {State.FILED, State.CLOSED}:
         return DisplayStatus.COMPLETE
@@ -485,6 +507,9 @@ def derive_display_status(
 
     if state in {State.IN_PREPARATION, State.PENDING_REVIEW, State.READY_TO_FILE}:
         return DisplayStatus.IN_PROGRESS
+
+    if state == State.NOT_STARTED:
+        return DisplayStatus.PENDING if pending_reason else DisplayStatus.NOT_STARTED
 
     return DisplayStatus.ON_TRACK
 
@@ -547,6 +572,31 @@ _LABELS: Mapping[str, str] = {
 
 def state_label(state: str) -> str:
     return _LABELS.get(state, state.replace("_", " ").capitalize())
+
+
+#: The word for each ``DisplayStatus`` value — the one a status chip shows
+#: when nobody overrides it. Kept here rather than left to a template's
+#: ``capfirst`` so a value with a hyphen in it (``"not-started"``,
+#: ``"due-soon"``) reads as two words rather than one with a dash in the
+#: middle, and so this is the one place that can drift out of step with the
+#: colour and icon it is paired with — see ``DisplayStatus``'s own docstring
+#: on why that pairing must never happen.
+_DISPLAY_STATUS_LABELS: Mapping[str, str] = {
+    DisplayStatus.OVERDUE: "Overdue",
+    DisplayStatus.DUE_SOON: "Due soon",
+    DisplayStatus.NOT_STARTED: "Not started",
+    DisplayStatus.PENDING: "Pending",
+    DisplayStatus.ON_TRACK: "On track",
+    DisplayStatus.IN_PROGRESS: "In progress",
+    DisplayStatus.WAITING: "Waiting",
+    DisplayStatus.COMPLETE: "Complete",
+    DisplayStatus.NOT_APPLICABLE: "Not applicable",
+    DisplayStatus.DISPUTED: "Disputed",
+}
+
+
+def display_status_label(status: str) -> str:
+    return _DISPLAY_STATUS_LABELS.get(status, status.replace("-", " ").capitalize())
 
 
 def describe_states() -> tuple[StateDescriptor, ...]:
