@@ -545,3 +545,56 @@
   font-size: 0.75rem;
   color: var(--stacos-text-muted);
 }
+
+// -- The first-run dashboard's "how STACOS works" list -----------------------
+//
+// A vertical rail, not the horizontal `.wizard__steps` rail above: this one
+// lives beside a card rather than above a full-width page, and it says what
+// the *product* does rather than which of four sibling screens is current.
+
+.onboarding-journey {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.onboarding-journey__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  color: var(--stacos-text-muted);
+
+  &.is-current {
+    color: var(--stacos-text);
+  }
+}
+
+.onboarding-journey__marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--stacos-border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--stacos-text-muted);
+
+  .onboarding-journey__step.is-current & {
+    background: var(--stacos-accent);
+    border-color: var(--stacos-accent);
+    color: #fff;
+  }
+
+  .onboarding-journey__step.is-done & {
+    background: var(--stacos-status-on-track-bg);
+    border-color: var(--stacos-status-on-track);
+    color: var(--stacos-status-on-track);
+  }
+}

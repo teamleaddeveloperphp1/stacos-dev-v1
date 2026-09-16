@@ -40,12 +40,37 @@
   &::placeholder { color: var(--stacos-text-subtle); }
 }
 
+// A toolbar filter that is narrowing the list, kept visible without focus.
+// The calendar's status filter defaults to "Due in 30 days" the moment
+// there is no `status` in the querystring at all — arriving from the
+// dashboard, most often — and a short list on arrival has to read as "a
+// filter is doing this", not as "nothing is due". Bootstrap's own
+// `:focus` ring answers that for as long as the control is focused and not
+// a moment longer, which is most of the time anyone is looking at the page.
+.form-select--filtered {
+  border-color: var(--stacos-accent);
+  // A faint halo, not a fill — the same idea as a focus ring, permanent
+  // rather than momentary, and quiet enough not to compete with a real
+  // validation error. `--stacos-accent-subtle` is far too pale for this —
+  // it is tuned to sit *behind* text as a background tint, and at 3px wide
+  // against `--stacos-surface` it all but disappears — so this mixes its
+  // own, the same way `_status.scss` tints a status chip's border.
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--stacos-accent) 30%, transparent);
+}
+
 .invalid-feedback { font-size: $stacos-text-xs; }
 
 // Show/hide toggle sitting inside a password field. The button overlaps the
 // input rather than sitting beside it, so the field keeps the same width as
 // every other form-control on the page.
 .password-field {
+  // Bootstrap shows `.invalid-feedback` via `.is-invalid ~ .invalid-feedback`,
+  // a sibling selector — but here the input sits one level deeper, inside
+  // `&__control`, alongside the show/hide toggle, so it and the feedback text
+  // are never siblings. Without this the error text stayed `display: none`
+  // forever: the field turned red with nothing said about why.
+  &:has(.is-invalid) .invalid-feedback { display: block; }
+
   &__control {
     position: relative;
 
@@ -70,6 +95,87 @@
     &:focus-visible { color: var(--stacos-text-muted); }
 
     &:focus-visible { outline: 2px solid var(--stacos-border-strong); outline-offset: -2px; }
+  }
+}
+
+// Choosing a password: the strength meter and the requirement checklist.
+//
+// Both borrow the status vocabulary's colours because they are saying the same
+// kind of thing — but never by colour alone. The meter always carries its word
+// ("Fair", "Strong"), and each rule carries a tick or a dot as well as a
+// weight change, so the list still reads with no colour perception at all.
+
+.password-meter {
+  margin-top: 0.5rem;
+
+  &__track {
+    height: 4px;
+    border-radius: $stacos-radius-pill;
+    background: var(--stacos-border);
+    overflow: hidden;
+  }
+
+  &__fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    // The width is set inline from the score, so only the colour lives here.
+    transition: width 120ms ease-out, background-color 120ms ease-out;
+    background: var(--stacos-status-overdue);
+
+    &--fair   { background: var(--stacos-status-due-soon); }
+    &--good   { background: var(--stacos-status-in-progress); }
+    &--strong { background: var(--stacos-status-on-track); }
+  }
+
+  &__label {
+    margin: 0.25rem 0 0;
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+}
+
+.password-rules {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+
+  &__item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+
+    &.is-met {
+      color: var(--stacos-status-on-track);
+    }
+  }
+
+  &__mark {
+    // A fixed width so the label does not shift sideways when the dot becomes
+    // a tick — movement in a list being read as you type is genuinely
+    // distracting.
+    display: inline-block;
+    width: 0.75rem;
+    text-align: center;
+    font-weight: 700;
+  }
+}
+
+.password-match {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin: 0.5rem 0 0;
+  font-size: $stacos-text-xs;
+  color: var(--stacos-text-muted);
+
+  &--ok {
+    color: var(--stacos-status-on-track);
   }
 }
 

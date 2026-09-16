@@ -94,18 +94,17 @@ def test_htmx_requests_get_a_redirect_header_not_a_302(client: Client) -> None:
 def _registration_payload(**overrides: str) -> dict[str, str]:
     """A complete, valid sign-up.
 
-    Written once because sign-up now has seven fields and a confirmation, and a
-    test that omits one gets a 200 with form errors rather than the redirect it
+    Written once because sign-up has six fields and a confirmation, and a test
+    that omits one gets a 200 with form errors rather than the redirect it
     asserts — a failure that reads as "verification broke".
     """
     payload = {
         "first_name": "Priya",
         "last_name": "Vaibhav",
-        "organisation_name": "Vaibhav Consulting",
         "email": "priya@example.com",
         "phone": "9876543210",
-        "password": "a-long-enough-password",
-        "confirm_password": "a-long-enough-password",
+        "password": "a-genuinely-long-passphrase",
+        "confirm_password": "a-genuinely-long-passphrase",
     }
     payload.update(overrides)
     return payload
@@ -224,13 +223,14 @@ def test_a_verified_session_reaches_the_application(client: Client) -> None:
         {"email_code": email_code, "phone_code": phone_code, "remember_device": "on"},
     )
 
-    # A tenant now exists — provisioned on verification, named after what was
-    # typed at sign-up — but it owns no entity yet. What a brand-new user must
-    # NOT see is a refusal: they are sent to add one. See
-    # `tenancy.middleware.OrganisationGateMiddleware`.
+    # A tenant now exists — provisioned on verification, named after the
+    # person who just signed up — but it owns no entity yet. What a brand-new
+    # user must NOT see is a refusal, or a bare form with no context: the
+    # dashboard renders its own guided first-run state. See
+    # `tenancy.onboarding.workspace_state`.
     response = client.get("/app/")
-    assert response.status_code == 302
-    assert response["Location"] == reverse("app:entity_create")
+    assert response.status_code == 200
+    assert "Add your first entity" in response.content.decode()
 
 
 # ===========================================================================
@@ -250,7 +250,11 @@ def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
     return client
 
 
-def test_dashboard_renders_for_a_member(signed_in: Client, entity_a: Entity) -> None:
+def test_dashboard_renders_for_a_member(signed_in: Client, materialised: Entity) -> None:
+    """The ordinary, tracking dashboard — once at least one entity has a
+    calendar. A member whose only entity has never been materialised sees the
+    first-run state instead; see ``tests/tenancy/test_onboarding.py``.
+    """
     response = signed_in.get("/app/")
     assert response.status_code == 200
     assert b"Compliance health" in response.content

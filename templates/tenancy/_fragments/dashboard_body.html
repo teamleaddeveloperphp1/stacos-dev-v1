@@ -1,13 +1,12 @@
 {% load i18n %}
 
 <c-page-header title="{% translate 'Compliance health' %}"
-               subtitle="{% if selected_entity %}{{ selected_entity.name }}{% elif tenant %}{{ tenant.name }}{% else %}{% translate 'Finish setting up your organisation' %}{% endif %}">
+               subtitle="{% if selected_entity %}{{ selected_entity.name }}{% elif tenant %}{{ tenant.name }}{% endif %}">
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:entity_list' %}" preload>
     {% translate "Manage entities" %}
   </a>
 </c-page-header>
 
-{% if entity_count %}
   {% if entity_options|length > 1 %}
     {% comment %}
       Everything below defaults to every entity combined; picking one here
@@ -184,11 +183,3 @@
       </div>
     </div>
   </div>
-{% else %}
-  <c-empty-state title="{% translate 'Add your first entity' %}"
-                 body="{% translate 'Tell us about the company, LLP or firm you need to keep compliant. We will work out which obligations apply and build the calendar for you.' %}">
-    <a class="btn btn-primary" href="{% url 'app:entity_list' %}">
-      {% translate "Add an entity" %}
-    </a>
-  </c-empty-state>
-{% endif %}

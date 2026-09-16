@@ -164,11 +164,11 @@ def test_a_verified_user_joins_immediately(
 
     # And they are in the organisation they were invited to, rather than being
     # sent to create one of their own — even though `org` owns no entity yet
-    # and the dashboard therefore redirects them to add one, same as it would
-    # for the owner who invited them.
+    # and the dashboard therefore renders its guided first-run state, same as
+    # it would for the owner who invited them.
     response = signed_in.get("/app/")
-    assert response.status_code == 302
-    assert response["Location"] == reverse("app:entity_create")
+    assert response.status_code == 200
+    assert "Add your first entity" in response.content.decode()
     assert response.wsgi_request.tenant == org
 
 
@@ -248,15 +248,10 @@ def test_somebody_with_no_account_can_sign_up_and_land_inside(
         {
             "first_name": "Deepa",
             "last_name": "Colleague",
-            # Asked and filled in like any other sign-up, but unused: joining
-            # via an invitation is what puts them in an organisation, and
-            # `_complete_verification` skips provisioning one from this field
-            # while `SESSION_INVITATION_KEY` is parked on the session.
-            "organisation_name": "Colleague's Consultancy",
             "email": "colleague@acme.example",
             "phone": "9876500012",
-            "password": "a-long-enough-password",
-            "confirm_password": "a-long-enough-password",
+            "password": "a-genuinely-long-passphrase",
+            "confirm_password": "a-genuinely-long-passphrase",
             "next": accept_url,
         },
     )
@@ -280,12 +275,12 @@ def test_somebody_with_no_account_can_sign_up_and_land_inside(
     with platform_scope(reason="test"):
         assert Tenant.objects.count() == 1
 
-    # `org` owns no entity yet, so the dashboard sends them to add one — the
-    # same as it would for anybody else in this organisation, and still not a
-    # refusal or a route to inventing a second one.
+    # `org` owns no entity yet, so the dashboard renders its guided first-run
+    # state — the same as it would for anybody else in this organisation, and
+    # still not a refusal or a route to inventing a second one.
     response = client.get("/app/")
-    assert response.status_code == 302
-    assert response["Location"] == reverse("app:entity_create")
+    assert response.status_code == 200
+    assert "Add your first entity" in response.content.decode()
 
 
 # ---------------------------------------------------------------------------

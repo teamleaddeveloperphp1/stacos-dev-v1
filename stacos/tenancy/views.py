@@ -23,18 +23,33 @@ from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView
 
 from stacos.core.audit import diff_fields, record_event
-from stacos.core.htmx import Fragment, HtmxFragmentMixin, Toast, is_fragment_request, navigate, oob
+from stacos.core.htmx import (
+    Fragment,
+    HtmxFragmentMixin,
+    Toast,
+    is_fragment_request,
+    navigate,
+    oob,
+    page_url,
+)
 from stacos.core.models import AuditAction
 from stacos.core.permissions import RequirePermissionMixin, check_permissions, require_permission
 from stacos.core.typing import current_user
 from stacos.jurisdictions.registration_requirements import get_registration_requirements
 from stacos.obligations.models import MaterialisationRun
+
+#: Moved to `stacos.obligations.queries` so the calendar's own workload
+#: forecast can share it rather than reimplementing "scale to the busiest
+#: row" a second time. Aliased back to its original name since every call
+#: site in this module already uses it.
+from stacos.obligations.queries import scaled_bars as _scaled_bars
 from stacos.tenancy.forms import (
     EntityForm,
     EntityProfileForm,
     EntityRegistrationFieldsForm,
     PremisesForm,
     RegistrationForm,
+    WorkspaceRenameForm,
     registration_field_name,
 )
 from stacos.tenancy.models import Entity, EntityProfile, EntityRegistration
@@ -46,18 +61,6 @@ ENTITY_FORM_TEMPLATE = "tenancy/_fragments/entity_form_modal.html"
 #: describe. Taken from the form so the two cannot drift apart.
 AUDITED_ENTITY_FIELDS = list(EntityForm.Meta.fields)
 
-
-def _scaled_bars(rows: list[tuple[Any, int, str]]) -> list[dict[str, Any]]:
-    """Bar-list rows scaled to the busiest one, not stacked to a 100% total.
-
-    Shared by the category, weekly-workload and overdue-ageing panels so the
-    "scale to the busiest row" rule lives in one place rather than three.
-    """
-    busiest = max((count for _, count, _ in rows), default=0) or 1
-    return [
-        {"label": label, "count": count, "pct": round(count / busiest * 100, 1), "color": color}
-        for label, count, color in rows
-    ]
 
 
 def _donut_geometry(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -86,6 +89,30 @@ def _donut_geometry(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return geometry
 
 
+def _render_first_run_dashboard(request: HttpRequest, state: Any) -> HttpResponse:
+    """The dashboard for a workspace that is not tracking anything yet.
+
+    Deliberately its own template rather than the ordinary dashboard body with
+    everything hidden behind ``{% if %}``: every one of the charts, the entity
+    filter, the health donut, exists to make a register of obligations legible,
+    and a register on day one has nothing in it. Rendering the real page and
+    hiding the empty parts still costs the six aggregate queries the parts
+    were built to serve, for a page that displays none of their answers.
+
+    Both first-run stages — no entity at all, and an entity that has never had
+    its calendar built — share one template and one message contract: what is
+    true right now, why it matters, and the one thing to do about it. Only the
+    copy and the call to action differ, and ``state.stage`` is what the
+    template switches on.
+    """
+    template = (
+        "tenancy/_fragments/first_run_body.html"
+        if getattr(request, "htmx", False)
+        else "tenancy/first_run.html"
+    )
+    return render(request, template, {"state": state, "tenant": state.tenant})
+
+
 @require_permission("tenancy.entity.view")
 def dashboard(request: HttpRequest) -> HttpResponse:
     """Compliance health at a glance.
@@ -106,6 +133,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         upcoming,
         weekly_workload,
     )
+    from stacos.tenancy.onboarding import workspace_state
 
     as_of = timezone.localdate()
     open_states = [str(s) for s in OPEN_STATES]
@@ -126,13 +154,14 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         )
     )
 
-    # Counted here rather than left to `context["entity_count"]` below, so a
-    # brand-new organisation is sent to add its first entity before any of the
-    # aggregate queries beneath this run for a register that does not exist yet
-    # — and so that count costs one query either way, not two.
-    entity_count = entities.count()
-    if entity_count == 0:
-        return navigate(request, reverse("app:entity_create"))
+    # Resolved before any of the aggregate queries below run for a register
+    # that may not exist yet — one extra query, reused for both the "is this a
+    # first-run workspace" branch and the entity count the ordinary dashboard
+    # already needed.
+    state = workspace_state(getattr(request, "tenant", None))
+    if state.is_first_run:
+        return _render_first_run_dashboard(request, state)
+    entity_count = state.entity_count
 
     # Everything below defaults to every entity in the tenant combined. Picking
     # one from `?entity=` narrows every breakdown to it — the same `entity_ids`
@@ -154,10 +183,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
                 entity_ids = [selected_entity.id]
 
     counts = status_counts(as_of=as_of, entity_ids=entity_ids)
-    # `overdue` and `due_soon` are disjoint subsets of `open` (split on
-    # `due_date` vs. `as_of`), so this can never go negative — unlike deriving
-    # it from `total`, which also includes NOT_APPLICABLE/DISPUTED states.
-    pending = counts["open"] - counts["overdue"] - counts["due_soon"]
+    pending = counts["pending"]
 
     # Colour cycles through a small fixed palette — categories aren't part of
     # the status vocabulary and must not borrow its colours, which each mean
@@ -222,6 +248,10 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         "selected_entity": selected_entity,
         "dashboard_entity_qs": dashboard_entity_qs,
         "tenant": getattr(request, "tenant", None),
+        # A one-line nudge on the ordinary dashboard, not a blocking screen —
+        # the workspace is fully usable under its derived name, and asking for
+        # a real one belongs beside the product, not in front of it.
+        "workspace_name_is_provisional": state.name_is_provisional,
         "as_of": as_of,
         "counts": counts,
         "pending": pending,
@@ -267,6 +297,45 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         else "tenancy/dashboard.html"
     )
     return render(request, template, context)
+
+
+@require_permission("tenancy.tenant.manage")
+@require_http_methods(["GET", "POST"])
+def workspace_rename(request: HttpRequest) -> HttpResponse:
+    """Give the workspace the name its owner actually wants, from a modal.
+
+    Reachable from the first-run dashboard's nudge and, later, from wherever
+    organisation settings end up living — there is deliberately no dedicated
+    settings page for this yet, because a one-field settings screen for a
+    product with one setting on it is a screen nobody would find useful twice.
+    """
+    from stacos.tenancy.services import name_is_provisional, rename_tenant
+
+    tenant = getattr(request, "tenant", None)
+    if tenant is None:
+        raise Http404
+
+    form = WorkspaceRenameForm(
+        request.POST or None,
+        initial={"name": "" if name_is_provisional(tenant) else tenant.name},
+    )
+
+    if request.method == "POST" and form.is_valid():
+        rename_tenant(tenant, form.cleaned_data["name"], actor=current_user(request))
+        return oob(
+            request,
+            main="",
+            toast=Toast(_("Organisation renamed.")),
+            triggers={"stacos:modal-close": True, "stacos:navigate": page_url(request)},
+        )
+
+    status = 422 if request.method == "POST" else 200
+    return render(
+        request,
+        "tenancy/_fragments/workspace_rename_modal.html",
+        {"form": form, "tenant": tenant},
+        status=status,
+    )
 
 
 def entity_rows() -> QuerySet[Entity]:
@@ -625,7 +694,8 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
     ``registered_office_state`` both drive applicability, so an edit can change
     what the entity owes — and this product's rule is that such a change
     produces a reviewable plan rather than taking effect silently. The toast
-    points at "Rebuild calendar", which is that review.
+    points at "Save changes" (``entity_build_button_label.html``'s
+    ``has_calendar`` branch), which is that review.
     """
     entity = Entity.objects.filter(pk=pk, archived_at__isnull=True).first()
     if entity is None:
@@ -709,7 +779,7 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
             request,
             Fragment("tenancy/_fragments/entity_row.html", {"entity": row}),
             toast=Toast(
-                _("%(name)s updated. Rebuild its calendar to apply the change.")
+                _("%(name)s updated. Save changes to apply it to the calendar.")
                 % {"name": entity.name}
             ),
             triggers={"stacos:modal-close": True},
@@ -801,15 +871,15 @@ def entity_detail(request: HttpRequest, pk: str) -> HttpResponse:
     materialisation run.
 
     A freshly created entity is sent to the guided setup flow instead (see
-    ``stacos.tenancy.entity_setup``), always at its first step: there is no
-    persisted "how far did they get" to resume from, and re-entering at step
-    one costs nothing when the steps ahead are just a couple of clicks for an
-    entity that already has what they need. This redirect fires exactly once
-    in an entity's life — the moment a build is attempted, ``rebuild_calendar``
-    (``?finish_setup=1``) sends the browser to the dashboard, and every visit
-    here after that has a run to satisfy the ``exists()`` check below — a run, not an
-    obligation count, so an entity whose first build honestly creates nothing
-    (no registrations recorded yet) is not sent back into setup forever.
+    ``stacos.tenancy.entity_setup``), at whichever step it last reached
+    (``Entity.setup_step``) rather than always at the first — a closed browser,
+    a lost connection or a deliberate "finish this later" must not make someone
+    re-answer questions they already settled. This redirect fires until the
+    moment a build is attempted; ``rebuild_calendar`` (``?finish_setup=1``)
+    sends the browser to the dashboard, and every visit here after that has a
+    run to satisfy the ``exists()`` check below — a run, not an obligation
+    count, so an entity whose first build honestly creates nothing (no
+    registrations recorded yet) is not sent back into setup forever.
     """
     entity = Entity.objects.select_related("tenant", "profile").filter(pk=pk).first()
     if entity is None:
@@ -825,7 +895,9 @@ def entity_detail(request: HttpRequest, pk: str) -> HttpResponse:
     # `obligations.views.entity_preview_context`'s own `has_calendar`, which
     # answers the identical question for the identical reason.
     if not MaterialisationRun.objects.filter(entity=entity).exists():
-        return navigate(request, reverse("app:entity_setup_registrations", args=[entity.pk]))
+        from stacos.tenancy.onboarding import setup_step_url
+
+        return navigate(request, setup_step_url(entity))
 
     context = {
         "entity": entity,

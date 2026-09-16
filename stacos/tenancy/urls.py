@@ -6,6 +6,7 @@ app_name = "app"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("workspace/rename/", views.workspace_rename, name="workspace_rename"),
     path("entities/", views.EntityListView.as_view(), name="entity_list"),
     path("entities/new/", views.entity_create, name="entity_create"),
     path(

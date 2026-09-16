@@ -571,6 +571,178 @@ Alpine.data("palette", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Choosing a password
+//
+// The server is the only authority on whether a password is acceptable —
+// `RegistrationForm.clean` runs Django's configured validators and nothing here
+// can overrule it. What these two components buy is the feedback *before* the
+// round trip, which is the difference between correcting a password and
+// abandoning a sign-up: a rejected submit clears both password boxes, and the
+// second time someone retypes a password they reach for one they reuse.
+//
+// So this deliberately only rates what a browser can honestly know. It does not
+// claim anything about the common-password list or similarity to the name and
+// email above; those are enforced server-side and are not advertised here.
+// ---------------------------------------------------------------------------
+
+// Long is strong: a passphrase of four ordinary words beats a short string with
+// a symbol wedged into it, and a meter that says otherwise teaches the wrong
+// habit. Length dominates the score and variety only tops it up.
+function scorePassword(value, minLength) {
+  if (!value) return 0;
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((re) => re.test(value)).length;
+
+  let score = 0;
+  if (value.length >= minLength) score += 2;
+  if (value.length >= minLength + 4) score += 1;
+  if (value.length >= minLength + 10) score += 1;
+  if (classes >= 2) score += 1;
+  if (classes >= 3) score += 1;
+
+  // Anything that is one repeated character, one run of digits, or a keyboard
+  // walk is not saved by being long.
+  if (/^(.)\1*$/.test(value) || /^\d+$/.test(value)) score = Math.min(score, 1);
+
+  return Math.min(score, 5);
+}
+
+const STRENGTH_TIERS = [
+  { tier: "weak", label: "Too weak" },
+  { tier: "weak", label: "Weak" },
+  { tier: "fair", label: "Fair" },
+  { tier: "good", label: "Good" },
+  { tier: "strong", label: "Strong" },
+  { tier: "strong", label: "Very strong" },
+];
+
+Alpine.data("passwordStrength", ({ minLength = 10 } = {}) => ({
+  value: "",
+  show: false,
+
+  get score() {
+    return scorePassword(this.value, minLength);
+  },
+  get tier() {
+    return STRENGTH_TIERS[this.score].tier;
+  },
+  get label() {
+    return STRENGTH_TIERS[this.score].label;
+  },
+  get percent() {
+    // Never zero while there is something typed: a bar with no width reads as
+    // "the meter is broken" rather than as "this password is terrible".
+    return Math.max(8, (this.score / 5) * 100);
+  },
+  get rules() {
+    const value = this.value;
+    return {
+      length: value.length >= minLength,
+      notAllDigits: value.length > 0 && !/^\d+$/.test(value),
+      // Either real variety, or enough length that variety stops mattering.
+      variety:
+        [/[A-Za-z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((re) => re.test(value)).length >= 2 ||
+        value.length >= minLength + 6,
+    };
+  },
+}));
+
+Alpine.data("passwordConfirm", (targetId) => ({
+  value: "",
+  other: "",
+  show: false,
+
+  init() {
+    const source = document.getElementById(targetId);
+    if (!source) return;
+    // A plain listener rather than a shared Alpine scope: crispy renders each
+    // field in its own template, so there is no element both boxes sit inside.
+    // `input` covers typing, paste and autofill-on-interaction alike.
+    const sync = () => {
+      this.other = source.value;
+    };
+    source.addEventListener("input", sync);
+    sync();
+  },
+
+  get matches() {
+    return this.value.length > 0 && this.value === this.other;
+  },
+}));
+
+// ---------------------------------------------------------------------------
+// Stale validation errors
+//
+// crispy-forms decides `is-invalid` (and, through it, whether the paired
+// `invalid-feedback` text is visible — see `.password-field:has(.is-invalid)`
+// in `_forms.scss` for the one field group where that isn't a plain CSS
+// sibling) once, at render time. Nothing then updates it: a user correcting a
+// rejected field kept the *previous* submit's red border and error text under
+// their cursor until the next full round trip re-rendered the form, client
+// or server error alike, since both arrive the same way — baked into the HTML.
+//
+// Clearing the class on the first edit doesn't skip validation, it just stops
+// displaying a verdict already known to be stale. The next submit — the
+// application's actual validation strategy throughout, HTMX fragment or full
+// page alike — re-renders with whatever is true of the corrected value, so a
+// field that is still invalid gets a fresh, accurate error rather than none.
+// ---------------------------------------------------------------------------
+function clearStaleFieldError(event) {
+  const field = event.target;
+  if (!field.classList || !field.classList.contains("is-invalid")) return;
+  field.classList.remove("is-invalid");
+}
+document.addEventListener("input", clearStaleFieldError);
+document.addEventListener("change", clearStaleFieldError);
+
+// ---------------------------------------------------------------------------
+// Double-submit guard
+//
+// The authentication screens post normally — `layouts/auth.html` carries no
+// `hx-boost`, because those responses set cookies and change who the session is
+// — so `hx-disabled-elt`, which is what the rest of the product relies on, never
+// fires there. A second click on "Create account" while the first request is in
+// flight is an ordinary thing for a person on a slow connection to do, and it
+// produced two sign-up attempts, two users racing on one unique email, and an
+// IntegrityError.
+//
+// Disabling rather than swallowing the event: the button says what is happening,
+// which is the other half of the problem — a form that looks inert after a click
+// is a form people click again.
+// ---------------------------------------------------------------------------
+document.addEventListener("submit", (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+
+  const button = form.querySelector("[data-submit-guard]");
+  if (!button || button.dataset.submitting === "1") return;
+
+  // Let the browser build and send the request first; disabling a submit button
+  // synchronously inside its own submit handler drops it from the payload in
+  // some browsers, and the view reads `request.POST` expecting it.
+  window.setTimeout(() => {
+    button.dataset.submitting = "1";
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    if (button.tagName === "INPUT") button.value = button.dataset.submitGuard + "\u2026";
+    else button.textContent = button.dataset.submitGuard + "\u2026";
+  }, 0);
+});
+
+// Back/forward into a cached page restores the disabled button with it, leaving
+// a form nobody can submit. `pageshow` with `persisted` is the only event that
+// fires for a bfcache restore.
+window.addEventListener("pageshow", (event) => {
+  if (!event.persisted) return;
+  document.querySelectorAll("[data-submit-guard]").forEach((button) => {
+    delete button.dataset.submitting;
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    if (button.tagName === "INPUT") button.value = button.dataset.submitGuard;
+    else button.textContent = button.dataset.submitGuard;
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Bootstrap widget initialisation
 // ---------------------------------------------------------------------------
 function initTooltips(root = document) {

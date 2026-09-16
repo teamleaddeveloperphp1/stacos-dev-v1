@@ -26,7 +26,9 @@
         <form method="post" action="{% url 'app:entity_create' %}" hx-boost="false">
           {% csrf_token %}
           {% include "tenancy/_fragments/entity_form.html" %}
-          <button type="submit" class="btn btn-primary mt-3">{% translate "Add entity" %}</button>
+          <div class="d-flex justify-content-end mt-3">
+            <button type="submit" class="btn btn-primary">{% translate "Add entity" %}</button>
+          </div>
         </form>
       </div>
     </div>

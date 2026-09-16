@@ -45,7 +45,16 @@ from stacos.tenancy.models import (
 
 logger = structlog.get_logger(__name__)
 
-__all__ = ["OWNER_ROLE_CODES", "provision_tenant", "record_fact", "unique_slug"]
+__all__ = [
+    "OWNER_ROLE_CODES",
+    "PROVISIONAL_NAME_KEY",
+    "default_workspace_name",
+    "name_is_provisional",
+    "provision_tenant",
+    "record_fact",
+    "rename_tenant",
+    "unique_slug",
+]
 
 #: Profile facts that have their own typed column rather than living in the
 #: ``facts`` JSONB. ``women_employees_count`` and ``net_profit`` are registered,
@@ -80,6 +89,43 @@ OWNER_ROLE_CODES: dict[str, str] = {
 }
 
 
+#: Marks a tenant whose name nobody has chosen — see
+#: :func:`default_workspace_name`. Lives in ``Tenant.settings`` rather than as a
+#: column because it is a fact about onboarding that stops being true within a
+#: day or two of the account existing, and a boolean column would outlive its
+#: usefulness by years.
+PROVISIONAL_NAME_KEY = "name_is_provisional"
+
+
+def default_workspace_name(owner: User) -> str:
+    """What to call a workspace nobody has named yet.
+
+    Sign-up asks for a person, not a business. That is the right trade — the one
+    thing a user cannot answer at the sign-up screen is what the product will do
+    with "organisation name", and asking anyway turns a thirty-second form into a
+    decision — but a tenant still needs *a* name, because it is what the sidebar,
+    the audit log and every invitation email say.
+
+    The person's own name is the honest answer, and it is also the answer that
+    reads correctly for the largest group of users this product has: one person,
+    one business, no distinction they care about. It is replaced the moment
+    somebody says otherwise (``rename_tenant``), and
+    :func:`name_is_provisional` is what lets the dashboard ask.
+    """
+    name = (owner.full_name or "").strip()
+    if not name:
+        # No name at all only happens for an account created outside sign-up —
+        # a fixture, an import, a social sign-in that returned nothing useful.
+        # The local part of the email is still better than "Untitled".
+        name = owner.email.partition("@")[0].replace(".", " ").strip().title()
+    return (name or "My workspace")[:200]
+
+
+def name_is_provisional(tenant: Tenant) -> bool:
+    """True while the workspace is still wearing the name we picked for it."""
+    return bool((tenant.settings or {}).get(PROVISIONAL_NAME_KEY))
+
+
 def unique_slug(name: str) -> str:
     """A URL-safe slug for ``name`` that no tenant is already using."""
     base = slugify(name)[:50] or "organisation"
@@ -99,6 +145,7 @@ def provision_tenant(
     country: str = "IN",
     tenant_type: str = Tenant.Type.ORGANISATION,
     reason: str = "provision",
+    name_provisional: bool = False,
 ) -> Tenant:
     """Create a tenant with a jurisdiction pack, and make ``owner`` its owner.
 
@@ -130,6 +177,7 @@ def provision_tenant(
         status=Tenant.Status.TRIAL,
         country=country,
         jurisdiction_pack=pack,
+        settings={PROVISIONAL_NAME_KEY: True} if name_provisional else {},
     )
 
     # Not platform_scope: that would need an allowlist entry and write a bypass
@@ -151,6 +199,38 @@ def provision_tenant(
         owner_id=str(owner.pk),
         country=country,
         pack=pack.code if hasattr(pack, "code") else country,
+    )
+    return tenant
+
+
+@transaction.atomic
+def rename_tenant(tenant: Tenant, name: str, *, actor: User | None) -> Tenant:
+    """Give the workspace the name its owner actually wants.
+
+    The slug is deliberately **not** regenerated. It is the tenant's stable
+    identifier — it appears in support conversations and, the moment subdomains
+    or exports exist, in addresses people have saved — and rotating it because
+    somebody fixed a spelling is how a link goes dead for a reason nobody can
+    reconstruct afterwards.
+
+    Audited like any other state change (``CLAUDE.md`` rule 6): "who renamed the
+    organisation, and from what" is exactly the sort of question a due-diligence
+    reviewer asks.
+    """
+    before = {"name": tenant.name}
+    settings_after = dict(tenant.settings or {})
+    settings_after.pop(PROVISIONAL_NAME_KEY, None)
+
+    tenant.name = name.strip()[:200]
+    tenant.settings = settings_after
+    tenant.save(update_fields=["name", "settings", "updated_at"])
+
+    record_event(
+        action=AuditAction.UPDATE,
+        actor=actor,
+        obj=tenant,
+        before=before,
+        after={"name": tenant.name},
     )
     return tenant
 

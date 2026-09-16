@@ -1,14 +1,16 @@
 """
-Sign-up, and the organisation it is supposed to leave behind.
+Sign-up, and the workspace it is supposed to leave behind.
 
 Registration used to collect one undivided name, one number, and a password with
 nothing to check it against. A typo in the password locked somebody out of the
-account they had just made, and they found out at the next sign-in.
+account they had just made, and they found out at the next sign-in. It also used
+to ask for an organisation name up front — a decision about the business at the
+one moment a user knows least about what the product will do with it.
 
-STACOS is one identity per user, decided here: the organisation name is
-collected at sign-up, and the tenant is provisioned the moment both OTP
-channels are proven (``accounts.views._complete_verification``) — there is no
-separate "set up an organisation" step afterwards.
+STACOS is one identity per user, decided here: sign-up collects a **person**,
+and the tenant is provisioned the moment both OTP channels are proven
+(``accounts.views._complete_verification``), named after that person until they
+say otherwise. There is no separate "set up an organisation" step afterwards.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from stacos.accounts.models import User
 from stacos.accounts.whatsapp import MemoryWhatsAppProvider
 from stacos.core.scope import platform_scope
 from stacos.tenancy.models import Membership, Tenant
+from stacos.tenancy.services import PROVISIONAL_NAME_KEY
 
 pytestmark = pytest.mark.django_db
 
@@ -32,7 +35,6 @@ pytestmark = pytest.mark.django_db
 EXPECTED_FIELD_ORDER = [
     "first_name",
     "last_name",
-    "organisation_name",
     "email",
     "phone",
     "password",
@@ -44,11 +46,10 @@ def payload(**overrides: str) -> dict[str, str]:
     data = {
         "first_name": "Asha",
         "last_name": "Founder",
-        "organisation_name": "Founder Textiles",
         "email": "asha@example.com",
         "phone": "9876500002",
-        "password": "a-long-enough-password",
-        "confirm_password": "a-long-enough-password",
+        "password": "a-genuinely-long-passphrase",
+        "confirm_password": "a-genuinely-long-passphrase",
     }
     data.update(overrides)
     return data
@@ -101,11 +102,22 @@ def test_the_fields_are_in_the_specified_order(client: Client) -> None:
     )
 
 
+def test_the_form_no_longer_asks_for_an_organisation_name(client: Client) -> None:
+    """The one field this form used to have that asked about the business
+    rather than the person signing up. See the module docstring.
+    """
+    body = client.get(reverse("accounts:register")).content.decode()
+    assert 'name="organisation_name"' not in body
+
+
 def test_a_mismatched_confirmation_creates_nothing(client: Client) -> None:
     """The failure this field exists to prevent: locked out of a brand-new account."""
     response = client.post(
         reverse("accounts:register"),
-        payload(password="a-long-enough-password", confirm_password="a-long-enough-passwordd"),
+        payload(
+            password="a-genuinely-long-passphrase",
+            confirm_password="a-genuinely-long-passphrasee",
+        ),
     )
 
     assert response.status_code == 200
@@ -129,23 +141,20 @@ def test_the_name_halves_are_stored_and_composed(client: Client) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_a_missing_organisation_name_creates_nothing(client: Client) -> None:
-    response = client.post(reverse("accounts:register"), payload(organisation_name=""))
-
-    assert response.status_code == 200
-    assert not User.objects.filter(email="asha@example.com").exists()
-    assert not mail.outbox, "a verification code went out for a sign-up that failed"
-
-
-def test_verification_provisions_the_named_organisation(client: Client) -> None:
+def test_verification_provisions_a_workspace_named_after_the_signer(client: Client) -> None:
+    """No organisation name is collected, so the workspace is named after the
+    person who signed up — and marked provisional, so the product can offer to
+    rename it later without forcing the question now.
+    """
     client.post(reverse("accounts:register"), payload())
     response = _verify(client)
     assert response.status_code == 302
 
     with platform_scope(reason="test"):
         tenant = Tenant.objects.get()
-        assert tenant.name == "Founder Textiles"
+        assert tenant.name == "Asha Founder"
         assert tenant.type == Tenant.Type.ORGANISATION
+        assert tenant.settings.get(PROVISIONAL_NAME_KEY) is True
 
         membership = Membership.objects.get()
         assert membership.tenant_id == tenant.id
@@ -153,13 +162,14 @@ def test_verification_provisions_the_named_organisation(client: Client) -> None:
         assert membership.status == Membership.Status.ACTIVE
         assert membership.role.code == "org-owner"
 
-    # A tenant now, but no entity yet — so the gate sends them to add one
-    # rather than to a "set up an organisation" step that no longer exists.
-    # See tests/security/test_organisation_gate.py for the whole of that
-    # behaviour.
+    # A tenant now, but no entity yet — so the dashboard renders its own
+    # guided first-run state rather than redirecting into a bare form. See
+    # tests/tenancy/test_onboarding.py for the whole of that behaviour, and
+    # tests/security/test_organisation_gate.py for the membership-less case
+    # this is not.
     response = client.get("/app/")
-    assert response.status_code == 302
-    assert response["Location"] == reverse("app:entity_create")
+    assert response.status_code == 200
+    assert "Add your first entity" in response.content.decode()
 
 
 def test_provisioning_is_idempotent_on_membership(client: Client) -> None:
@@ -185,4 +195,46 @@ def test_provisioning_is_idempotent_on_membership(client: Client) -> None:
     _provision_signup_tenant(_FakeRequest(), user, verification)  # type: ignore[arg-type]
 
     with platform_scope(reason="test"):
-        assert Tenant.objects.filter(name="Founder Textiles").count() == 1
+        assert Tenant.objects.filter(name="Asha Founder").count() == 1
+
+
+def test_a_typed_organisation_name_still_wins_for_a_verification_already_in_flight(
+    client: Client,
+) -> None:
+    """``PendingVerification.organisation_name`` is read first and is not dead
+    code: a verification created by the previous sign-up form can still be
+    sitting in a live session when this deploys, and a name typed two minutes
+    ago should not be thrown away.
+    """
+    from stacos.accounts.models import PendingVerification
+    from stacos.accounts.models import User as UserModel
+    from stacos.accounts.otp import start_verification
+
+    user = UserModel.objects.create_user(
+        email="legacy@example.com",
+        password="a-genuinely-long-passphrase",
+        first_name="Legacy",
+        last_name="Signup",
+        phone_e164="+919876500099",
+    )
+    verification, decision = start_verification(
+        purpose=PendingVerification.Purpose.REGISTRATION,
+        email=user.email,
+        phone_e164=user.phone_e164,
+        user=user,
+        organisation_name="Legacy Textiles",
+    )
+    assert decision.allowed
+    assert verification is not None
+
+    session = client.session
+    from stacos.accounts.middleware import SESSION_PENDING_KEY
+
+    session[SESSION_PENDING_KEY] = str(verification.id)
+    session.save()
+
+    _verify(client)
+
+    with platform_scope(reason="test"):
+        tenant = Tenant.objects.get(name="Legacy Textiles")
+        assert tenant.settings.get(PROVISIONAL_NAME_KEY) is not True

@@ -165,7 +165,7 @@ def test_saving_closes_the_modal_and_toasts(signed_in: Client, entity_a: Entity)
     triggers = response["HX-Trigger"]
     assert "stacos:modal-close" in triggers
     assert "stacos:toast" in triggers
-    assert "Rebuild" in triggers, "the user is not told the calendar may now be stale"
+    assert "Save changes" in triggers, "the user is not told the calendar may now be stale"
 
 
 def test_the_edited_row_keeps_its_registration_count(

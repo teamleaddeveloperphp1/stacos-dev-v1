@@ -324,6 +324,19 @@ TRUSTED_DEVICE_COOKIE = "stacos_td"
 STEP_UP_ENABLED = env.bool("STEP_UP_ENABLED", default=False)
 STEP_UP_MAX_AGE_SECONDS = env.int("STEP_UP_MAX_AGE_SECONDS", default=600)
 
+#: A live DNS check on the sign-up email's domain (``stacos.accounts.forms
+#: .assert_real_email_domain``), on top of the placeholder-domain check that
+#: check always runs. ``xyz@example.abc`` passes Django's own ``EmailField`` —
+#: it has the right shape — and only a resolver actually knows the domain has
+#: never existed.
+#:
+#: OFF in ``config/settings/test.py``: this is a real network call on the
+#: request thread, and a test suite must be able to run offline and fast. Dev
+#: keeps it on so the sign-up form behaves as it will in production; turn it
+#: off in ``.env`` (``EMAIL_DOMAIN_VERIFICATION_ENABLED=False``) when working
+#: without a network connection.
+EMAIL_DOMAIN_VERIFICATION_ENABLED = env.bool("EMAIL_DOMAIN_VERIFICATION_ENABLED", default=True)
+
 # --- WhatsApp -----------------------------------------------------------------
 # The second verification channel. WhatsApp rather than SMS because for Indian
 # businesses it is the channel people actually read.

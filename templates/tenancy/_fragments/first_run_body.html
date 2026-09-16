@@ -1,0 +1,139 @@
+{% load i18n %}
+{% comment %}
+  The dashboard for a workspace that is not tracking anything yet.
+
+  Two stages share this one template — no entity at all, and an entity that
+  exists but has never had a calendar built — because they are the same
+  message with a different subject: what is true right now, why it matters,
+  and the one thing to do about it. `state.stage` (a `tenancy.onboarding.Stage`)
+  is the only thing either half of this template switches on.
+{% endcomment %}
+
+<c-page-header title="{% translate 'Welcome to STACOS' %}"
+               subtitle="{% translate 'Your account is ready. Here is what comes next.' %}">
+</c-page-header>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        {% if state.stage == "add_entity" %}
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="avatar avatar--lg flex-shrink-0"><c-icon name="building" size="16" /></span>
+            <div>
+              <h2 class="h5 mb-1">{% translate "Add your first entity" %}</h2>
+              <p class="text-muted mb-0">
+                {% blocktranslate %}
+                An entity is the company, LLP, trust or firm you need to keep
+                compliant — the thing GST returns, ROC filings and labour
+                registrations actually belong to. Everything in STACOS attaches
+                to one, so this is the one thing to do before anything else
+                becomes useful.
+                {% endblocktranslate %}
+              </p>
+            </div>
+          </div>
+          {% comment %}
+            A real navigation, not the modal the Entities list uses — see
+            `entity_create`'s own docstring. Creating a first entity has
+            somewhere to go afterwards (the guided setup wizard,
+            `entity_setup_registrations`); the modal pattern only closes and
+            hands back to a dashboard with no list to show a new row in.
+            `hx-boost="false"` is load-bearing: `.app-shell` boosts every link
+            by default, and a boosted GET carries an `HX-Request` header,
+            which makes `entity_create` treat it as the modal's fragment
+            request and answer with a bare table row nothing here expects —
+            see `entity_create_body.html`'s identical note on its own form.
+          {% endcomment %}
+          <a class="btn btn-primary" href="{% url 'app:entity_create' %}" hx-boost="false">
+            <c-icon name="plus" size="16" /> {% translate "Add an entity" %}
+          </a>
+        {% else %}
+          <div class="d-flex align-items-start gap-3 mb-3">
+            <span class="avatar avatar--lg flex-shrink-0"><c-icon name="calendar" size="16" /></span>
+            <div>
+              <h2 class="h5 mb-1">
+                {% blocktranslate with name=state.resume_entity.name %}Finish setting up {{ name }}{% endblocktranslate %}
+              </h2>
+              <p class="text-muted mb-0">
+                {% blocktranslate %}
+                You started, and nothing is lost — every registration and answer
+                you gave is right where you left it. A couple more steps and
+                the compliance calendar is ready.
+                {% endblocktranslate %}
+              </p>
+            </div>
+          </div>
+          <a class="btn btn-primary" href="{{ state.resume_url }}" preload>
+            {% blocktranslate with current=state.resume_step_number total=state.setup_step_total %}Continue — step {{ current }} of {{ total }}{% endblocktranslate %}
+          </a>
+          {% if state.pending|length > 1 %}
+            <p class="text-muted mt-3 mb-0" style="font-size:.8125rem">
+              {% blocktranslate count counter=state.pending|length|add:"-1" %}
+              And {{ counter }} other entity is also waiting on its calendar.
+              {% plural %}
+              And {{ counter }} other entities are also waiting on their calendars.
+              {% endblocktranslate %}
+              <a href="{% url 'app:entity_list' %}" preload>{% translate "View entities" %}</a>
+            </p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card h-100">
+      <div class="card-header">
+        <strong class="small">{% translate "How STACOS works" %}</strong>
+      </div>
+      <div class="card-body">
+        {% comment %}
+          The whole product's shape, in one glance, so the person who just
+          signed up knows what an entity is *for* before being asked to
+          create one — and knows there is more ahead than one form.
+        {% endcomment %}
+        <ol class="onboarding-journey">
+          <li class="onboarding-journey__step is-done">
+            <span class="onboarding-journey__marker"><c-icon name="check" size="14" /></span>
+            <span>
+              <strong>{% translate "Account created" %}</strong>
+              <span class="d-block text-muted" style="font-size:.8125rem">
+                {% translate "Your email and WhatsApp number are verified." %}
+              </span>
+            </span>
+          </li>
+          <li class="onboarding-journey__step{% if state.stage == 'add_entity' %} is-current{% else %} is-done{% endif %}">
+            <span class="onboarding-journey__marker">
+              {% if state.stage == 'add_entity' %}2{% else %}<c-icon name="check" size="14" />{% endif %}
+            </span>
+            <span>
+              <strong>{% translate "Add an entity" %}</strong>
+              <span class="d-block text-muted" style="font-size:.8125rem">
+                {% translate "The company, LLP or firm compliance attaches to." %}
+              </span>
+            </span>
+          </li>
+          <li class="onboarding-journey__step{% if state.stage == 'finish_setup' %} is-current{% endif %}">
+            <span class="onboarding-journey__marker">3</span>
+            <span>
+              <strong>{% translate "Answer a few questions" %}</strong>
+              <span class="d-block text-muted" style="font-size:.8125rem">
+                {% translate "Registrations, turnover, headcount — whatever decides what applies." %}
+              </span>
+            </span>
+          </li>
+          <li class="onboarding-journey__step">
+            <span class="onboarding-journey__marker">4</span>
+            <span>
+              <strong>{% translate "Your calendar is built" %}</strong>
+              <span class="d-block text-muted" style="font-size:.8125rem">
+                {% translate "Every applicable filing, with its due date, ready to track." %}
+              </span>
+            </span>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>

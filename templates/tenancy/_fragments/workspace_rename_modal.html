@@ -1,0 +1,55 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Naming the workspace. Reachable from the first-run dashboard's nudge card,
+  and from anywhere else it later gets a link — there is no dedicated
+  organisation-settings page yet for a one-field setting to live on its own.
+
+  `hx-swap="none"`: the response carries no row to swap, only a toast and a
+  `stacos:navigate` trigger that refetches the page the modal was opened from,
+  so the nudge disappears the moment the real name is in place.
+{% endcomment %}
+<div class="modal fade" tabindex="-1" aria-labelledby="workspace-rename-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <form hx-post="{% url 'app:workspace_rename' %}"
+            hx-target="#main"
+            hx-swap="none"
+            hx-disabled-elt="find button[type=submit]"
+            hx-indicator="#workspace-rename-spinner">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="workspace-rename-title">
+            {% translate "Name your organisation" %}
+          </h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="{% translate 'Close' %}"></button>
+        </div>
+
+        <div class="modal-body">
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2 small" role="alert">
+              {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+          {% endif %}
+          {% crispy form %}
+        </div>
+
+        <div class="modal-footer">
+          <span class="htmx-indicator me-auto" id="workspace-rename-spinner">
+            <span class="spinner-inline"></span>
+            <span class="small text-muted ms-1">{% translate "Saving…" %}</span>
+          </span>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">
+            {% translate "Save" %}
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>

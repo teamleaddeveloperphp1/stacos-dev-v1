@@ -1,0 +1,38 @@
+{% load i18n static %}<!doctype html>
+{% comment %}
+  Django's own generic 404, restyled to match the product rather than left as
+  a bare "Not Found" — a wrong link or a stale bookmark is an ordinary event,
+  not a reason to remind someone they are using software.
+
+  Deliberately standalone rather than extending a layout: Django renders this
+  template with no guarantee that `request.user`, a tenant, or a scope is
+  resolvable — the very thing that produced the 404 may be a broken middleware
+  assumption — so nothing here reads anything beyond the URL config and the
+  static asset pipeline, both of which exist independently of any request.
+{% endcomment %}
+<html lang="en-in" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% translate "Page not found" %} · STACOS</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+</head>
+<body class="d-flex flex-column min-vh-100" style="background: var(--stacos-surface-sunken);">
+  <main class="flex-grow-1 d-flex align-items-center justify-content-center px-3">
+    <div class="empty-state" style="max-width: 30rem;">
+      <svg class="empty-state__icon" viewBox="0 0 48 48" fill="none" stroke="currentColor"
+           stroke-width="1.5" aria-hidden="true">
+        <circle cx="24" cy="24" r="17"/>
+        <path d="M18 30l12-12M18 18l12 12"/>
+      </svg>
+      <h1 class="empty-state__title">{% translate "That page does not exist" %}</h1>
+      <p class="empty-state__body">
+        {% translate "The link may be out of date, or the address was mistyped. Nothing here has been affected." %}
+      </p>
+      <a class="btn btn-primary" href="/">{% translate "Back to STACOS" %}</a>
+    </div>
+  </main>
+</body>
+</html>

@@ -636,3 +636,31 @@ class InviteColleagueForm(forms.Form):
 
     def clean_email(self) -> str:
         return str(self.cleaned_data["email"]).strip().lower()
+
+
+class WorkspaceRenameForm(forms.Form):
+    """Give the workspace a real name in place of the derived one.
+
+    A plain ``forms.Form`` rather than a ``ModelForm`` on ``Tenant``: the view
+    already has the tenant from ``request.tenant`` and the write goes through
+    ``tenancy.services.rename_tenant`` so the audit entry and the "no longer
+    provisional" flag are written together, in the one place that means either.
+    """
+
+    name = forms.CharField(
+        label=_("Organisation name"),
+        max_length=200,
+        help_text=_("Shown throughout STACOS, and on anything sent to your team."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("name")
+
+    def clean_name(self) -> str:
+        name = " ".join(self.cleaned_data["name"].split())
+        if not name:
+            raise forms.ValidationError(_("Enter a name."))
+        return name

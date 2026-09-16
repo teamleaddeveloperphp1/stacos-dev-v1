@@ -48,6 +48,12 @@ STEP_UP_ENABLED = True
 # Fast, deterministic hashing — Argon2 in tests wastes minutes per run.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
+# A live DNS lookup on the request thread (see the setting's comment in
+# base.py) has no place in a suite that has to run fast and offline. The
+# placeholder-domain check `assert_real_email_domain` always runs — it needs
+# no network — so `example.abc`-style addresses are still covered without this.
+EMAIL_DOMAIN_VERIFICATION_ENABLED = False
+
 CACHES = {
     "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
 }

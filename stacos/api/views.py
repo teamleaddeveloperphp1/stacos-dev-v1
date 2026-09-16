@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
+import structlog
 from django.db import transaction
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import serializers, status
@@ -31,6 +32,8 @@ from stacos.api.authentication import issue_tokens
 from stacos.core.rls import rls_bootstrap
 from stacos.core.typing import current_user
 from stacos.tenancy.models import Membership
+
+logger = structlog.get_logger(__name__)
 
 
 class LoginSerializer(serializers.Serializer):
@@ -84,14 +87,28 @@ class MobileLoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        verification, decision = start_verification(
-            purpose=PendingVerification.Purpose.LOGIN_NEW_DEVICE,
-            email=user.email,
-            phone_e164=user.phone_e164,
-            user=user,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.headers.get("User-Agent", ""),
-        )
+        try:
+            verification, decision = start_verification(
+                purpose=PendingVerification.Purpose.LOGIN_NEW_DEVICE,
+                email=user.email,
+                phone_e164=user.phone_e164,
+                user=user,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.headers.get("User-Agent", ""),
+            )
+        except Exception:
+            # Same failure mode as the web login (`accounts.views
+            # ._start_verification_safely`): the password is already checked,
+            # so an outage in the mail or WhatsApp provider must read as
+            # "try again", never as a stack trace in a JSON body a mobile
+            # client cannot parse into anything useful.
+            logger.exception("api.verification_dispatch_failed", user_id=str(user.pk))
+            return Response(
+                {
+                    "detail": "We could not send your verification codes just now. Try again shortly."
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if verification is None:
             return Response(
                 {"detail": decision.reason, "retry_after": decision.retry_after_seconds},

@@ -20,7 +20,7 @@ from urllib.parse import quote
 import structlog
 from django.contrib import messages
 from django.contrib.auth import login, logout
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -40,7 +40,7 @@ from stacos.core.rls import rls_bootstrap
 from stacos.core.typing import current_user
 from stacos.tenancy.models import Membership
 from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
-from stacos.tenancy.services import provision_tenant
+from stacos.tenancy.services import default_workspace_name, provision_tenant
 
 logger = structlog.get_logger(__name__)
 
@@ -85,30 +85,114 @@ def register(request: HttpRequest) -> HttpResponse:
 
     form = RegistrationForm(request.POST or None, initial=initial)
     if request.method == "POST" and form.is_valid():
-        user = User.objects.create_user(
-            email=form.cleaned_data["email"],
-            password=form.cleaned_data["password"],
-            first_name=form.cleaned_data["first_name"],
-            last_name=form.cleaned_data["last_name"],
-            phone_e164=form.cleaned_data["phone"],
-        )
+        try:
+            user = _create_or_reclaim_user(form)
+        except IntegrityError:
+            # Two sign-ups for one address, in flight at the same time. The
+            # form's own check cannot close this — it reads a moment before the
+            # write — so the database constraint is the real guard and this is
+            # how it reaches the user: as the same sentence they would have got
+            # a second earlier, not as a 500.
+            logger.warning("accounts.register_conflict", email=form.cleaned_data["email"])
+            form.add_error("email", _("An account already exists for this email. Sign in instead."))
+        else:
+            verification, reason = _start_verification_safely(
+                request, user, purpose=PendingVerification.Purpose.REGISTRATION
+            )
+            if verification is None:
+                form.add_error(None, reason)
+            else:
+                request.session[SESSION_PENDING_KEY] = str(verification.id)
+                return redirect(reverse("accounts:verify"))
+
+    return render(request, "accounts/register.html", {"form": form, "next": _safe_next(request)})
+
+
+@transaction.atomic
+def _create_or_reclaim_user(form: RegistrationForm) -> User:
+    """The account this sign-up is for — a new row, or an abandoned one reused.
+
+    Reuse is the branch worth explaining. ``RegistrationForm.clean_email``
+    allows an address that already has an account **only** when that account was
+    never verified, which is the wreckage left by every sign-up that got as far
+    as creating a user and no further: codes throttled, WhatsApp number
+    mistyped, browser closed at the verification screen. Refusing it told those
+    users "an account already exists — sign in instead", and signing in put them
+    straight back at the same verification screen. There was no way out inside
+    the product.
+
+    It grants nothing. The account is unusable until somebody reads a code sent
+    to that address, so whoever retypes the form here still has to control the
+    inbox before any of it means anything — and rotating the security stamp
+    invalidates whatever the abandoned attempt left lying around.
+
+    The row is re-read ``FOR UPDATE`` and re-checked rather than trusted from
+    the form: ``clean_email`` ran before this transaction opened, and a
+    verification landing in between would otherwise let a live account be
+    overwritten.
+    """
+    data = form.cleaned_data
+    existing = form.reclaimable_user
+
+    if existing is not None:
+        locked = User.objects.select_for_update().filter(pk=existing.pk).first()
+        if locked is not None and not locked.is_fully_verified:
+            locked.first_name = data["first_name"]
+            locked.last_name = data["last_name"]
+            locked.phone_e164 = data["phone"]
+            locked.set_password(data["password"])
+            locked.rotate_security_stamp(save=False)
+            locked.is_active = True
+            locked.save()
+            logger.info("accounts.register_reclaimed_unverified", user_id=str(locked.pk))
+            return locked
+        # Verified in the meantime: fall through to the create below, which the
+        # unique constraint will refuse — handled by the caller as a conflict.
+
+    return User.objects.create_user(
+        email=data["email"],
+        password=data["password"],
+        first_name=data["first_name"],
+        last_name=data["last_name"],
+        phone_e164=data["phone"],
+    )
+
+
+def _start_verification_safely(
+    request: HttpRequest, user: User, *, purpose: str
+) -> tuple[PendingVerification | None, str]:
+    """Send both codes, converting every failure into something a person can act on.
+
+    ``start_verification`` reaches an SMTP server and a WhatsApp provider. Both
+    are out of this process's control and both fail in production — a timeout, a
+    bounced connection, a provider returning something unexpected — and an
+    unhandled one here is a 500 rendered over a form the user has already
+    filled in correctly, at both call sites that reach this: a fresh sign-up
+    and a sign-in from a new device. The detail goes to the log, where it is
+    actionable; the user gets a sentence and a form they can resubmit. For
+    sign-up, the account also survives to be reclaimed by that resubmission —
+    see ``_create_or_reclaim_user``. For sign-in, the password has already been
+    checked, so nothing here should ever ask the user to retype it.
+    """
+    try:
         verification, decision = start_verification(
-            purpose=PendingVerification.Purpose.REGISTRATION,
+            purpose=purpose,
             email=user.email,
             phone_e164=user.phone_e164,
             user=user,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.headers.get("User-Agent", ""),
             next_url=_safe_next(request),
-            organisation_name=form.cleaned_data["organisation_name"],
         )
-        if verification is None:
-            form.add_error(None, decision.reason)
-        else:
-            request.session[SESSION_PENDING_KEY] = str(verification.id)
-            return redirect(reverse("accounts:verify"))
-
-    return render(request, "accounts/register.html", {"form": form, "next": _safe_next(request)})
+    except Exception:
+        logger.exception("accounts.verification_dispatch_failed", user_id=str(user.pk))
+        return None, _(
+            "We could not send your verification codes just now. "
+            "Please try again in a moment — your details have been kept."
+        )
+    if verification is None:
+        return None, decision.reason
+    return verification, ""
 
 
 #: Where an invitation link parks itself while the invitee signs up or signs in.
@@ -198,17 +282,11 @@ def login_view(request: HttpRequest) -> HttpResponse:
             request.session[SESSION_VERIFIED_KEY] = True
             return redirect(_safe_next(request))
 
-        verification, decision = start_verification(
-            purpose=PendingVerification.Purpose.LOGIN_NEW_DEVICE,
-            email=user.email,
-            phone_e164=user.phone_e164,
-            user=user,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.headers.get("User-Agent", ""),
-            next_url=_safe_next(request),
+        verification, reason = _start_verification_safely(
+            request, user, purpose=PendingVerification.Purpose.LOGIN_NEW_DEVICE
         )
         if verification is None:
-            form.add_error(None, decision.reason)
+            form.add_error(None, reason)
         else:
             login(request, user)
             request.session[SESSION_VERIFIED_KEY] = False
@@ -322,13 +400,22 @@ def _complete_verification(
 def _provision_signup_tenant(
     request: HttpRequest, user: User, verification: PendingVerification
 ) -> None:
-    """The organisation named at sign-up, created the moment both channels are proven.
+    """The workspace, created the moment both channels are proven.
 
     STACOS is one identity per user, decided at sign-up — there is no later
     "set up an organisation" step to fall back on, so this is the only place a
     fresh account's tenant is created. Guarded on an existing membership rather
     than on verification state, because that is the one check that stays correct
     even if this handler is ever reached twice for the same verified user.
+
+    **The name.** Sign-up no longer asks for one: it collects a person, and the
+    workspace is named after that person until somebody renames it
+    (``tenancy.services.default_workspace_name``, and the prompt the dashboard's
+    first-run card carries). ``verification.organisation_name`` is still read
+    first, and is not dead code — a verification created by the previous
+    sign-up form may still be sitting in a live session when this deploys, and
+    throwing away a name the user typed two minutes ago would be a poor
+    introduction.
 
     ``rls_bootstrap`` is load-bearing, not decorative: a member-less user has no
     tenant bound, so Row-Level Security restricts ``Membership`` to nothing at
@@ -348,7 +435,13 @@ def _provision_signup_tenant(
             already_provisioned = Membership.objects_unscoped.filter(user=user).exists()
         if already_provisioned:
             return
-        tenant = provision_tenant(verification.organisation_name, owner=user, reason="signup")
+        chosen_name = (verification.organisation_name or "").strip()
+        tenant = provision_tenant(
+            chosen_name or default_workspace_name(user),
+            owner=user,
+            reason="signup",
+            name_provisional=not chosen_name,
+        )
     request.session[SESSION_TENANT_KEY] = str(tenant.id)
 
 

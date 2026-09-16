@@ -187,13 +187,15 @@ def test_marketing_pages_are_untouched(stranger: Client) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_a_member_with_no_entity_yet_is_sent_to_add_one(client: Client, org_owner: User) -> None:
+def test_a_member_with_no_entity_yet_sees_the_first_run_dashboard(
+    client: Client, org_owner: User
+) -> None:
     signed_in = sign_in(client, org_owner)
 
     response = signed_in.get("/app/")
 
-    assert response.status_code == 302
-    assert response["Location"] == reverse("app:entity_create")
+    assert response.status_code == 200
+    assert "Add your first entity" in response.content.decode()
 
 
 def test_the_entity_create_page_itself_stays_reachable(client: Client, org_owner: User) -> None:
@@ -285,10 +287,10 @@ def test_suspension_in_one_organisation_does_not_affect_another(
     signed_in = sign_in(client, suspended_user)
     response = signed_in.get("/app/")
 
-    # `other_org` owns no entity in this test, so the second organisation's own
-    # gate — not a refusal — is what fires next.
-    assert response.status_code == 302
-    assert response["Location"] == reverse("app:entity_create")
+    # `other_org` owns no entity in this test, so its own first-run dashboard —
+    # not a refusal — is what renders next.
+    assert response.status_code == 200
+    assert "Add your first entity" in response.content.decode()
     assert response.wsgi_request.tenant == other_org
 
 

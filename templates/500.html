@@ -1,0 +1,39 @@
+{% load i18n static %}<!doctype html>
+{% comment %}
+  Django's own generic 500, restyled. Rendered with no context at all — Django
+  does not run context processors for the server-error handler, deliberately,
+  because whatever broke may have broken them too — so this template reads
+  nothing beyond the URL config and the static pipeline, both independent of
+  the request that failed.
+
+  Says nothing about *what* failed. The detail belongs in the server log
+  (every view that talks to an external service already logs its own
+  exception — see `stacos.accounts.views._start_verification_safely`); a
+  stack trace or an exception class name on the page is a technical detail
+  reaching a business user who cannot act on it, and a lead for anyone else.
+{% endcomment %}
+<html lang="en-in" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% translate "Something went wrong" %} · STACOS</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" href="{% static 'favicon.svg' %}" type="image/svg+xml">
+</head>
+<body class="d-flex flex-column min-vh-100" style="background: var(--stacos-surface-sunken);">
+  <main class="flex-grow-1 d-flex align-items-center justify-content-center px-3">
+    <div class="empty-state" style="max-width: 30rem;">
+      <svg class="empty-state__icon" viewBox="0 0 48 48" fill="none" stroke="currentColor"
+           stroke-width="1.5" aria-hidden="true">
+        <path d="M24 4l20 34H4L24 4z"/><path d="M24 20v8M24 32v.3"/>
+      </svg>
+      <h1 class="empty-state__title">{% translate "Something went wrong on our end" %}</h1>
+      <p class="empty-state__body">
+        {% translate "Nothing you did caused this. Please try again in a moment — if it keeps happening, our team has already been notified." %}
+      </p>
+      <a class="btn btn-primary" href="/">{% translate "Back to STACOS" %}</a>
+    </div>
+  </main>
+</body>
+</html>
