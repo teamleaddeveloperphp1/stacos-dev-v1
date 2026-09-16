@@ -1,0 +1,108 @@
+{% load i18n %}
+{% comment %}
+  Deferred, not applicable and disputed are not stages of progress — they are
+  exceptions to needing one, and the status chip above already names which.
+  This is what explains *why*, in place of the "is this submitted?" question
+  that would otherwise be the wrong thing to ask about an obligation somebody
+  has already ruled off the happy path.
+{% endcomment %}
+{% if obligation.state == "DEFERRED" %}
+  <div class="callout callout--info">
+    <h3 class="card__title card__title--section mt-0">{% translate "Deferred" %}</h3>
+    {% if off_path_event.note %}<p class="mb-1">{{ off_path_event.note }}</p>{% endif %}
+    <p class="text-muted small mb-2">
+      {% if off_path_event %}
+        {% blocktranslate with who=off_path_event.actor_label when=off_path_event.occurred_at|date:"j M Y" %}
+          {{ who }}, {{ when }}
+        {% endblocktranslate %}
+      {% endif %}
+      {% if off_path_suppression.expires_on %}
+        {% blocktranslate with when=off_path_suppression.expires_on|date:"j M Y" %}
+          · Planned to come back to this on {{ when }}
+        {% endblocktranslate %}
+      {% endif %}
+    </p>
+    <p class="text-muted small mb-2">
+      {% translate "The statutory due date above has not moved, and this will still go overdue on schedule." %}
+    </p>
+    {% if resume_action %}
+      <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+            hx-target="#obligation-panel" hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="target" value="{{ resume_action.target }}">
+        <button class="btn btn-sm btn-primary" type="submit">{{ resume_action.label }}</button>
+      </form>
+    {% endif %}
+  </div>
+
+{% elif obligation.state == "NOT_APPLICABLE" %}
+  <div class="callout">
+    <h3 class="card__title card__title--section mt-0">{% translate "Not applicable" %}</h3>
+    {% if off_path_event.note %}<p class="mb-1">{{ off_path_event.note }}</p>{% endif %}
+    <p class="text-muted small mb-2">
+      {% if off_path_event %}
+        {% blocktranslate with who=off_path_event.actor_label when=off_path_event.occurred_at|date:"j M Y" %}
+          Marked not applicable by {{ who }}, {{ when }}
+        {% endblocktranslate %}
+      {% endif %}
+    </p>
+    {% if resume_action %}
+      <details class="action-tile">
+        <summary>
+          <span class="action-tile__label">{{ resume_action.label }}</span>
+          <span class="action-tile__hint">{% translate "Provide a reason" %}</span>
+        </summary>
+        <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+              hx-target="#obligation-panel" hx-swap="outerHTML"
+              class="action-tile__form">
+          {% csrf_token %}
+          <input type="hidden" name="target" value="{{ resume_action.target }}">
+          <label class="form-label" for="reinstate-note">
+            {% translate "Reason" %}<span class="asteriskField">*</span>
+          </label>
+          <textarea class="form-control form-control-sm" id="reinstate-note"
+                    name="note" required rows="2"
+                    placeholder="{% translate 'Why? (recorded)' %}"></textarea>
+          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ resume_action.label }}</button>
+        </form>
+      </details>
+    {% endif %}
+  </div>
+
+{% elif obligation.state == "DISPUTED" %}
+  <div class="callout callout--warning">
+    <h3 class="card__title card__title--section mt-0">{% translate "Disputed" %}</h3>
+    {% if off_path_event.note %}<p class="mb-1">{{ off_path_event.note }}</p>{% endif %}
+    <p class="text-muted small mb-2">
+      {% if off_path_event %}
+        {% blocktranslate with who=off_path_event.actor_label when=off_path_event.occurred_at|date:"j M Y" %}
+          Marked disputed by {{ who }}, {{ when }}
+        {% endblocktranslate %}
+      {% endif %}
+    </p>
+    <p class="text-muted small mb-2">{% translate "How was it resolved?" %}</p>
+    <div class="action-tiles">
+      {% for action in dispute_resolution_actions %}
+        <details class="action-tile">
+          <summary>
+            <span class="action-tile__label">{{ action.label }}</span>
+            <span class="action-tile__hint">{% translate "Provide a reason" %}</span>
+          </summary>
+          <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+                hx-target="#obligation-panel" hx-swap="outerHTML"
+                class="action-tile__form">
+            {% csrf_token %}
+            <input type="hidden" name="target" value="{{ action.target }}">
+            <label class="form-label" for="dispute-note-{{ forloop.counter }}">
+              {% translate "Reason" %}<span class="asteriskField">*</span>
+            </label>
+            <textarea class="form-control form-control-sm" id="dispute-note-{{ forloop.counter }}"
+                      name="note" required rows="2"
+                      placeholder="{% translate 'Why? (recorded)' %}"></textarea>
+            <button class="btn btn-sm btn-outline-secondary" type="submit">{{ action.label }}</button>
+          </form>
+        </details>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}

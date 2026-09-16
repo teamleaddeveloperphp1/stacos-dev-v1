@@ -121,7 +121,10 @@ def test_ascending_pagination_sorts_nulls_last(materialised: Entity) -> None:
     to agree with the ordering about where nulls sit, or the page containing the
     boundary drops rows.
     """
+    from django.utils import timezone
+
     from stacos.obligations.models import ObligationInstance
+    from stacos.obligations.queries import annotate_status
     from stacos.obligations.queries import keyset_page as calendar_page
 
     with platform_scope(reason="test-fixture"):
@@ -137,7 +140,12 @@ def test_ascending_pagination_sorts_nulls_last(materialised: Entity) -> None:
         ).count()
 
     with tenant_context(tenant_ids=materialised.tenant_id, reason="test"):
-        queryset = ObligationInstance.objects.filter(entity=materialised)
+        # `queries.keyset_page` orders on `priority_rank` as well as `due_date`
+        # now, so — like every real caller — the queryset has to carry that
+        # annotation before it gets here; see `annotate_status`.
+        queryset = annotate_status(
+            ObligationInstance.objects.filter(entity=materialised), as_of=timezone.localdate()
+        )
 
         walked: list[Any] = []
         cursor = ""

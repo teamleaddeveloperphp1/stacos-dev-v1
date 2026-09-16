@@ -1,0 +1,15 @@
+{% load i18n %}
+{% comment %}
+  The "Audit trail" card, as its own fragment with a stable id.
+
+  Every status change happens inside `#obligation-panel`, which is all that
+  `obligation_transition`/`obligation_status` swap — so without this, the
+  history sitting right beside it would show yesterday's timeline until the
+  next full reload, which is exactly backwards for the one page whose entire
+  point is "what has happened to this obligation." Both endpoints send this
+  back out of band alongside their main response instead.
+{% endcomment %}
+<section class="card" id="obligation-audit-trail">
+  <h2 class="card__title"><c-icon name="history" size="14" /> {% translate "Audit trail" %}</h2>
+  {% include "obligations/_fragments/timeline.html" %}
+</section>

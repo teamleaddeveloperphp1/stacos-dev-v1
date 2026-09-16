@@ -50,6 +50,11 @@ GLOBAL_MODEL_ALLOWLIST: dict[str, str] = {
     "accounts.User": "Global identity, deliberately not owned by a tenant.",
     "accounts.PendingVerification": "Pre-authentication; no tenant exists yet.",
     "accounts.TrustedDevice": "Belongs to a user across all their tenants.",
+    "obligations.CalendarFeedToken": (
+        "Belongs to a user across all their tenants; an external calendar app "
+        "polls it with no session, so scope is re-resolved from the owning "
+        "user's own membership on every fetch instead of being stored here."
+    ),
     "accounts.UserSession": "Belongs to a user across all their tenants.",
     "accounts.MessageSpendLedger": "Platform-level cost control.",
     # The tenant table cannot be scoped by itself.

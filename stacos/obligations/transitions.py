@@ -48,6 +48,7 @@ __all__ = [
     "complete_step",
     "ensure_steps",
     "nudge",
+    "outstanding_mandatory_evidence",
     "record_completion",
     "record_pending",
     "reopen_step",
@@ -70,6 +71,38 @@ class TransitionResult:
     event: ObligationEvent
 
 
+def outstanding_mandatory_evidence(obligation: ObligationInstance) -> list[str]:
+    """Labels of the evidence the current definition marks ``mandatory_for_close``
+    that this obligation does not yet have on file.
+
+    The register has exactly one place evidence can live today — the single
+    acknowledgement upload — so "on file" means that document is attached.
+    That is a coarser question than "is item X specifically attached", but it
+    is the honest question this data model can answer; a per-requirement
+    evidence store is a bigger change than a status-transition guard should
+    make on its own.
+
+    Deliberately a plain function rather than folded into
+    :func:`available_actions` alone: :func:`apply_transition` needs the exact
+    same check to actually enforce the guard, not merely hide a button.
+    """
+    if obligation.acknowledgement:
+        return []
+    from stacos.catalog.models import DefinitionVersion
+
+    requirements = (
+        DefinitionVersion.objects.filter(
+            definition__code=obligation.definition_code,
+            version=obligation.definition_version,
+        )
+        .values_list("evidence_requirements", flat=True)
+        .first()
+    )
+    if not requirements:
+        return []
+    return [item["label"] for item in requirements if item.get("mandatory_for_close") and item.get("label")]
+
+
 def available_actions(
     obligation: ObligationInstance,
     *,
@@ -80,10 +113,20 @@ def available_actions(
     Used to render the action menu. Filtering here is a courtesy to the user, not
     a security boundary — :func:`apply_transition` re-checks everything, because a
     button that is merely absent from the page is not absent from the network.
+
+    A move whose evidence is still outstanding is dropped rather than shown and
+    left to fail: offering "Close" only to reject it is a worse experience than
+    not offering it, and the "What you'll need" card on the detail page already
+    says what is missing.
     """
     if obligation.is_superseded or obligation.is_archived:
         return ()
-    return allowed_transitions(obligation.state, permissions=permissions)
+    moves = allowed_transitions(obligation.state, permissions=permissions)
+    if any(move.requires_mandatory_evidence for move in moves) and outstanding_mandatory_evidence(
+        obligation
+    ):
+        moves = tuple(move for move in moves if not move.requires_mandatory_evidence)
+    return moves
 
 
 @transaction.atomic
@@ -96,6 +139,7 @@ def apply_transition(
     note: str = "",
     filing_reference: str = "",
     filed_on: date | None = None,
+    defer_until: date | None = None,
     as_of: date | None = None,
 ) -> TransitionResult:
     """Move an obligation to ``target``, or explain why not.
@@ -143,6 +187,15 @@ def apply_transition(
             code="reference_required",
         )
 
+    if move.requires_mandatory_evidence:
+        missing = outstanding_mandatory_evidence(obligation)
+        if missing:
+            raise TransitionError(
+                _("Attach the required evidence first: %(items)s.")
+                % {"items": ", ".join(missing)},
+                code="evidence_required",
+            )
+
     previous_state = obligation.state
     now = timezone.now()
     today = as_of or timezone.localdate()
@@ -174,7 +227,9 @@ def apply_transition(
     # Dismissing or deferring has to survive the nightly rebuild, or the client
     # finds it back tomorrow morning and stops trusting the calendar.
     if target in {State.NOT_APPLICABLE, State.DEFERRED}:
-        _record_suppression(obligation, target=target, reason=note, actor=actor)
+        _record_suppression(
+            obligation, target=target, reason=note, actor=actor, expires_on=defer_until
+        )
     elif previous_state in {State.NOT_APPLICABLE, State.DEFERRED}:
         _revoke_suppression(obligation)
 
@@ -212,6 +267,7 @@ def _record_suppression(
     target: str,
     reason: str,
     actor: Any,
+    expires_on: date | None = None,
 ) -> None:
     """Persist a dismissal as an input to future planning.
 
@@ -219,6 +275,13 @@ def _record_suppression(
     month does not apply" and "this never applies to us" are different claims, and
     only the user knows which they mean. The broader form is offered separately in
     the UI, with its consequence spelled out.
+
+    ``expires_on`` is the planned return date for a deferral — the model has
+    carried it since ``ObligationSuppression`` was written, but nothing ever
+    passed one through, so every "Defer" was indefinite regardless of what the
+    user actually meant by it. Meaningless for ``NOT_APPLICABLE``: there is no
+    "until" to a rule not applying, so a caller passing one there is simply
+    ignored rather than silently accepted as if it meant something.
     """
     ObligationSuppression.objects.update_or_create(
         entity_id=obligation.entity_id,
@@ -235,6 +298,7 @@ def _record_suppression(
             "reason": reason,
             "created_by": actor if getattr(actor, "is_authenticated", False) else None,
             "revoked_at": None,
+            "expires_on": expires_on if target == State.DEFERRED else None,
         },
     )
 

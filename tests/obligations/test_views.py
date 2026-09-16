@@ -125,8 +125,14 @@ def test_the_calendar_list_has_a_bounded_query_count(
     ``select_related`` on entity and assignee is what keeps this flat. An upper
     bound rather than an exact count: adding a legitimate query should not fail
     the build, but an N+1 turns ten into sixty and blows straight through it.
-    (The entity filter's own dropdown options are one more query, hence 15
-    rather than 14.)
+    (The entity filter's own dropdown options are one more query, and the
+    "Total" figure above the table is a second — a single ``COUNT(*)`` on the
+    first screen of a filter combination, never repeated on "load more" — 16
+    rather than 14. The workload forecast adds two aggregates
+    (``weekly_workload``, ``overdue_aging``) and the overdue penalty exposure
+    adds two more — one for the overdue rows' own dates, one batched lookup of
+    every distinct definition version's penalty rules — hence 20. All four are
+    skipped on "load more" the same way ``total`` is, see ``calendar_list``.)
     """
     with platform_scope(reason="test"):
         assert ObligationInstance.objects.filter(entity=materialised).count() > 50
@@ -135,7 +141,7 @@ def test_the_calendar_list_has_a_bounded_query_count(
     # view rather than the sign-in.
     signed_in.get(reverse("compliance:calendar"))
 
-    with django_assert_max_num_queries(15):  # type: ignore[operator]
+    with django_assert_max_num_queries(20):  # type: ignore[operator]
         response = signed_in.get(reverse("compliance:calendar"))
     assert response.status_code == 200
 
@@ -180,9 +186,13 @@ def test_filters_narrow_the_list(signed_in: Client, materialised: Entity) -> Non
     size of fifty, two different filters can easily produce pages of near
     identical size while containing completely different rows.
     """
+    # TAX_INDIRECT (GST), not CORPORATE_SECRETARIAL: the catalog loaded by the
+    # `materialised` fixture only carries GST/income-tax/TDS definitions —
+    # MCA and other categories were dropped from this fork's catalog and no
+    # longer materialise anything to filter on.
     response = signed_in.get(
         reverse("compliance:calendar"),
-        {"category": "CORPORATE_SECRETARIAL", "status": "all"},
+        {"category": "TAX_INDIRECT", "status": "all"},
         headers={"HX-Request": "true"},
     )
     assert response.status_code == 200
@@ -194,7 +204,7 @@ def test_filters_narrow_the_list(signed_in: Client, materialised: Entity) -> Non
         categories = set(
             ObligationInstance.objects.filter(pk__in=shown).values_list("category", flat=True)
         )
-    assert categories == {"CORPORATE_SECRETARIAL"}, f"filter leaked other categories: {categories}"
+    assert categories == {"TAX_INDIRECT"}, f"filter leaked other categories: {categories}"
 
 
 def test_pending_and_completed_filters_agree_with_status_counts(
@@ -228,7 +238,12 @@ def test_pending_and_completed_filters_agree_with_status_counts(
 
 
 def _collect_all_rows(client: Client, status: str) -> list[str]:
-    """Every row id behind a status filter, walking the keyset cursor.
+    """Every row id behind a status filter, walking the keyset cursor."""
+    return _collect_all_rows_with(client, {"status": status})
+
+
+def _collect_all_rows_with(client: Client, base_params: dict[str, str]) -> list[str]:
+    """Every row id behind arbitrary querystring params, walking the keyset cursor.
 
     A page is 50 rows and the fixture materialises well over that, so reading
     only the first page would silently under-count a broad bucket like
@@ -237,7 +252,7 @@ def _collect_all_rows(client: Client, status: str) -> list[str]:
     ids: list[str] = []
     cursor = ""
     while True:
-        params = {"status": status}
+        params = dict(base_params)
         if cursor:
             params["cursor"] = cursor
         response = client.get(
@@ -272,6 +287,104 @@ def test_due_30_filter_matches_status_counts_and_stays_in_window(
         states = set(rows.values_list("state", flat=True))
         assert states.isdisjoint({"FILED", "CLOSED", "NOT_APPLICABLE"}), states
         assert all(as_of <= row.due_date <= as_of + timedelta(days=30) for row in rows)
+
+
+def test_due_90_filter_matches_status_counts_and_stays_in_window(
+    signed_in: Client, materialised: Entity
+) -> None:
+    """Same contract as the 30-day filter, one window wider."""
+    from stacos.obligations.queries import status_counts
+
+    as_of = timezone.localdate()
+    with platform_scope(reason="test"):
+        expected = status_counts(as_of=as_of)["due_90"]
+
+    shown = _collect_all_rows(signed_in, "due_90")
+    assert len(shown) == expected
+
+    with platform_scope(reason="test"):
+        rows = ObligationInstance.objects.filter(pk__in=shown)
+        states = set(rows.values_list("state", flat=True))
+        assert states.isdisjoint({"FILED", "CLOSED", "NOT_APPLICABLE"}), states
+        assert all(as_of <= row.due_date <= as_of + timedelta(days=90) for row in rows)
+
+
+def test_no_status_param_defaults_to_latest(signed_in: Client, materialised: Entity) -> None:
+    """A first visit to the calendar — no ``status`` in the querystring at all —
+    must open on "Due now" (overdue, of any age, plus the next 90 days), not
+    "Everything open".
+
+    An explicit ``status=`` (the user picking "Everything open" from the
+    dropdown) is a different request and must still fall through to the old
+    behaviour, so the two are asserted against each other rather than only
+    against ``status_counts``.
+    """
+    from stacos.obligations.queries import status_counts
+
+    as_of = timezone.localdate()
+    with platform_scope(reason="test"):
+        expected_latest = status_counts(as_of=as_of)["latest"]
+        expected_open = status_counts(as_of=as_of)["open"]
+    assert expected_open > expected_latest, "fixture must have open rows outside the 90-day window"
+
+    first_page = signed_in.get(reverse("compliance:calendar"), headers={"HX-Request": "true"})
+    assert first_page.status_code == 200
+    assert first_page.context["status"] == "latest"
+    assert b'<option value="latest" selected>' in first_page.content
+
+    shown = _collect_all_rows_with(signed_in, {})
+    assert len(shown) == expected_latest
+
+    with platform_scope(reason="test"):
+        rows = ObligationInstance.objects.filter(pk__in=shown)
+        assert all(
+            row.due_date is not None and row.due_date <= as_of + timedelta(days=90) for row in rows
+        )
+
+    everything_open = signed_in.get(
+        reverse("compliance:calendar"), {"status": ""}, headers={"HX-Request": "true"}
+    )
+    assert everything_open.status_code == 200
+    assert everything_open.context["status"] == ""
+    assert len(_collect_all_rows_with(signed_in, {"status": ""})) == expected_open
+
+
+def test_latest_status_filter_includes_the_backlog(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """ "Due now" is the calendar's default landing view, and a window that
+    silently drops the backlog is worse than no window at all: it must show
+    overdue rows regardless of age, unlike the explicit "Due in 90 days"
+    filter, which stays upcoming-only.
+    """
+    as_of = timezone.localdate()
+    with platform_scope(reason="test"):
+        an_obligation.due_date = as_of - timedelta(days=400)
+        an_obligation.save(update_fields=["due_date"])
+
+    shown_default = _collect_all_rows_with(signed_in, {})
+    assert str(an_obligation.pk) in shown_default
+
+    shown_due_90 = _collect_all_rows(signed_in, "due_90")
+    assert str(an_obligation.pk) not in shown_due_90, "due_90 must stay upcoming-only"
+
+
+def test_the_defaulted_filter_stays_visibly_marked_without_focus(
+    signed_in: Client, materialised: Entity
+) -> None:
+    """The default is silent otherwise: nothing in the URL says a filter is
+    doing the narrowing, so a short list on arrival reads as "nothing is
+    due" rather than "due in 30 days" — see `form-select--filtered` in
+    `assets/scss/components/_forms.scss`. "Everything open" — a filter that
+    narrows nothing — must not carry the same marker.
+    """
+    defaulted = signed_in.get(reverse("compliance:calendar"), headers={"HX-Request": "true"})
+    assert b"form-select--filtered" in defaulted.content
+
+    everything_open = signed_in.get(
+        reverse("compliance:calendar"), {"status": ""}, headers={"HX-Request": "true"}
+    )
+    assert b"form-select--filtered" not in everything_open.content
 
 
 def test_the_entity_filter_narrows_the_list(
@@ -344,13 +457,20 @@ def test_an_unknown_cursor_starts_the_list_again(signed_in: Client, materialised
 
 
 def test_a_cursor_request_returns_only_rows(signed_in: Client, materialised: Entity) -> None:
-    first = signed_in.get(reverse("compliance:calendar"), headers={"HX-Request": "true"})
+    # "all" rather than the default "due in 30 days" — pagination mechanics are
+    # under test here, and the default's narrower window has fewer rows than a
+    # page, which would exercise nothing.
+    first = signed_in.get(
+        reverse("compliance:calendar"), {"status": "all"}, headers={"HX-Request": "true"}
+    )
     body = first.content.decode()
     assert "calendar-load-more" in body, "a full calendar should paginate"
 
     cursor = body.split("?cursor=")[1].split("&")[0].split('"')[0]
     more = signed_in.get(
-        reverse("compliance:calendar"), {"cursor": cursor}, headers={"HX-Request": "true"}
+        reverse("compliance:calendar"),
+        {"status": "all", "cursor": cursor},
+        headers={"HX-Request": "true"},
     )
     assert more.status_code == 200
     assert b"data-table__toolbar" not in more.content
@@ -361,10 +481,19 @@ def test_a_cursor_request_returns_only_rows(signed_in: Client, materialised: Ent
 # ===========================================================================
 
 
-def test_a_transition_updates_the_panel_and_the_counters(
+def test_a_transition_updates_the_panel(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
-    """One request, several regions, no refetch."""
+    """The panel comes back re-rendered, with no dangling swap for a region
+    this page never has.
+
+    This form only ever posts from the standalone obligation page, which has
+    no `#calendar-counts` in its DOM — that strip belongs to the calendar list.
+    An OOB fragment aimed at it used to ride along anyway, costing a query and
+    logging `htmx:oobErrorNoTarget` on every transition for a swap that could
+    never land; the bulk actions on the calendar itself still carry it, because
+    there it does.
+    """
     response = signed_in.post(
         reverse("compliance:transition", args=[an_obligation.pk]),
         {"target": State.IN_PREPARATION},
@@ -373,8 +502,13 @@ def test_a_transition_updates_the_panel_and_the_counters(
 
     assert response.status_code == 200
     assert b"obligation-panel" in response.content
-    assert b"calendar-counts" in response.content
-    assert "HX-Trigger" in response.headers
+    assert b"calendar-counts" not in response.content
+    # `obligation-audit-trail` rides along OOB on every transition (a new row
+    # in the audit trail is not optional), which is exactly why this uses
+    # `HX-Trigger-After-Swap` rather than the immediate header — see `oob()`'s
+    # own docstring on why an OOB swap changes which one is safe.
+    assert b"obligation-audit-trail" in response.content
+    assert "HX-Trigger-After-Swap" in response.headers
 
     with platform_scope(reason="test"):
         an_obligation.refresh_from_db()
@@ -443,8 +577,8 @@ def test_assigning_hands_the_obligation_to_a_colleague(
     assert response.status_code == 200
     assert f"obligation-{an_obligation.pk}".encode() in response.content
     assert b"obligation-panel" in response.content
-    assert "HX-Trigger" in response.headers
-    assert "stacos:modal-close" in response.headers["HX-Trigger"]
+    assert "HX-Trigger-After-Swap" in response.headers
+    assert "stacos:modal-close" in response.headers["HX-Trigger-After-Swap"]
 
     with platform_scope(reason="test"):
         an_obligation.refresh_from_db()
@@ -542,8 +676,8 @@ def test_nudging_notifies_the_assignee_and_logs_it(
     )
 
     assert response.status_code == 200
-    assert "HX-Trigger" in response.headers
-    assert "nudged" in response.headers["HX-Trigger"].lower()
+    assert "HX-Trigger-After-Swap" in response.headers
+    assert "nudged" in response.headers["HX-Trigger-After-Swap"].lower()
 
     with platform_scope(reason="test"):
         from stacos.notifications.models import Notification
@@ -695,11 +829,23 @@ def test_answering_no_records_the_reason_and_leaves_the_state_alone(
     """The load-bearing assertion in this file.
 
     An obligation somebody has explained is still owed, still dated and still
-    goes overdue on schedule. The day an explanation starts counting as progress
-    is the day the register stops being worth reading — so the state, the due
-    date and the display status are all asserted unchanged, not just the state.
+    goes overdue on schedule — the day an explanation starts counting as
+    progress is the day the register stops being worth reading. ``state``, the
+    due date and ``filed_on`` are asserted unchanged for exactly that reason.
+
+    ``display_status`` is a different matter, and does change: from
+    ``not-started`` (nothing said yet) to ``pending`` (something has been
+    said). That word change is not progress either — overdue and due-soon
+    both still override it, see
+    ``stacos.engine.lifecycle.derive_display_status`` — it is only the
+    difference between an obligation nobody has looked at and one somebody
+    has already given an account of. Pushed into the future first so this is
+    unambiguously not overdue or due soon, which would otherwise legitimately
+    keep outranking ``pending``.
     """
     with platform_scope(reason="test"):
+        an_obligation.due_date = date.today() + timedelta(days=180)
+        an_obligation.save(update_fields=["due_date"])
         due_before = an_obligation.due_date
 
     response = signed_in.post(
@@ -725,6 +871,45 @@ def test_answering_no_records_the_reason_and_leaves_the_state_alone(
         assert an_obligation.events.filter(
             kind=ObligationEvent.Kind.NOTE, note__contains="purchase register"
         ).exists()
+
+    body = response.content.decode()
+    assert "status-chip--pending" in body
+    # The colour and the word must move together — a chip that turned pending
+    # by class while still reading "Not started" is exactly the bug this
+    # closes (the chip used to be handed `obligation.get_state_display`,
+    # which reads the stored `state` and never moved). Scoped to the chip's
+    # own `aria-label`, not the header at large: the header now *also* shows
+    # the raw work status next to it on purpose ("Work status: Not started"),
+    # precisely so that fact is not lost the moment the chip's word changes —
+    # see the manual-tracking status model's own note on keeping the two
+    # concepts separate rather than one variable pretending to be both.
+    assert 'aria-label="Status: Pending"' in body
+
+
+def test_an_untouched_obligation_shows_not_started_not_on_track(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """Nothing recorded yet is an attention state, not a quiet green one — the
+    gap this closes: ``derive_display_status``'s old fallback read every
+    untouched, not-yet-due obligation as ``on-track``, the same word and
+    colour the rest of the product uses for "comfortably ahead".
+
+    Pushed well into the future so this is unambiguously "not due soon"
+    rather than "overdue" or "due soon" — either of which would legitimately
+    take priority over ``not-started``, and the fixture's own due date is not
+    guaranteed to land outside that window on every day this test runs.
+    """
+    with platform_scope(reason="test"):
+        an_obligation.due_date = date.today() + timedelta(days=180)
+        an_obligation.save(update_fields=["due_date"])
+        assert an_obligation.pending_reason == ""
+
+    response = signed_in.get(
+        reverse("compliance:detail", args=[an_obligation.pk]), headers={"HX-Request": "true"}
+    )
+
+    assert response.status_code == 200
+    assert "status-chip--not-started" in response.content.decode()
 
 
 def test_answering_no_needs_an_actual_reason(
@@ -910,7 +1095,7 @@ def test_the_detail_page_asks_one_question_rather_than_rendering_a_step_rail(
     """
     response = signed_in.get(reverse("compliance:detail", args=[a_24q_obligation.pk]))
     assert response.status_code == 200
-    assert b"Is this filing completed?" in response.content
+    assert b"Has this been submitted?" in response.content
     assert b"Confirm TDS applies this quarter" not in response.content
     assert b"obligation-checklist" not in response.content
 
@@ -924,34 +1109,240 @@ def test_ensure_steps_is_idempotent(a_24q_obligation: ObligationInstance) -> Non
         assert a_24q_obligation.steps.count() == 7
 
 
-def test_the_question_offers_both_answers_and_no_workflow_buttons(
+def test_the_question_offers_both_answers_and_start_compliance_but_no_maker_checker(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
-    """Both answers, equally weighted, and none of the flow that used to be here.
+    """Both answers, equally weighted, and a clear, named next step beside
+    them — but none of the review-chain moves nobody manually walks through.
 
-    "Request information" is named explicitly because it is the one the flow was
-    most often mistaken for progress: asking the client something is not a state
-    the register needs to model, and the page no longer offers it.
+    "Start compliance" is genuinely offered here, not tucked behind a second
+    click: a solo user should see it the moment they land on a fresh
+    obligation, not go looking for it. "Request information", "Submit for
+    review" and "Approve for filing" are not offered anywhere on this page —
+    that part of the old maker-checker table stays exactly as absent as it
+    already was.
     """
     response = signed_in.get(reverse("compliance:detail", args=[an_obligation.pk]))
     body = response.content.decode()
 
     assert response.status_code == 200
-    assert "Is this filing completed?" in body
-    assert "Yes, it is done" in body
+    assert "Has this been submitted?" in body
+    assert "Yes, submitted" in body
     assert "Not yet" in body
     assert "Acknowledgement number" in body
     assert "Acknowledgement document" in body
+    assert "Start compliance" in body
 
-    for gone in ("Request information", "Start work", "Submit for review", "Approve for filing"):
-        assert gone not in body, f"{gone!r} is still offered on the detail page"
+    for gone in ("Request information", "Submit for review", "Approve for filing"):
+        assert gone not in body, f"{gone!r} should not be offered to a solo tracker"
 
 
-def test_an_obligation_off_the_happy_path_is_not_asked_whether_it_is_filed(
+def test_start_compliance_moves_to_in_progress_and_is_reflected_on_reload(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """The exact loop the manual tracker exists for: take the named action,
+    see it stick — both in the response and on a fresh load of the page."""
+    with platform_scope(reason="test"):
+        assert an_obligation.state == State.NOT_STARTED
+
+    response = signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.IN_PREPARATION},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+    assert "Work status: In progress" in response.content.decode()
+
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+        assert an_obligation.state == State.IN_PREPARATION
+
+    reloaded = signed_in.get(reverse("compliance:detail", args=[an_obligation.pk]))
+    assert "Work status: In progress" in reloaded.content.decode()
+    # The one correction "Start compliance" needs: undoing a mistaken click is
+    # a typo, not a judgement call, so it is offered right on the page.
+    assert "Move back to not started" in reloaded.content.decode()
+
+
+def test_complete_modal_shows_the_submission_summary_and_evidence(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """"Mark as completed" is a review, not a bare click: what was submitted,
+    when, under what reference, and which evidence this definition asked
+    for — reachable at all only once that evidence is actually on file (see
+    ``test_completing_is_refused_without_the_required_evidence`` for the
+    other half of that guard)."""
+    signed_in.post(
+        reverse("compliance:status", args=[an_obligation.pk]),
+        {
+            "answer": "yes",
+            "filed_on": "2026-08-10",
+            "filing_reference": "AA240810123456X",
+            "acknowledgement": SimpleUploadedFile(
+                "ack.pdf", b"%PDF-1.4", content_type="application/pdf"
+            ),
+        },
+        headers={"HX-Request": "true"},
+    )
+
+    response = signed_in.get(
+        reverse("compliance:complete", args=[an_obligation.pk]), headers={"HX-Request": "true"}
+    )
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert "AA240810123456X" in body
+    assert "10 Aug 2026" in body
+    # GSTR-3B marks two evidence items mandatory, and the one document
+    # attached above satisfies both — see `outstanding_mandatory_evidence`.
+    assert "Attached" in body
+    assert "Confirm completion" in body
+
+
+def test_completing_is_refused_without_the_required_evidence(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """The modal cannot be reached at all once ``Close`` is not on offer —
+    see ``test_closing_is_refused_without_the_required_evidence`` in
+    ``test_transitions.py`` for the guard this relies on."""
+    signed_in.post(
+        reverse("compliance:status", args=[an_obligation.pk]),
+        {"answer": "yes", "filed_on": "2026-08-10", "filing_reference": "AA240810123456X"},
+        headers={"HX-Request": "true"},
+    )
+
+    response = signed_in.get(
+        reverse("compliance:complete", args=[an_obligation.pk]), headers={"HX-Request": "true"}
+    )
+    assert response.status_code == 404
+
+    detail = signed_in.get(reverse("compliance:detail", args=[an_obligation.pk]))
+    assert "Mark as completed" not in detail.content.decode()
+
+
+def test_reopen_requires_a_reason(signed_in: Client, an_obligation: ObligationInstance) -> None:
+    """"Reopen" is the one transition that has always needed a note — the
+    modal cannot be bypassed into skipping it."""
+    signed_in.post(
+        reverse("compliance:status", args=[an_obligation.pk]),
+        {"answer": "yes", "filed_on": "2026-08-10", "filing_reference": "AA240810123456X"},
+        headers={"HX-Request": "true"},
+    )
+    signed_in.post(
+        reverse("compliance:acknowledgement", args=[an_obligation.pk]),
+        {"acknowledgement": SimpleUploadedFile("ack.pdf", b"%PDF-1.4", content_type="application/pdf")},
+        headers={"HX-Request": "true"},
+    )
+    signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.CLOSED},
+        headers={"HX-Request": "true"},
+    )
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+        assert an_obligation.state == State.CLOSED
+
+    modal = signed_in.get(
+        reverse("compliance:reopen", args=[an_obligation.pk]), headers={"HX-Request": "true"}
+    )
+    assert modal.status_code == 200
+    assert "Why?" in modal.content.decode()
+
+    rejected = signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.FILED},
+        headers={"HX-Request": "true"},
+    )
+    assert rejected.status_code == 422
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+    assert an_obligation.state == State.CLOSED, "a reopen with no reason must not go through"
+
+    accepted = signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.FILED, "note": "Submission rejected by the authority."},
+        headers={"HX-Request": "true"},
+    )
+    assert accepted.status_code == 200
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+    assert an_obligation.state == State.FILED
+
+
+def test_a_mistaken_in_progress_can_be_moved_back_without_a_reason(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """The one correction the old maker-checker table never needed: nobody
+    reviewed this, so undoing it is not a judgement call worth recording a
+    reason for — unlike deferring, disputing or dismissing it outright."""
+    signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.IN_PREPARATION},
+        headers={"HX-Request": "true"},
+    )
+
+    response = signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.NOT_STARTED},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 200
+
+    with platform_scope(reason="test"):
+        an_obligation.refresh_from_db()
+    assert an_obligation.state == State.NOT_STARTED
+
+
+def test_the_timeline_names_the_status_change_plainly(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.IN_PREPARATION},
+        headers={"HX-Request": "true"},
+    )
+
+    response = signed_in.get(reverse("compliance:detail", args=[an_obligation.pk]))
+    assert "Changed status: Not started" in response.content.decode()
+
+
+def test_a_status_change_on_the_detail_page_is_reflected_on_the_calendar(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """One source of truth: the calendar reads the same row the detail page
+    just changed, not a cached or separately-tracked copy of its status.
+
+    The due date is pushed safely into the future first so the calendar's own
+    "worst true thing" ordering (overdue and due-soon both outrank a plain
+    work status) cannot mask the very word this test is checking for.
+    """
+    with platform_scope(reason="test"):
+        an_obligation.due_date = date.today() + timedelta(days=180)
+        an_obligation.save(update_fields=["due_date"])
+
+    signed_in.post(
+        reverse("compliance:transition", args=[an_obligation.pk]),
+        {"target": State.IN_PREPARATION},
+        headers={"HX-Request": "true"},
+    )
+
+    # `status=pending` is the "open, but neither overdue nor due soon" tile —
+    # the one the 180-day-out due date above actually falls into. The default
+    # landing scope (`status=latest`) is bounded to 90 days and would just
+    # drop the row, which is a fact about that scope, not about whether the
+    # calendar is showing this obligation's current status correctly.
+    response = signed_in.get(reverse("compliance:calendar"), {"status": "pending"})
+    body = response.content.decode()
+    row = body.split(f'id="obligation-{an_obligation.pk}"', 1)[1].split("</tr>", 1)[0]
+    assert "status-chip--in-progress" in row
+
+
+def test_an_obligation_off_the_happy_path_is_not_asked_whether_it_is_submitted(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
     """Deferred, disputed and not-applicable already have their answer in the
-    status chip — asking "is this filed?" about one is the wrong question."""
+    status chip — asking "has this been submitted?" about one is the wrong
+    question. Instead it gets the one card that explains *why* it is off the
+    ladder, with the reason on it and a clear way back."""
     with platform_scope(reason="test"):
         from stacos.obligations.transitions import apply_transition
 
@@ -960,15 +1351,18 @@ def test_an_obligation_off_the_happy_path_is_not_asked_whether_it_is_filed(
             target=State.DEFERRED,
             actor=None,
             permissions=frozenset({"compliance.obligation.defer", "compliance.obligation.view"}),
-            note="testing",
+            note="Waiting on the client's bank statement.",
             as_of=AS_OF,
         )
 
     response = signed_in.get(reverse("compliance:detail", args=[an_obligation.pk]))
+    body = response.content.decode()
     assert response.status_code == 200
-    assert b"Is this filing completed?" not in response.content
-    assert b"obligation-checklist" not in response.content
-    assert b'class="stepper"' not in response.content
+    assert "Has this been submitted?" not in body
+    assert "obligation-checklist" not in body
+    assert 'class="stepper"' not in body
+    assert "Waiting on the client" in body
+    assert "Resume" in body
 
 
 def test_toggling_a_step_marks_it_done_then_reopens_it(
@@ -1156,6 +1550,14 @@ def test_exposure_card_shows_rate_only_when_the_cap_is_unmodeled(
     assert "Section 271H" in body
 
 
+@pytest.mark.skip(
+    reason=(
+        "IN-MCA-AOC4 — the only catalog definition with an event-triggered "
+        "due date — was dropped from this fork's catalog (only GST/income-tax/"
+        "TDS definitions remain); nothing currently materialises to exercise "
+        "the record-event-then-reschedule flow this test covers."
+    )
+)
 def test_recording_an_event_schedules_and_rebuilds(signed_in: Client, materialised: Entity) -> None:
     """Answering "tell us your AGM date" produces a date immediately."""
     with platform_scope(reason="test"):
@@ -1178,7 +1580,39 @@ def test_recording_an_event_schedules_and_rebuilds(signed_in: Client, materialis
     assert blocked.due_date == date(2026, 10, 25)
 
 
-def test_rebuilding_the_calendar_is_safe_to_repeat(signed_in: Client, materialised: Entity) -> None:
+def test_a_forged_event_key_is_refused(signed_in: Client, materialised: Entity) -> None:
+    """The key is client-supplied. An unknown one would record an event that
+    triggers nothing and is invisible everywhere.
+
+    Relocated from ``test_event_materialisation.py`` (removed along with the
+    other MCA director-appointment tests it existed to support) — this one
+    check is catalog-independent and worth keeping.
+    """
+    response = signed_in.post(
+        reverse("compliance:event_create", args=[materialised.pk]),
+        {"key": "NOT_A_REAL_EVENT", "occurred_on": timezone.localdate().isoformat()},
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 422
+    with platform_scope(reason="test"):
+        assert not EntityEvent.objects.filter(key="NOT_A_REAL_EVENT").exists()
+
+
+def test_rebuilding_the_calendar_is_safe_to_repeat(
+    signed_in: Client, materialised: Entity, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rebuilding twice with nothing changed produces no changes the second time.
+
+    Pinned to the fixture's own ``AS_OF`` rather than the real date: the
+    planning window slides with ``as_of``, so a rebuild run today and one run
+    34 real days from now legitimately pick up different periods — that is
+    the planner working, not a break in idempotency. Idempotency only holds
+    for two rebuilds judged against the same instant.
+    """
+    from stacos.obligations import views as obligation_views
+
+    monkeypatch.setattr(obligation_views, "_today", lambda: AS_OF)
+
     url = reverse("compliance:rebuild", args=[materialised.pk])
 
     with platform_scope(reason="test"):

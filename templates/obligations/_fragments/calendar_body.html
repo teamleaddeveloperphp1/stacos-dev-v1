@@ -2,105 +2,236 @@
 
 <c-page-header title="{% translate 'Compliance calendar' %}"
                subtitle="{% translate 'Everything these entities owe, generated from their profiles. Nothing here was typed in by hand.' %}">
+  <button type="button" class="btn btn-sm btn-outline-secondary"
+          hx-get="{% url 'compliance:subscribe' %}" hx-target="#modal-container" hx-swap="innerHTML">
+    <c-icon name="link" size="14" /> {% translate "Subscribe to calendar" %}
+  </button>
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:month' %}"
      hx-get="{% url 'compliance:month' %}" hx-target="#main" hx-push-url="true">
     <c-icon name="calendar" size="14" /> {% translate "Month view" %}
   </a>
 </c-page-header>
 
-{% include "obligations/_fragments/status_counts.html" %}
+{% comment %}
+  Everything a filter change can affect — counts, active-filter chips and rows
+  — lives inside one region so a debounced keystroke or a dropdown change
+  updates all of it together. Without this, typing "gst" into the search box
+  would narrow the table while the tiles above it kept advertising the
+  tenant's whole backlog, which is exactly the "why did the count not match"
+  confusion a filtered list must not create.
+{% endcomment %}
+<div id="calendar-results">
+  {% include "obligations/_fragments/status_counts.html" %}
+  {% if workload %}
+    {% include "obligations/_fragments/workload_forecast.html" %}
+  {% endif %}
 
-<div class="data-table">
-  <div class="data-table__toolbar">
+  {% comment %}
+    Bulk selection, added on top of the existing register rather than
+    replacing it: `x-data` lives here, on the wrapper the filter toolbar and
+    the table already share, so a checkbox's native `change` event (which
+    bubbles) is all `selectedCount` needs to watch. Acting on a selection is
+    unconditionally offered, the same convention the row-level "Assign" and
+    "Confirm" controls already follow — each bulk endpoint re-checks its own
+    permission per obligation when the form is actually submitted.
+  {% endcomment %}
+  <div class="data-table" x-data="{ selectedCount: 0 }"
+       @change="selectedCount = $el.querySelectorAll('input[name=ids]:checked').length">
     {% comment %}
-      Filters swap only the table body, debounced at 250ms — typing must never
-      cost a navigation, and must never fire a request per keystroke.
-
-      The `change` trigger carries no `from:` — it listens on the form itself.
-      `from:find select` looked right with one select in the toolbar and broke
-      the moment a second one (category, then entity) was added: htmx's `find`
-      resolves like `querySelector`, matching only the *first* descendant, so
-      every select after it got no listener at all. `change` bubbles, so a
-      listener on the form catches it from any select or input inside.
+      `align-items-stretch` overrides the toolbar's own `align-items: center`
+      — written for its original single-row layout, where it *vertically*
+      centers the row's controls. Stacked as a column here (to fit the
+      filter-chip row underneath), that same rule would instead
+      *horizontally* centre the form and the chip row as blocks, squeezing
+      them into the middle of the toolbar instead of spanning it full width.
     {% endcomment %}
-    <form class="d-flex gap-2 flex-grow-1 flex-wrap"
-          hx-get="{% url 'compliance:calendar' %}"
-          hx-target="#obligation-rows"
-          hx-select="#obligation-rows"
-          hx-swap="morph"
-          hx-push-url="true"
-          hx-trigger="keyup changed delay:250ms from:find input, change"
-          hx-indicator="#calendar-spinner">
-      <input type="search" name="q" value="{{ search }}"
-             class="form-control form-control-sm" style="max-width: 18rem"
-             placeholder="{% translate 'Search obligations…' %}"
-             aria-label="{% translate 'Search obligations' %}">
+    <div class="data-table__toolbar d-flex flex-column align-items-stretch gap-2">
+      {% comment %}
+        Debounced at 250ms — typing must never cost a navigation, and must
+        never fire a request per keystroke.
 
-      <select name="status" class="form-select form-select-sm" style="max-width: 14rem"
-              aria-label="{% translate 'Filter by status' %}">
-        {% for value, label in status_filters %}
-          <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+        The `change` trigger carries no `from:` — it listens on the form
+        itself. `from:find select` looked right with one select in the
+        toolbar and broke the moment a second one (category, then entity)
+        was added: htmx's `find` resolves like `querySelector`, matching only
+        the *first* descendant, so every select after it got no listener at
+        all. `change` bubbles, so a listener on the form catches it from any
+        select or input inside.
 
-      <select name="category" class="form-select form-select-sm" style="max-width: 16rem"
-              aria-label="{% translate 'Filter by category' %}">
-        <option value="">{% translate "Every category" %}</option>
-        {% for value, label in categories %}
-          <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+        `id="calendar-filter-form"` gives the morph a stable anchor: the form
+        re-renders with the same values it already holds (they came from this
+        same request's own querystring), so morphing patches it in place
+        rather than losing focus mid-keystroke.
+      {% endcomment %}
+      <form id="calendar-filter-form" class="d-flex gap-2 flex-grow-1 flex-wrap"
+            hx-get="{% url 'compliance:calendar' %}"
+            hx-target="#calendar-results"
+            hx-select="#calendar-results"
+            hx-swap="morph"
+            hx-push-url="true"
+            hx-trigger="keyup changed delay:250ms from:find input, change"
+            hx-indicator="#calendar-spinner">
+        <input type="search" name="q" value="{{ search }}"
+               class="form-control form-control-sm" style="max-width: 18rem"
+               placeholder="{% translate 'Search by name, code, GSTIN…' %}"
+               aria-label="{% translate 'Search obligations' %}">
 
-      {% if entities %}
-        <select name="entity" class="form-select form-select-sm" style="max-width: 16rem"
-                aria-label="{% translate 'Filter by entity' %}">
-          <option value="">{% translate "Every entity" %}</option>
-          {% for row in entities %}
-            <option value="{{ row.id }}" {% if entity_id == row.id %}selected{% endif %}>
-              {{ row.name }}
-            </option>
+        {% comment %}
+          `status` defaults to "latest" the moment there is no `status` param
+          in the querystring at all — a fresh visit, most often arriving from
+          the dashboard — rather than "" ("Everything open"); see
+          `calendar_list`. That default narrows the list exactly like a
+          hand-picked one would, so it needs the same persistent marker: a
+          short list on arrival must read as "a filter is doing this" and not
+          as "there is nothing due", which the ordinary Bootstrap focus ring
+          cannot do once focus moves on.
+        {% endcomment %}
+        <select name="status"
+                class="form-select form-select-sm{% if status %} form-select--filtered{% endif %}"
+                style="max-width: 16rem"
+                aria-label="{% translate 'Filter by status' %}">
+          {% for value, label in status_filters %}
+            <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
+
+        <select name="category" class="form-select form-select-sm" style="max-width: 16rem"
+                aria-label="{% translate 'Filter by category' %}">
+          <option value="">{% translate "Every category" %}</option>
+          {% for value, label in categories %}
+            <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+
+        {% if entities %}
+          <select name="entity" class="form-select form-select-sm" style="max-width: 16rem"
+                  aria-label="{% translate 'Filter by entity' %}">
+            <option value="">{% translate "Every entity" %}</option>
+            {% for row in entities %}
+              <option value="{{ row.id }}" {% if entity_id == row.id %}selected{% endif %}>
+                {{ row.name }}
+              </option>
+            {% endfor %}
+          </select>
+        {% endif %}
+
+        <span class="htmx-indicator align-self-center" id="calendar-spinner">
+          <span class="spinner-inline"></span>
+        </span>
+      </form>
+
+      {% comment %}
+        Every active filter, named, each removable on its own — a user who
+        stacked a search term and a category has no other single place to
+        see, or undo, all of it at once. `scope_description` in the counts
+        strip above already names the date window a status implies; this row
+        is about the filters that narrowed *which rows*, not *which dates*.
+      {% endcomment %}
+      {% if active_filters %}
+        <div class="d-flex align-items-center gap-2 flex-wrap small">
+          <span class="text-muted">{% translate "Filtered by:" %}</span>
+          {% for chip in active_filters %}
+            <a class="badge-soft" href="{{ chip.href }}"
+               hx-get="{{ chip.href }}" hx-target="#main" hx-push-url="true">
+              {{ chip.label }} <span aria-hidden="true">&times;</span>
+            </a>
+          {% endfor %}
+          <a class="link-strong small" href="{% url 'compliance:calendar' %}"
+             hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
+            {% translate "Clear all" %}
+          </a>
+        </div>
       {% endif %}
+    </div>
 
-      <span class="htmx-indicator align-self-center" id="calendar-spinner">
-        <span class="spinner-inline"></span>
+    {% comment %}
+      Only ever visible once something is checked — an empty bar promising
+      actions on "0 selected" is worse than no bar at all.
+    {% endcomment %}
+    <div class="d-flex align-items-center gap-2 p-2 border-top small"
+         x-show="selectedCount > 0" x-cloak>
+      <span class="fw-semibold">
+        <span x-text="selectedCount"></span> {% translate "selected" %}
       </span>
-    </form>
-  </div>
+      <button type="button" class="btn btn-sm btn-outline-secondary"
+              hx-get="{% url 'compliance:bulk_assign' %}" hx-include="[name='ids']:checked"
+              hx-target="#modal-container" hx-swap="innerHTML">
+        {% translate "Assign to…" %}
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-danger"
+              hx-get="{% url 'compliance:bulk_not_applicable' %}" hx-include="[name='ids']:checked"
+              hx-target="#modal-container" hx-swap="innerHTML">
+        {% translate "Mark Not Applicable" %}
+      </button>
+    </div>
 
-  <div class="data-table__scroll" id="obligation-rows" aria-live="polite" aria-atomic="false">
-    <table class="table mb-0">
-      <thead>
-        <tr>
-          <th>{% translate "Obligation" %}</th>
-          <th>{% translate "Entity" %}</th>
-          <th>{% translate "Period" %}</th>
-          <th>{% translate "Due" %}</th>
-          <th>{% translate "Status" %}</th>
-          <th>{% translate "Owner" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% if obligations %}
-          {% include "obligations/_fragments/calendar_rows.html" %}
-        {% else %}
+    <div class="data-table__scroll" id="obligation-rows" aria-live="polite" aria-atomic="false">
+      <table class="table mb-0">
+        <thead>
           <tr>
-            <td colspan="6" class="p-0">
-              {% if search or status or category or entity %}
-                <c-empty-state title="{% translate 'Nothing matches that filter' %}"
-                               body="{% translate 'Try a different search term, or clear the status filter.' %}">
+            <th style="width: 2rem">
+              <input type="checkbox" class="form-check-input"
+                     aria-label="{% translate 'Select all' %}"
+                     @click="
+                       const boxes = $el.closest('.data-table').querySelectorAll('input[name=ids]');
+                       boxes.forEach((box) => { box.checked = $el.checked; });
+                       selectedCount = $el.checked ? boxes.length : 0;
+                     ">
+            </th>
+            <th>{% translate "Obligation" %}</th>
+            <th>{% translate "Entity" %}</th>
+            <th>{% translate "Period" %}</th>
+            <th>{% translate "Due" %}</th>
+            <th>{% translate "Status" %}</th>
+            <th>{% translate "Owner" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if obligations %}
+            {% include "obligations/_fragments/calendar_rows.html" %}
+          {% elif has_narrowing_filters %}
+            {% comment %}
+              A search term, category or entity picked matches nothing —
+              distinct from the status/date filter finding nothing (below):
+              this one means the *rows themselves* aren't there, not that
+              they're just outside the current window.
+            {% endcomment %}
+            <tr>
+              <td colspan="7" class="p-0">
+                <c-empty-state title="{% translate 'No matches for these filters' %}"
+                               body="{% translate 'Nothing matches this search, category or entity. Try a different term, or clear the filters below.' %}">
                   <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:calendar' %}"
                      hx-get="{% url 'compliance:calendar' %}" hx-target="#main" hx-push-url="true">
                     {% translate "Clear filters" %}
                   </a>
                 </c-empty-state>
-              {% else %}
-                {% comment %}
-                  An empty calendar during onboarding is the expected state, not
-                  an error — so the empty state explains what is missing rather
-                  than apologising.
-                {% endcomment %}
+              </td>
+            </tr>
+          {% elif counts.total %}
+            {% comment %}
+              The tenant has obligations — `counts.total` is not narrowed by
+              `status` — so an empty table means this particular status/date
+              window is genuinely clear, not that the register is empty.
+            {% endcomment %}
+            <tr>
+              <td colspan="7" class="p-0">
+                <c-empty-state title="{% translate 'Nothing due in this window' %}"
+                               body="{% translate 'Nothing matches the selected status. Everything else is outside it — widen the filter or see everything open.' %}">
+                  <a class="btn btn-sm btn-outline-secondary" href="?status="
+                     hx-get="?status=" hx-target="#main" hx-push-url="true">
+                    {% translate "Show everything open" %}
+                  </a>
+                </c-empty-state>
+              </td>
+            </tr>
+          {% else %}
+            {% comment %}
+              An empty calendar during onboarding is the expected state, not
+              an error — so the empty state explains what is missing rather
+              than apologising.
+            {% endcomment %}
+            <tr>
+              <td colspan="7" class="p-0">
                 <c-empty-state title="{% translate 'No obligations yet' %}"
                                body="{% translate 'Complete an entity profile — registrations, states, headcount — and the calendar builds itself from it.' %}">
                   <a class="btn btn-sm btn-primary" href="{% url 'app:entity_list' %}"
@@ -108,11 +239,11 @@
                     {% translate "Go to entities" %}
                   </a>
                 </c-empty-state>
-              {% endif %}
-            </td>
-          </tr>
-        {% endif %}
-      </tbody>
-    </table>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>

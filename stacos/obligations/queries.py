@@ -58,16 +58,38 @@ StrOrPromise = str | Promise
 __all__ = [
     "CategoryCount",
     "KeysetPage",
+    "PenaltyExposure",
     "WeeklyWorkload",
     "annotate_status",
+    "apply_text_filters",
     "category_counts",
     "keyset_page",
     "live",
     "overdue_aging",
+    "overdue_penalty_exposure",
+    "related_scope_instances",
+    "scaled_bars",
+    "sibling_instances",
     "status_counts",
     "upcoming",
     "weekly_workload",
 ]
+
+
+def scaled_bars(rows: Sequence[tuple[StrOrPromise, int, str]]) -> list[dict[str, object]]:
+    """Bar-list rows scaled to the busiest one, not stacked to a 100% total.
+
+    Shared by every ``<c-bar-list>`` caller — the tenancy dashboard's
+    category/weekly-workload/overdue-ageing panels, and the calendar's own
+    workload forecast — so "scale to the busiest row" lives in one place
+    rather than being reimplemented per panel.
+    """
+    busiest = max((count for _, count, _ in rows), default=0) or 1
+    return [
+        {"label": label, "count": count, "pct": round(count / busiest * 100, 1), "color": color}
+        for label, count, color in rows
+    ]
+
 
 _OPEN = sorted(str(s) for s in OPEN_STATES)
 _CLOSED = sorted(str(s) for s in CLOSED_STATES)
@@ -114,7 +136,7 @@ def annotate_status(
     *,
     as_of: date,
 ) -> QuerySet[ObligationInstance]:
-    """Attach ``is_overdue``, ``days_to_due`` and ``display_status``.
+    """Attach ``is_overdue``, ``days_to_due``, ``display_status`` and ``priority_rank``.
 
     ``as_of`` is passed in rather than read from the clock so the annotation is
     deterministic under test and so a jurisdiction's local date — not the
@@ -124,9 +146,18 @@ def annotate_status(
     The ordering inside ``display_status`` mirrors
     :func:`stacos.engine.lifecycle.derive_display_status` clause for clause. They
     are asserted equal across a fixture matrix; if you change one, change both.
+
+    ``priority_rank`` mirrors the same clauses a third time, as an integer, purely
+    for ordering the register: lower is more urgent. It duplicates rather than
+    derives from ``display_status`` because Django cannot reference one
+    annotation from inside the ``Case`` that builds a sibling in the same
+    ``.annotate()`` call. A row not yet confirmed sorts ahead of an otherwise
+    identical one that is, within the same bucket — the register should surface
+    what needs a decision before what has already had one.
     """
     overdue = Q(due_date__isnull=False) & Q(state__in=_OPEN) & Q(due_date__lt=as_of)
     due_soon_cutoff = as_of + timedelta(days=DUE_SOON_DAYS)
+    due_soon = Q(due_date__isnull=False) & Q(due_date__gte=as_of) & Q(due_date__lte=due_soon_cutoff)
 
     return queryset.annotate(
         is_overdue=Case(
@@ -160,17 +191,50 @@ def annotate_status(
                 state__in=[State.INFO_REQUESTED, State.PENDING_CLIENT_APPROVAL, State.DEFERRED],
                 then=Value(DisplayStatus.WAITING),
             ),
-            When(
-                Q(due_date__isnull=False)
-                & Q(due_date__gte=as_of)
-                & Q(due_date__lte=due_soon_cutoff),
-                then=Value(DisplayStatus.DUE_SOON),
-            ),
+            When(due_soon, then=Value(DisplayStatus.DUE_SOON)),
             When(
                 state__in=[State.IN_PREPARATION, State.PENDING_REVIEW, State.READY_TO_FILE],
                 then=Value(DisplayStatus.IN_PROGRESS),
             ),
+            When(
+                Q(state=State.NOT_STARTED) & ~Q(pending_reason=""),
+                then=Value(DisplayStatus.PENDING),
+            ),
+            When(state=State.NOT_STARTED, then=Value(DisplayStatus.NOT_STARTED)),
             default=Value(DisplayStatus.ON_TRACK),
+        ),
+        priority_rank=(
+            Case(
+                When(state__in=[State.FILED, State.CLOSED], then=Value(16)),
+                When(state=State.NOT_APPLICABLE, then=Value(18)),
+                When(state=State.DISPUTED, then=Value(12)),
+                When(overdue, then=Value(0)),
+                When(
+                    state__in=[
+                        State.INFO_REQUESTED,
+                        State.PENDING_CLIENT_APPROVAL,
+                        State.DEFERRED,
+                    ],
+                    then=Value(10),
+                ),
+                When(due_soon, then=Value(2)),
+                When(
+                    state__in=[State.IN_PREPARATION, State.PENDING_REVIEW, State.READY_TO_FILE],
+                    then=Value(8),
+                ),
+                When(
+                    Q(state=State.NOT_STARTED) & ~Q(pending_reason=""),
+                    then=Value(6),
+                ),
+                When(state=State.NOT_STARTED, then=Value(4)),
+                default=Value(14),
+                output_field=IntegerField(),
+            )
+            + Case(
+                When(confirmed=False, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
         ),
     )
 
@@ -192,22 +256,64 @@ def upcoming(
     return annotate_status(queryset, as_of=as_of).order_by("due_date", "title")
 
 
-def status_counts(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> dict[str, int]:
-    """Counts behind the dashboard tiles, in one query rather than five.
+def apply_text_filters(
+    queryset: QuerySet[ObligationInstance],
+    *,
+    category: str = "",
+    search: str = "",
+) -> QuerySet[ObligationInstance]:
+    """The category/search narrowing shared by the register and the tiles above it.
 
-    Conditional aggregation instead of five ``.count()`` calls: the same table
-    scan answers every tile, and the numbers cannot disagree with each other
-    because they came from one snapshot.
+    Kept in one place so the list and its counts can never disagree about what
+    a typed search term or a chosen category matches — five conditional counts
+    built on one queryset, and a list built on another with the same two lines
+    copied by hand, is exactly how a tile ends up promising a number the list
+    it links to does not deliver.
+    """
+    if category:
+        queryset = queryset.filter(category=category)
+    if search:
+        queryset = queryset.filter(
+            Q(title__icontains=search)
+            | Q(definition_code__icontains=search)
+            | Q(scope_label__icontains=search)
+            | Q(entity__name__icontains=search)
+        )
+    return queryset
+
+
+def status_counts(
+    *,
+    as_of: date,
+    entity_ids: Sequence[UUID] | None = None,
+    category: str = "",
+    search: str = "",
+) -> dict[str, int]:
+    """Counts behind the calendar's tiles, in one query rather than a dozen.
+
+    Conditional aggregation instead of separate ``.count()`` calls: the same
+    table scan answers every tile, and the numbers cannot disagree with each
+    other because they came from one snapshot.
+
+    ``category``/``search`` narrow the same way the register's own toolbar
+    does — see :func:`apply_text_filters` — so that typing "gst" into the
+    search box updates the tiles to match what is actually on screen, not the
+    tenant's entire backlog. ``entity_ids`` behaves the same way it always has.
+    Deliberately *not* narrowed by the register's own ``status`` selection:
+    these tiles are the other buckets a click could switch to, and a tile that
+    only ever counted the bucket already showing would be pointless.
     """
     queryset = live()
     if entity_ids is not None:
         queryset = queryset.filter(entity_id__in=list(entity_ids))
+    queryset = apply_text_filters(queryset, category=category, search=search)
 
     open_q = Q(state__in=_OPEN)
     row = queryset.aggregate(
         total=Count("id"),
         open=Count("id", filter=open_q),
         overdue=Count("id", filter=open_q & Q(due_date__isnull=False) & Q(due_date__lt=as_of)),
+        due_today=Count("id", filter=open_q & Q(due_date=as_of)),
         due_soon=Count(
             "id",
             filter=open_q
@@ -220,6 +326,18 @@ def status_counts(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> d
             "id",
             filter=open_q & Q(due_date__gte=as_of) & Q(due_date__lte=as_of + timedelta(days=30)),
         ),
+        due_90=Count(
+            "id",
+            filter=open_q & Q(due_date__gte=as_of) & Q(due_date__lte=as_of + timedelta(days=90)),
+        ),
+        # The calendar's default landing scope: overdue, of any age, plus
+        # everything else due within 90 days — unlike `due_30`/`due_90` above,
+        # not lower-bounded at `as_of`, so a backlog is never silently dropped
+        # from the view a user lands on first.
+        latest=Count(
+            "id",
+            filter=open_q & Q(due_date__isnull=False) & Q(due_date__lte=as_of + timedelta(days=90)),
+        ),
         completed=Count("id", filter=Q(state__in=_CLOSED)),
         # Only rows where the rule could not decide and nobody has decided for
         # it. An obligation somebody opted into by hand is confirmed the moment
@@ -227,7 +345,12 @@ def status_counts(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> d
         unconfirmed=Count("id", filter=open_q & Q(confirmed=False)),
         needs_input=Count("id", filter=open_q & ~Q(needs_input="")),
     )
-    return {key: int(value or 0) for key, value in row.items()}
+    counts = {key: int(value or 0) for key, value in row.items()}
+    # Open, but neither overdue nor due soon. `overdue` and `due_soon` are
+    # disjoint subsets of `open` (split on `due_date` vs. `as_of`), so this
+    # can never go negative.
+    counts["pending"] = counts["open"] - counts["overdue"] - counts["due_soon"]
+    return counts
 
 
 class CategoryCount(TypedDict):
@@ -265,17 +388,27 @@ class WeeklyWorkload(TypedDict):
 
 
 def weekly_workload(
-    *, as_of: date, weeks: int = 6, entity_ids: Sequence[UUID] | None = None
+    *,
+    as_of: date,
+    weeks: int = 6,
+    entity_ids: Sequence[UUID] | None = None,
+    category: str = "",
+    search: str = "",
 ) -> WeeklyWorkload:
     """Open obligations due in each of the next few weeks, one aggregate query.
 
     Overdue is folded in as its own figure rather than a negative week, so a
     caller does not have to special-case "week -1" — a backlog is a different
     kind of number from "due in nine days."
+
+    ``category``/``search`` narrow the same way ``status_counts`` does — see
+    :func:`apply_text_filters` — so the calendar's own toolbar can drive this
+    without a second filtering path.
     """
     queryset = live().filter(state__in=_OPEN, due_date__isnull=False)
     if entity_ids is not None:
         queryset = queryset.filter(entity_id__in=list(entity_ids))
+    queryset = apply_text_filters(queryset, category=category, search=search)
 
     aggregates = {"overdue": Count("id", filter=Q(due_date__lt=as_of))}
     for week in range(weeks):
@@ -290,15 +423,25 @@ def weekly_workload(
     }
 
 
-def overdue_aging(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> dict[str, int]:
+def overdue_aging(
+    *,
+    as_of: date,
+    entity_ids: Sequence[UUID] | None = None,
+    category: str = "",
+    search: str = "",
+) -> dict[str, int]:
     """How late the overdue register is, bucketed rather than one flat number.
 
     A filing two days late and one six weeks late are not the same problem —
     a single "overdue" count on the dashboard tiles conflates them.
+
+    ``category``/``search`` narrow the same way ``status_counts`` does — see
+    :func:`apply_text_filters`.
     """
     queryset = live().filter(state__in=_OPEN, due_date__isnull=False, due_date__lt=as_of)
     if entity_ids is not None:
         queryset = queryset.filter(entity_id__in=list(entity_ids))
+    queryset = apply_text_filters(queryset, category=category, search=search)
 
     row = queryset.aggregate(
         recent=Count("id", filter=Q(due_date__gte=as_of - timedelta(days=7))),
@@ -312,6 +455,74 @@ def overdue_aging(*, as_of: date, entity_ids: Sequence[UUID] | None = None) -> d
     return {key: int(value or 0) for key, value in row.items()}
 
 
+class PenaltyExposure(TypedDict):
+    total_minor: int
+    partial: bool
+
+
+def overdue_penalty_exposure(
+    *,
+    as_of: date,
+    entity_ids: Sequence[UUID] | None = None,
+    category: str = "",
+    search: str = "",
+) -> PenaltyExposure:
+    """Aggregate potential penalty across the overdue register.
+
+    Not a second penalty formula: this calls the same
+    :func:`stacos.engine.penalty.compute_penalties` the detail page already
+    calls for one obligation at a time, over every overdue row's own
+    ``days_late`` (:func:`stacos.engine.lifecycle.days_late`) — just batched,
+    with the catalog lookup done once per distinct ``(definition_code,
+    definition_version)`` pair rather than once per row.
+
+    ``total_minor`` only sums rules ``compute_penalties`` could fully price
+    (``computed_minor`` is not ``None``). ``partial`` is ``True`` when at
+    least one overdue row carries a rule that could not be totalled (an
+    uncapped per-day rate, or a fixed statutory range) — the caller should
+    read the total as a floor, not the whole exposure, in that case.
+    """
+    from stacos.catalog.models import DefinitionVersion
+    from stacos.engine.lifecycle import days_late
+    from stacos.engine.penalty import compute_penalties
+
+    queryset = live().filter(state__in=_OPEN, due_date__isnull=False, due_date__lt=as_of)
+    if entity_ids is not None:
+        queryset = queryset.filter(entity_id__in=list(entity_ids))
+    queryset = apply_text_filters(queryset, category=category, search=search)
+
+    rows = list(queryset.values("due_date", "filed_on", "definition_code", "definition_version"))
+    if not rows:
+        return {"total_minor": 0, "partial": False}
+
+    pairs = {(row["definition_code"], row["definition_version"]) for row in rows}
+    codes = {code for code, _version in pairs}
+    rules_by_pair: dict[tuple[str, int], list[dict[str, object]]] = {}
+    for definition_version in (
+        DefinitionVersion.objects.filter(definition__code__in=codes)
+        .exclude(penalty_rules=[])
+        .values("definition__code", "version", "penalty_rules")
+    ):
+        key = (definition_version["definition__code"], definition_version["version"])
+        if key in pairs:
+            rules_by_pair[key] = definition_version["penalty_rules"]
+
+    total_minor = 0
+    partial = False
+    for row in rows:
+        rules = rules_by_pair.get((row["definition_code"], row["definition_version"]))
+        if not rules:
+            continue
+        late = days_late(due_date=row["due_date"], filed_on=row["filed_on"], as_of=as_of)
+        for penalty in compute_penalties(rules, days_late=late):
+            if penalty.computed_minor is None:
+                partial = True
+            else:
+                total_minor += penalty.computed_minor
+
+    return {"total_minor": total_minor, "partial": partial}
+
+
 # ---------------------------------------------------------------------------
 # Keyset pagination
 # ---------------------------------------------------------------------------
@@ -323,14 +534,17 @@ def keyset_page(
     cursor: str = "",
     page_size: int = 50,
 ) -> KeysetPage[ObligationInstance]:
-    """Fetch one page after ``cursor``, ordered by ``(due_date, id)``.
+    """Fetch one page after ``cursor``, ordered by ``(due_date, priority_rank, id)``.
 
     A thin wrapper over :func:`stacos.core.pagination.keyset_page`, kept for the
-    two decisions specific to the register. It reads *forwards* through time,
-    unlike every other paginated list in the product, which shows newest first.
-    And nulls sort last: an obligation whose date could not be resolved belongs
-    at the end of the list, not at the top pretending to be the most urgent thing
-    a user owns.
+    decisions specific to the register. It reads *forwards* through time, unlike
+    every other paginated list in the product, which shows newest first. Nulls
+    sort last: an obligation whose date could not be resolved belongs at the end
+    of the list, not at the top pretending to be the most urgent thing a user
+    owns. And within a shared due date, ``priority_rank`` (from
+    :func:`annotate_status`, which every caller of this function has already
+    run) puts what still needs a decision ahead of what has already had one —
+    the register should read as a work queue, not an alphabetised table.
     """
     return core_keyset_page(
         queryset,
@@ -338,4 +552,67 @@ def keyset_page(
         cursor=cursor,
         page_size=page_size,
         null_sentinel=date.max,
+        secondary="priority_rank",
     )
+
+
+# ---------------------------------------------------------------------------
+# Neighbours, for the detail page
+# ---------------------------------------------------------------------------
+
+
+def sibling_instances(
+    obligation: ObligationInstance, *, as_of: date
+) -> dict[str, ObligationInstance | None]:
+    """The occurrence immediately before and after this one, in its own sequence.
+
+    "Sequence" means the same entity, the same rule and the same registration or
+    site — GSTR-3B for one GSTIN in March is adjacent to GSTR-3B for *that GSTIN*
+    in February and April, never to GSTR-3B for a different GSTIN filed the same
+    month. ``period_key`` is the right ordering key rather than ``due_date``: it
+    sorts chronologically as a string by construction
+    (:class:`stacos.engine.types.Period`) and, unlike ``due_date``, is never null.
+    """
+    if not obligation.period_key:
+        return {"previous": None, "next": None}
+    siblings = live().filter(
+        entity_id=obligation.entity_id,
+        definition_code=obligation.definition_code,
+        scope_ref=obligation.scope_ref,
+    ).exclude(pk=obligation.pk)
+    previous = (
+        annotate_status(siblings.filter(period_key__lt=obligation.period_key), as_of=as_of)
+        .order_by("-period_key")
+        .first()
+    )
+    upcoming_sibling = (
+        annotate_status(siblings.filter(period_key__gt=obligation.period_key), as_of=as_of)
+        .order_by("period_key")
+        .first()
+    )
+    return {"previous": previous, "next": upcoming_sibling}
+
+
+def related_scope_instances(
+    obligation: ObligationInstance, *, as_of: date
+) -> QuerySet[ObligationInstance]:
+    """Other filings the same rule produced for the same period, at other scopes.
+
+    Empty for an ``ENTITY``-scoped obligation, which is unique per period by the
+    identity constraint. For a ``REGISTRATION``- or ``PREMISES``-scoped one — GST
+    filed per GSTIN, a licence renewed per plant — this is the rest of that same
+    month's filing, so an entity with six GSTINs sees all six from any one of them
+    rather than having to know to look.
+    """
+    if not obligation.scope_ref:
+        return ObligationInstance.objects.none()
+    siblings = (
+        live()
+        .filter(
+            entity_id=obligation.entity_id,
+            definition_code=obligation.definition_code,
+            period_key=obligation.period_key,
+        )
+        .exclude(pk=obligation.pk)
+    )
+    return annotate_status(siblings, as_of=as_of).order_by("scope_label")

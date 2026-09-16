@@ -31,7 +31,7 @@ from stacos.obligations.models import (
 )
 from stacos.obligations.queries import live, status_counts
 from stacos.obligations.services import materialise
-from stacos.tenancy.models import Entity, Tenant
+from stacos.tenancy.models import Entity, EntityRegistration, Tenant
 
 pytestmark = [pytest.mark.django_db, pytest.mark.isolation]
 
@@ -51,6 +51,15 @@ SCOPED_MODELS = (
 def rival_calendar(rival_entity: Entity) -> Entity:
     """A fully materialised calendar belonging to somebody else entirely."""
     with platform_scope(reason="test-fixture"):
+        # ``rival_entity`` (shared with tests that specifically want a fresh,
+        # registration-free entity) has no registrations of its own, and this
+        # fork's catalog is GST/income-tax/TDS only — every one of those
+        # definitions gates on one. Without a PAN here, this fixture would
+        # materialise to nothing, and "does the isolated tenant still see
+        # fewer rows than everyone" would hold vacuously rather than for real.
+        EntityRegistration.objects.create(
+            tenant=rival_entity.tenant, entity=rival_entity, type="PAN", value="AAACR1234C"
+        )
         materialise(rival_entity, as_of=AS_OF, trigger="ONBOARDING")
     return rival_entity
 
@@ -175,6 +184,52 @@ def test_another_tenants_obligation_cannot_be_transitioned(
     with platform_scope(reason="test"):
         an_obligation.refresh_from_db()
     assert an_obligation.state == State.NOT_STARTED
+
+
+def test_another_tenants_reopen_modal_is_a_404(
+    rival_signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """Same disclosure risk as the detail page itself: the modal names the
+    obligation's title, so it is exactly as scoped.
+
+    Put into ``CLOSED`` first so the action is genuinely available to the
+    owning tenant — a 404 that would happen anyway because the action is
+    unreachable proves nothing about tenant isolation.
+    """
+    with platform_scope(reason="test"):
+        an_obligation.state = State.CLOSED
+        an_obligation.filed_on = AS_OF
+        an_obligation.filing_reference = "AA240812000000X"
+        an_obligation.save(update_fields=["state", "filed_on", "filing_reference"])
+
+    response = rival_signed_in.get(
+        reverse("compliance:reopen", args=[an_obligation.pk]),
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 404
+
+
+def test_another_tenants_complete_modal_is_a_404(
+    rival_signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """See ``test_another_tenants_reopen_modal_is_a_404`` for why ``FILED`` and
+    an attached acknowledgement come first."""
+    with platform_scope(reason="test"):
+        an_obligation.state = State.FILED
+        an_obligation.filed_on = AS_OF
+        an_obligation.filing_reference = "AA240812000000X"
+        an_obligation.acknowledgement.save(
+            "ack.pdf", ContentFile(b"%PDF-1.4"), save=False
+        )
+        an_obligation.save(
+            update_fields=["state", "filed_on", "filing_reference", "acknowledgement"]
+        )
+
+    response = rival_signed_in.get(
+        reverse("compliance:complete", args=[an_obligation.pk]),
+        headers={"HX-Request": "true"},
+    )
+    assert response.status_code == 404
 
 
 def test_another_tenants_filing_cannot_be_answered_for(
@@ -339,6 +394,17 @@ def test_a_practice_sees_only_the_entity_it_was_engaged_on(
     product sellable at all.
     """
     with platform_scope(reason="test-fixture"):
+        # Neither fixture entity carries a registration by default (other
+        # suites rely on that to test a fresh, undecided entity), and every
+        # definition in this fork's GST/income-tax/TDS-only catalog gates on
+        # one — so give each a PAN here, local to this test, to get a
+        # non-empty calendar to actually isolate.
+        EntityRegistration.objects.create(
+            tenant=entity_a.tenant, entity=entity_a, type="PAN", value="AAACA1234C"
+        )
+        EntityRegistration.objects.create(
+            tenant=entity_b.tenant, entity=entity_b, type="PAN", value="AAACB1234C"
+        )
         materialise(entity_a, as_of=AS_OF, trigger="ONBOARDING")
         materialise(entity_b, as_of=AS_OF, trigger="ONBOARDING")
 

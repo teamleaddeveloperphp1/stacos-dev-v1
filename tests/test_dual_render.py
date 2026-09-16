@@ -89,6 +89,15 @@ FRAGMENT_ONLY = {
     # `entity_type` renders an empty identifier-fields fragment, not a form
     # anyone would navigate to directly.
     "/app/entities/registration-fields/",
+    # Another modal body, opened from the first-run dashboard's nudge and from
+    # the dashboard's own provisional-name banner. No standalone page.
+    "/app/workspace/rename/",
+    # Calendar subscribe/bulk-action modals. Opened with `hx-get` into
+    # `#modal-container` from the calendar toolbar or the bulk-selection bar;
+    # none of the three has a standalone page or appears in the address bar.
+    "/app/compliance/subscribe/",
+    "/app/compliance/bulk/assign/",
+    "/app/compliance/bulk/not-applicable/",
 }
 
 

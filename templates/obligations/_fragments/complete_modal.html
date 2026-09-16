@@ -1,0 +1,76 @@
+{% load i18n %}
+{% comment %}
+  "Mark as completed" is a review, not a click: what was submitted, when, and
+  under what reference, with the evidence this definition actually asks for
+  checked off beside it — the same "proof of completion" a person would want
+  before signing off on someone else's filing. `apply_transition` still
+  enforces `mandatory_for_close` for real on the POST; this is what lets a
+  reader see *why* before they click, instead of after a rejection.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="complete-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+            hx-target="#obligation-panel" hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="target" value="{{ action.target }}">
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="complete-modal-title">{% translate "Mark as completed" %}</h2>
+          <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                  @click="$dispatch('stacos:modal-close')"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small">{{ obligation.title }}</p>
+
+          <dl class="key-values">
+            <dt>{% translate "Submitted on" %}</dt>
+            <dd>{{ obligation.filed_on|date:"j M Y" }}</dd>
+            <dt>{% translate "Acknowledgement number" %}</dt>
+            <dd>{{ obligation.filing_reference|default:"—" }}</dd>
+            <dt>{% translate "Acknowledgement document" %}</dt>
+            <dd>
+              {% if obligation.acknowledgement %}
+                {{ obligation.acknowledgement_name|default:_("Attached") }}
+              {% else %}
+                <span class="text-muted">{% translate "Not attached" %}</span>
+              {% endif %}
+            </dd>
+          </dl>
+
+          {% if definition.evidence_requirements %}
+            <p class="fw-medium small mb-1">{% translate "What this needs on file" %}</p>
+            <ul class="reason-list mb-3">
+              {% for item in definition.evidence_requirements %}
+                <li>
+                  {{ item.label }}
+                  {% if item.mandatory_for_close %}
+                    {% if obligation.acknowledgement %}
+                      <span class="badge-soft">{% translate "Attached" %}</span>
+                    {% else %}
+                      <span class="badge-soft badge-soft--attention">{% translate "Required" %}</span>
+                    {% endif %}
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          <label class="form-label" for="complete-note">{% translate "Completion note" %}</label>
+          <textarea class="form-control" id="complete-note" name="note" rows="2"
+                    placeholder="{% translate 'Optional — recorded on the timeline.' %}"></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary"
+                  @click="$dispatch('stacos:modal-close')">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">{% translate "Confirm completion" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

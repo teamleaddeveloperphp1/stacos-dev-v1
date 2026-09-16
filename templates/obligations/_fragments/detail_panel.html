@@ -11,6 +11,12 @@
   rendering, not the security boundary — `apply_transition` re-checks the
   permission, the guards and the legality of the move, because a button being
   absent from a page does not make its URL absent from the network.
+
+  One named action per state rather than a menu of every legal move: a solo
+  user's next step is never a choice among several equally-plausible targets,
+  it is the one thing that follows from where this already is. "Doesn't
+  apply, or needs to wait?" below is the deliberate exception — those really
+  are alternatives to the next step, not the next step itself.
 {% endcomment %}
 <section class="card" id="obligation-panel" aria-live="polite" aria-atomic="true">
   {% if error %}
@@ -18,14 +24,81 @@
   {% endif %}
 
   <div class="detail-header">
-    <c-status-chip :status="obligation.display_status" :label="obligation.get_state_display" />
+    {% comment %}
+      No explicit ``label``: the chip's own word for ``display_status``
+      always matches its colour and icon. ``obligation.get_state_display``
+      would show the raw workflow state instead — right most of the time,
+      but wrong the moment they diverge, e.g. once a "why not yet" reason
+      turns ``NOT_STARTED`` into the ``PENDING`` display status without the
+      stored state moving (see ``stacos.engine.lifecycle.derive_display_status``).
+    {% endcomment %}
+    <c-status-chip :status="obligation.display_status" />
+    {% comment %}
+      The chip above answers "what is the single most urgent true thing about
+      this row" — it folds overdue, a "why not yet" note and a late filing
+      into one word, on purpose, so a list of two hundred reads at a glance.
+      That is the wrong question here: this is the one page where the reader
+      wants the *other* answer, "where does my own work actually stand,"
+      un-collapsed. Shown always, not only when it would differ from the chip
+      above, so its presence is predictable rather than a thing that pops in
+      and out depending on state.
+    {% endcomment %}
+    <span class="badge-soft" title="{% translate 'The tracking state you set — separate from due-date urgency' %}">
+      {% translate "Work status" %}: {{ obligation.state|state_label }}
+    </span>
     {% if obligation.filed_late %}
       <span class="badge-soft badge-soft--danger">{% translate "Filed late" %}</span>
     {% endif %}
     {% if obligation.applied_extension_reference %}
       <span class="badge-soft">{% translate "Date extended by notification" %}</span>
     {% endif %}
+
+    {% comment %} The one obvious next step, named for what it does. {% endcomment %}
+    {% if start_action %}
+      <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+            hx-target="#obligation-panel" hx-swap="outerHTML"
+            class="ms-auto">
+        {% csrf_token %}
+        <input type="hidden" name="target" value="{{ start_action.target }}">
+        <button class="btn btn-sm btn-primary" type="submit">{% translate "Start compliance" %}</button>
+      </form>
+    {% elif complete_action %}
+      <button type="button" class="btn btn-sm btn-primary ms-auto"
+              hx-get="{% url 'compliance:complete' obligation.pk %}"
+              hx-target="#modal-container" hx-swap="innerHTML">
+        {% translate "Mark as completed" %}
+      </button>
+    {% elif reopen_action %}
+      <button type="button" class="btn btn-sm btn-outline-secondary ms-auto"
+              hx-get="{% url 'compliance:reopen' obligation.pk %}"
+              hx-target="#modal-container" hx-swap="innerHTML">
+        {% translate "Reopen" %}
+      </button>
+    {% endif %}
   </div>
+
+  {% if obligation.progress_steps %}
+    {% comment %}
+      A read-only picture of where this sits, not a second way to move it —
+      every circle here is driven by the same ``state`` the badge above names,
+      never clicked on its own. STACOS tried the other version of this once,
+      as a checklist someone had to narrate one stage at a time even when they
+      had already finished the work in one sitting, and removed it — see
+      ``status_questions.html``'s own note. This is the display that update
+      was missing, not that workflow coming back.
+    {% endcomment %}
+    <ol class="stepper">
+      {% for step in obligation.progress_steps %}
+        <li class="stepper__step{% if step.done %} stepper__step--done{% elif step.current %} stepper__step--current{% endif %}"
+            {% if step.current %}aria-current="step"{% endif %}>
+          <span class="stepper__marker">
+            {% if step.done %}<c-icon name="check" size="12" />{% else %}{{ forloop.counter }}{% endif %}
+          </span>
+          <span class="stepper__label">{{ step.label }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
 
   {% comment %}
     The four facts someone re-opening this page reads before anything else, as
@@ -79,7 +152,7 @@
       The fourth cell answers "and what is stopping it", which since the step
       rail went is one of three things: a date this obligation cannot be
       scheduled without, the answer somebody gave to "not yet", or — once it is
-      done — when it was filed.
+      done — when it was submitted.
     {% endcomment %}
     {% if obligation.needs_input %}
       <a href="#needs-input" class="ob-strip__cell ob-strip__cell--attention">
@@ -89,7 +162,7 @@
       </a>
     {% elif obligation.filed_on %}
       <div class="ob-strip__cell">
-        <span class="ob-strip__label">{% translate "Filed" %}</span>
+        <span class="ob-strip__label">{% translate "Submitted" %}</span>
         <span class="ob-strip__value">{{ obligation.filed_on|date:"j M Y" }}</span>
         {% if obligation.filing_reference %}
           <span class="ob-strip__sub ob-strip__sub--ref">{{ obligation.filing_reference }}</span>
@@ -131,38 +204,41 @@
     {% include "obligations/_fragments/needs_input.html" %}
   {% endif %}
 
-  {% comment %}
-    The two questions replace what used to be here: a checklist of named steps,
-    a four-stage stepper, and a row of lifecycle buttons. See the fragment's own
-    note for why. Absent off the happy path (deferred, disputed, not applicable)
-    for the same reason the stepper was — those already have their answer in the
-    status chip above, and asking "is this filed?" about an obligation somebody
-    has ruled out is asking the wrong question.
-  {% endcomment %}
-  {% if obligation.progress_steps %}
+  {% if obligation.state == "DEFERRED" or obligation.state == "NOT_APPLICABLE" or obligation.state == "DISPUTED" %}
+    {% include "obligations/_fragments/off_path_status.html" %}
+  {% elif obligation.progress_steps %}
     {% include "obligations/_fragments/status_questions.html" %}
-  {% endif %}
 
-  {% comment %}
-    What is left of the old action bar. The workflow moves it used to carry —
-    start work, request information, submit for review, approve — went with the
-    checklist; these are the ones that are not part of that flow at all: closing
-    a filed obligation, and bringing a deferred one back.
-  {% endcomment %}
-  {% if plain_actions %}
-    <div class="action-bar">
-      {% for action in plain_actions %}
+    {% if undo_start_action %}
+      <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+            hx-target="#obligation-panel" hx-swap="outerHTML" class="mt-2">
+        {% csrf_token %}
+        <input type="hidden" name="target" value="{{ undo_start_action.target }}">
+        <button class="btn btn-sm btn-link p-0 text-muted" type="submit">
+          {% translate "Not actually started yet? Move back to not started." %}
+        </button>
+      </form>
+    {% endif %}
+
+    {% if undo_submission_action %}
+      <details class="mt-2">
+        <summary class="btn btn-sm btn-link p-0 text-muted">{{ undo_submission_action.label }}</summary>
         <form hx-post="{% url 'compliance:transition' obligation.pk %}"
-              hx-target="#obligation-panel"
-              hx-swap="outerHTML"
-              {% if action.confirmation %}hx-confirm="{{ action.confirmation }}"{% endif %}
-              class="action-bar__form">
+              hx-target="#obligation-panel" hx-swap="outerHTML"
+              {% if undo_submission_action.confirmation %}hx-confirm="{{ undo_submission_action.confirmation }}"{% endif %}
+              class="mt-2">
           {% csrf_token %}
-          <input type="hidden" name="target" value="{{ action.target }}">
-          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ action.label }}</button>
+          <input type="hidden" name="target" value="{{ undo_submission_action.target }}">
+          <label class="form-label" for="undo-submission-note">
+            {% translate "Reason" %}<span class="asteriskField">*</span>
+          </label>
+          <textarea class="form-control form-control-sm" id="undo-submission-note"
+                    name="note" required rows="2"
+                    placeholder="{% translate 'Why? (recorded)' %}"></textarea>
+          <button class="btn btn-sm btn-outline-secondary mt-2" type="submit">{{ undo_submission_action.label }}</button>
         </form>
-      {% endfor %}
-    </div>
+      </details>
+    {% endif %}
   {% endif %}
 
   <dl class="key-values key-values--foot">
@@ -172,29 +248,22 @@
       <dt>{% translate "Filed for" %}</dt><dd>{{ obligation.scope_label }}</dd>
     {% endif %}
     {% if obligation.filed_on %}
-      <dt>{% translate "Filed on" %}</dt><dd>{{ obligation.filed_on|date:"j M Y" }}</dd>
+      <dt>{% translate "Submitted on" %}</dt><dd>{{ obligation.filed_on|date:"j M Y" }}</dd>
       <dt>{% translate "Acknowledgement" %}</dt>
       <dd>{{ obligation.filing_reference|default:"—" }}</dd>
     {% endif %}
   </dl>
 
-  {% if not actions %}
-    <p class="text-muted small">
-      {% translate "You do not have permission to change this obligation." %}
-    </p>
-  {% elif note_actions %}
+  {% if special_actions %}
     {% comment %}
-      Judgement calls — deferring, disputing, marking not applicable — collapsed
-      into a tile so the reason field is not sitting open and empty before it is
-      chosen. Kept separate from the step rail above: these do not advance the
-      obligation, they take it off the happy path entirely.
+      Deferring, dismissing and disputing — off the main ladder on purpose
+      (see this file's own top note), so they sit in their own section below
+      the actual next step rather than beside it. Each needs a reason, and it
+      goes into the audit trail.
     {% endcomment %}
-    <h3 class="card__title card__title--section">{% translate "Doesn't apply?" %}</h3>
-    <p class="text-muted small mb-0">
-      {% translate "Each of these needs a reason, and it goes into the audit trail." %}
-    </p>
+    <h3 class="card__title card__title--section">{% translate "Doesn't apply, or needs to wait?" %}</h3>
     <div class="action-tiles">
-      {% for action in note_actions %}
+      {% for action in special_actions %}
         <details class="action-tile">
           <summary>
             <span class="action-tile__label">{{ action.label }}</span>
@@ -207,15 +276,30 @@
                 class="action-tile__form">
             {% csrf_token %}
             <input type="hidden" name="target" value="{{ action.target }}">
-            <label class="visually-hidden" for="tile-note-{{ forloop.counter }}">{% translate "Reason" %}</label>
+            <label class="form-label" for="tile-note-{{ forloop.counter }}">
+              {% translate "Reason" %}<span class="asteriskField">*</span>
+            </label>
             <textarea class="form-control form-control-sm" id="tile-note-{{ forloop.counter }}"
                       name="note" required rows="2"
                       placeholder="{% translate 'Why? (recorded)' %}"></textarea>
-            <button class="btn btn-sm btn-outline-secondary" type="submit">{{ action.label }}</button>
+            {% if action.target == "DEFERRED" %}
+              <label class="form-label small mt-2" for="tile-defer-until-{{ forloop.counter }}">
+                {% translate "Come back to this on" %}
+              </label>
+              <input type="date" class="form-control form-control-sm"
+                     id="tile-defer-until-{{ forloop.counter }}" name="defer_until">
+            {% endif %}
+            <button class="btn btn-sm btn-outline-secondary mt-2" type="submit">{{ action.label }}</button>
           </form>
         </details>
       {% endfor %}
     </div>
+  {% endif %}
+
+  {% if not actions %}
+    <p class="text-muted small">
+      {% translate "You do not have permission to change this obligation." %}
+    </p>
   {% endif %}
 
 </section>

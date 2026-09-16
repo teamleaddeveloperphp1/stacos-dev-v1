@@ -20,6 +20,90 @@
   </a>
 </c-page-header>
 
+{% comment %}
+  The four facts named in requirement #3 — status, due date, entity, primary
+  action — reachable without reading the working panel below. Entity and rule
+  are already in the header's own subtitle; this row adds the two that were
+  previously only visible after scrolling into `detail_panel.html`.
+
+  The one action offered here is deliberately singular: confirming applicability
+  is the one thing that blocks every other action on this obligation, so it is
+  the only case where a second copy of a control belongs in the header as well
+  as in the working panel below. Every other action already opens the page as
+  the first interactive element in the main column — duplicating it here would
+  be two buttons doing the same thing rather than one obvious one.
+{% endcomment %}
+<div class="detail-header">
+  <c-status-chip :status="obligation.display_status" />
+  {% if obligation.due_date %}
+    <c-due-badge :date="obligation.due_date" :days="obligation.days_to_due"
+                 :original="obligation.original_due_date"
+                 :notification="obligation.applied_extension_reference" />
+  {% endif %}
+  {% if not obligation.confirmed %}
+    <span class="ms-auto d-flex align-items-center gap-2">
+      {% comment %}
+        Spelled out beside the button, not left to the word "Confirm" alone:
+        this settles *whether the rule was right that this applies to you at
+        all* — it says nothing about whether the work is done. That is a
+        completely different question, answered below by the working panel's
+        own "Start compliance"/"Has this been submitted?"/"Mark as completed"
+        actions, and a user who has only seen one "Confirm" in the product
+        before (an OTP screen, a delete dialog) has no reason to assume this
+        one means something else.
+      {% endcomment %}
+      <span class="text-muted small d-none d-md-inline">
+        {% translate "Does this apply to you? Not whether it's done." %}
+      </span>
+      <button type="button" class="btn btn-sm btn-primary"
+              hx-get="{% url 'compliance:confirm' obligation.pk %}"
+              hx-target="#modal-container" hx-swap="innerHTML">
+        {% translate "Confirm this applies" %}
+      </button>
+    </span>
+  {% endif %}
+</div>
+
+{% if previous_obligation or next_obligation %}
+  {% comment %}
+    A recurring filing is a sequence, not two hundred unrelated rows — GSTR-3B
+    for March is adjacent to GSTR-3B for February and April, at the same
+    registration. Reviewing a run of periods is common enough (catching up a
+    backlog, checking last quarter before this one) that it should not require
+    going back to the calendar and searching again each time.
+  {% endcomment %}
+  <nav class="sequence-nav" aria-label="{% translate 'Other periods of this filing' %}">
+    {% if previous_obligation %}
+      <a class="sequence-nav__link sequence-nav__link--prev"
+         href="{% url 'compliance:detail' previous_obligation.pk %}"
+         hx-get="{% url 'compliance:detail' previous_obligation.pk %}"
+         hx-target="#main" hx-push-url="true">
+        <c-icon name="chevron-left" size="14" />
+        <span>
+          <span class="sequence-nav__hint">{% translate "Previous period" %}</span>
+          {{ previous_obligation.period_label|default:previous_obligation.period_key }}
+          <c-status-chip :status="previous_obligation.display_status" />
+        </span>
+      </a>
+    {% else %}
+      <span></span>
+    {% endif %}
+    {% if next_obligation %}
+      <a class="sequence-nav__link sequence-nav__link--next"
+         href="{% url 'compliance:detail' next_obligation.pk %}"
+         hx-get="{% url 'compliance:detail' next_obligation.pk %}"
+         hx-target="#main" hx-push-url="true">
+        <span>
+          <span class="sequence-nav__hint">{% translate "Next period" %}</span>
+          {{ next_obligation.period_label|default:next_obligation.period_key }}
+          <c-status-chip :status="next_obligation.display_status" />
+        </span>
+        <c-icon name="chevron-right" size="14" />
+      </a>
+    {% endif %}
+  </nav>
+{% endif %}
+
 <div class="detail-grid detail-grid--obligation">
   <div class="detail-grid__main">
     {% include "obligations/_fragments/detail_panel.html" %}
@@ -135,7 +219,11 @@
             <dt>{% translate "Authority" %}</dt><dd>{{ definition.definition.authority }}</dd>
           {% endif %}
           {% if definition.periodicity %}
-            <dt>{% translate "Frequency" %}</dt><dd>{{ definition.periodicity|title }}</dd>
+            <dt>{% translate "Frequency" %}</dt>
+            <dd>
+              {{ definition.periodicity|periodicity_label }}
+              {% if obligation.period_label %}&mdash; {{ obligation.period_label }}{% endif %}
+            </dd>
           {% endif %}
         </dl>
 
@@ -169,6 +257,34 @@
       </section>
     {% endif %}
 
+    {% if definition.evidence_requirements %}
+      {% include "obligations/_fragments/evidence_card.html" %}
+    {% endif %}
+
+    {% if related_scope_obligations %}
+      {% comment %}
+        The rest of this same rule's filing for this same period, at the entity's
+        other registrations or sites — GSTR-3B filed per GSTIN means an entity
+        with six of them has six rows for one month, and a reader looking at one
+        should not have to know to go looking for the other five.
+      {% endcomment %}
+      <section class="card">
+        <h2 class="card__title"><c-icon name="briefcase" size="14" /> {% translate "Other registrations, same period" %}</h2>
+        <ul class="related-list">
+          {% for related in related_scope_obligations %}
+            <li>
+              <a href="{% url 'compliance:detail' related.pk %}"
+                 hx-get="{% url 'compliance:detail' related.pk %}"
+                 hx-target="#main" hx-push-url="true">
+                {{ related.scope_label|default:related.title }}
+              </a>
+              <c-status-chip :status="related.display_status" />
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
     {% if registrations is not None %}
       <section class="card">
         <h2 class="card__title"><c-icon name="briefcase" size="14" /> {% translate "Registrations on file" %}</h2>
@@ -188,9 +304,6 @@
       </section>
     {% endif %}
 
-    <section class="card">
-      <h2 class="card__title"><c-icon name="history" size="14" /> {% translate "Audit trail" %}</h2>
-      {% include "obligations/_fragments/timeline.html" %}
-    </section>
+    {% include "obligations/_fragments/audit_trail_card.html" %}
   </aside>
 </div>

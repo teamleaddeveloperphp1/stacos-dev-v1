@@ -1,0 +1,62 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Assign several obligations to the same person in one step.
+
+  Same shape as `assign_modal.html`: `hx-swap="none"` on the form because the
+  real update travels as out-of-band row swaps plus a toast — there is no
+  single "main" target, since several rows scattered across the register are
+  changing at once, not one panel.
+
+  `ids` travels as hidden inputs rather than depending on the calendar's own
+  checkboxes still being checked when this is submitted: the modal owns the
+  selection from the moment it opens.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="bulk-assign-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form hx-post="{% url 'compliance:bulk_assign' %}" hx-target="#obligation-rows" hx-swap="none">
+        {% csrf_token %}
+        {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="bulk-assign-modal-title">{% translate "Assign" %}</h2>
+          <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                  @click="$dispatch('stacos:modal-close')"></button>
+        </div>
+
+        <div class="modal-body">
+          {% if obligations %}
+            <p class="text-muted small">
+              {% blocktranslate count count=obligations|length %}
+                Who is holding this obligation?
+              {% plural %}
+                Who is holding these {{ count }} obligations?
+              {% endblocktranslate %}
+            </p>
+            <ul class="small text-muted mb-3">
+              {% for obligation in obligations %}
+                <li>{{ obligation.title|strip_trailing_paren }} — {{ obligation.entity.name }}</li>
+              {% endfor %}
+            </ul>
+            {% crispy form %}
+          {% else %}
+            <p class="callout callout--attention small mb-0">
+              {% translate "None of the selected obligations could be found. They may have changed since you selected them — close this and try again." %}
+            </p>
+          {% endif %}
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary"
+                  @click="$dispatch('stacos:modal-close')">
+            {% translate "Cancel" %}
+          </button>
+          {% if obligations %}
+            <button type="submit" class="btn btn-primary">{% translate "Save" %}</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

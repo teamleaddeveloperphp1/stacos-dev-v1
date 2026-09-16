@@ -14,7 +14,7 @@
 
 {% if page.has_more %}
   <tr id="calendar-load-more">
-    <td colspan="6" class="text-center p-2">
+    <td colspan="7" class="text-center p-2">
       <button class="btn btn-sm btn-outline-secondary"
               hx-get="?cursor={{ page.next_cursor|urlencode }}{{ querystring }}"
               hx-target="#calendar-load-more"

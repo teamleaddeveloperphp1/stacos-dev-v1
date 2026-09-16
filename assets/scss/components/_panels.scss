@@ -251,6 +251,71 @@
   border-bottom: 1px solid var(--stacos-border);
 }
 
+// -----------------------------------------------------------------------------
+// Previous/next through a recurring filing's own periods — the obligation
+// detail page's equivalent of a document's page-turn control, not a generic
+// pager. Two links, evenly split, each carrying its own status chip so moving
+// to March doesn't require a second page load to learn whether March is done.
+// -----------------------------------------------------------------------------
+.sequence-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: $stacos-space-3;
+  margin-bottom: $stacos-space-5;
+
+  &__link {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    padding: $stacos-space-2 $stacos-space-3;
+    border: 1px solid var(--stacos-border);
+    border-radius: var(--stacos-radius-md);
+    color: var(--stacos-text);
+    text-decoration: none;
+    font-size: $stacos-text-sm;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--stacos-border-strong);
+      background: var(--stacos-surface-sunken);
+      color: inherit;
+    }
+
+    &--next {
+      margin-left: auto;
+      text-align: right;
+
+      > span { text-align: right; }
+    }
+  }
+
+  &__hint {
+    display: block;
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+}
+
+// A registration row linking off to a sibling obligation — the same rule,
+// filed at a different GSTIN or site, for the same period. Deliberately
+// lighter than `.reason-list`: this is navigation, not reading matter.
+.related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $stacos-space-2;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $stacos-space-2;
+  }
+}
+
 .card {
   padding: $stacos-space-4;
   border: 1px solid var(--stacos-border);

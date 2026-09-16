@@ -13,3 +13,4 @@ stacos/tenancy/scope_resolver.py:2  # Bootstrap. These ARE the queries that esta
 stacos/api/views.py:1               # Mobile /me/ endpoint listing the caller's own memberships, filtered by `user`.
 stacos/tenancy/invitations.py:1     # Resolving an invitation link, for somebody who is by definition not yet a member of the tenant. Anchored on the token hash, inside `rls_bootstrap`.
 stacos/accounts/views.py:1          # Sign-up's idempotency guard: "has this just-verified user already been provisioned a tenant" is asked before any tenant is bound. Filtered by `user`, inside `rls_bootstrap`.
+stacos/obligations/feed.py:1        # The .ics feed has no session to bind a scope from — resolving the token's owner's membership is the bootstrap read that establishes one, same as `scope_resolver.py`. Filtered by `user`, inside `rls_bootstrap`.

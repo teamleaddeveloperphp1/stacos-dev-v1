@@ -166,8 +166,16 @@ class EntityEvent(TenantScopedModel):
 _OPEN_STATE_VALUES: list[str] = sorted(str(s) for s in OPEN_STATES)
 
 #: The happy path, collapsed to four stages for the detail page's progress
-#: stepper. DEFERRED, DISPUTED and NOT_APPLICABLE are deliberately absent —
+#: indicator. DEFERRED, DISPUTED and NOT_APPLICABLE are deliberately absent —
 #: see ``ObligationInstance.progress_steps``.
+#:
+#: ``submitted`` and ``completed`` are separate stages, not one — this used to
+#: read "Filed" for both ``FILED`` and ``CLOSED``, which quietly answered a
+#: question nobody asked ("has the paperwork been filed") while hiding the one
+#: a user actually has: is the acknowledgement filed away with its evidence,
+#: or does it still need attaching? Splitting them is what lets the stepper
+#: and ``ObligationInstance.state``'s own label agree, instead of a fourth
+#: circle that stays lit for two different true things.
 _PROGRESS_STAGES: tuple[tuple[str, Any, tuple[State, ...]], ...] = (
     ("not_started", _("Not started"), (State.NOT_STARTED,)),
     (
@@ -178,10 +186,11 @@ _PROGRESS_STAGES: tuple[tuple[str, Any, tuple[State, ...]], ...] = (
             State.IN_PREPARATION,
             State.PENDING_REVIEW,
             State.PENDING_CLIENT_APPROVAL,
+            State.READY_TO_FILE,
         ),
     ),
-    ("ready_to_file", _("Ready to file"), (State.READY_TO_FILE,)),
-    ("filed", _("Filed"), (State.FILED, State.CLOSED)),
+    ("submitted", _("Submitted"), (State.FILED,)),
+    ("completed", _("Completed"), (State.CLOSED,)),
 )
 
 
@@ -879,3 +888,44 @@ class MaterialisationRun(TenantScopedModel):
             "archived": self.archived_count,
             "revived": self.revived_count,
         }
+
+
+class CalendarFeedToken(models.Model):
+    """The secret behind one user's read-only ``.ics`` calendar subscription.
+
+    Deliberately not a :class:`TenantScopedModel`: an external calendar app
+    polls the feed URL with no Django session at all, so there is no request
+    scope to filter this row by. It is bound to a *user*, not a tenant —
+    ``stacos.obligations.feed`` re-resolves that user's own membership and
+    access scope on every fetch, the same way a real request would, so a later
+    change of role or engagement is honoured automatically rather than baked
+    into the link the day it was generated.
+
+    Only the secret's hash is stored, the same shape as
+    :class:`stacos.accounts.models.TrustedDevice`: a database disclosure must
+    not yield a working subscription link. The raw secret is handed to the
+    user once, at creation, and never persisted — losing the link means
+    generating a new one, not recovering the old.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="calendar_feed_tokens"
+    )
+    secret_hash = models.CharField(max_length=64, db_index=True)
+    label = models.CharField(max_length=120, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    objects = models.Manager()
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"calendar feed token for {self.user_id}"
+
+    @property
+    def is_valid(self) -> bool:
+        return self.revoked_at is None

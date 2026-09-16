@@ -40,9 +40,16 @@ DATE_CASES: tuple[date | None, ...] = (
 )
 
 
+#: Whether an explanation is on file — only ``NOT_STARTED`` reads any
+#: differently for it (see ``derive_display_status``), but every state gets
+#: both, the same "coverage of the decision surface, not realism" reasoning
+#: as ``DATE_CASES``.
+PENDING_REASON_CASES: tuple[str, ...] = ("", "Waiting on the client's bank statement.")
+
+
 @pytest.fixture
 def matrix(org: Tenant, entity_a: Entity) -> list[ObligationInstance]:
-    """One obligation for every (state, due date) pair.
+    """One obligation for every (state, due date, pending reason) triple.
 
     Built once and read by both parity tests: the point is coverage of the
     decision surface, not realism.
@@ -51,24 +58,26 @@ def matrix(org: Tenant, entity_a: Entity) -> list[ObligationInstance]:
     with platform_scope(reason="test-fixture"):
         for state_index, state in enumerate(State):
             for date_index, due in enumerate(DATE_CASES):
-                rows.append(
-                    ObligationInstance.objects.create(
-                        tenant=org,
-                        entity=entity_a,
-                        definition_code="IN-TEST-PARITY",
-                        definition_version=1,
-                        period_key=f"P{state_index:02d}{date_index:02d}",
-                        period_label="Parity fixture",
-                        title="Parity fixture",
-                        category="TAX_DIRECT",
-                        state=state,
-                        due_date=due,
-                        # The FILED/CLOSED check constraint requires a date, and
-                        # a filed instance without one could not be tested for
-                        # lateness anyway.
-                        filed_on=(AS_OF if state in {State.FILED, State.CLOSED} else None),
+                for reason_index, reason in enumerate(PENDING_REASON_CASES):
+                    rows.append(
+                        ObligationInstance.objects.create(
+                            tenant=org,
+                            entity=entity_a,
+                            definition_code="IN-TEST-PARITY",
+                            definition_version=1,
+                            period_key=f"P{state_index:02d}{date_index:02d}{reason_index:02d}",
+                            period_label="Parity fixture",
+                            title="Parity fixture",
+                            category="TAX_DIRECT",
+                            state=state,
+                            due_date=due,
+                            pending_reason=reason,
+                            # The FILED/CLOSED check constraint requires a date,
+                            # and a filed instance without one could not be
+                            # tested for lateness anyway.
+                            filed_on=(AS_OF if state in {State.FILED, State.CLOSED} else None),
+                        )
                     )
-                )
     return rows
 
 
@@ -101,14 +110,27 @@ def test_display_status_agrees_between_python_and_sql(
             {
                 "state": row.state,
                 "due": row.due_date,
+                "pending_reason": row.pending_reason,
                 "sql": row.display_status,
                 "python": str(
-                    derive_display_status(state=row.state, due_date=row.due_date, as_of=AS_OF)
+                    derive_display_status(
+                        state=row.state,
+                        due_date=row.due_date,
+                        as_of=AS_OF,
+                        pending_reason=row.pending_reason,
+                    )
                 ),
             }
             for row in annotated
             if row.display_status
-            != str(derive_display_status(state=row.state, due_date=row.due_date, as_of=AS_OF))
+            != str(
+                derive_display_status(
+                    state=row.state,
+                    due_date=row.due_date,
+                    as_of=AS_OF,
+                    pending_reason=row.pending_reason,
+                )
+            )
         ]
 
     assert not disagreements, (

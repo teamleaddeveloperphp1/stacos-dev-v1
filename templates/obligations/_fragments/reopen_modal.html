@@ -1,0 +1,62 @@
+{% load i18n %}
+{% comment %}
+  Reopening is the one transition in the lifecycle table that has always
+  required a note (see `Transition(CLOSED, FILED, "Reopen", ...)`), because a
+  completed record silently going back to work is exactly what an audit trail
+  exists to explain. The reason picker below is a starting sentence, not a
+  second field: it writes into the same `note` the engine already requires and
+  the timeline already renders, rather than adding a category the model has
+  nowhere to keep.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="reopen-modal-title" x-data="{ note: '' }">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+            hx-target="#obligation-panel" hx-swap="outerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="target" value="{{ action.target }}">
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="reopen-modal-title">{% translate "Reopen" %}</h2>
+          <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                  @click="$dispatch('stacos:modal-close')"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small">
+            {% blocktranslate with title=obligation.title %}
+              <strong>{{ title }}</strong> was marked completed. Reopening puts it back to
+              "Submitted" and clears nothing it already has on file.
+            {% endblocktranslate %}
+          </p>
+
+          <label class="form-label" for="reopen-reason-picker">
+            {% translate "Why?" %}<span class="asteriskField">*</span>
+          </label>
+          <select class="form-select mb-2" id="reopen-reason-picker"
+                  @change="note = $event.target.value">
+            <option value="">{% translate "Choose a reason, or write your own below" %}</option>
+            <option value="{% translate 'Correction required.' %}">{% translate "Correction required" %}</option>
+            <option value="{% translate 'Submission rejected by the authority.' %}">{% translate "Submission rejected" %}</option>
+            <option value="{% translate 'Additional information required.' %}">{% translate "Additional information required" %}</option>
+            <option value="{% translate 'Needs to be resubmitted.' %}">{% translate "Resubmission required" %}</option>
+          </select>
+
+          <label class="visually-hidden" for="reopen-note">{% translate "Reason" %}</label>
+          <textarea class="form-control" id="reopen-note" name="note" rows="3" required
+                    x-model="note"
+                    placeholder="{% translate 'Recorded on the timeline.' %}"></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary"
+                  @click="$dispatch('stacos:modal-close')">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">{% translate "Reopen" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

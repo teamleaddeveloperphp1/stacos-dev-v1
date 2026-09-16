@@ -1,0 +1,63 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Mark several obligations Not Applicable with one shared reason.
+
+  The reason is required at the form level (`BulkNotApplicableForm`) as well
+  as inside `apply_transition` itself — the same guard the single-obligation
+  flow relies on — so a user picking ten rows sees the validation error once,
+  before anything is attempted, not after the first nine have already gone
+  through.
+
+  A row this user could not individually mark Not Applicable is skipped, not
+  fatal to the batch — see `bulk_not_applicable` in `stacos.obligations.views`.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="bulk-na-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form hx-post="{% url 'compliance:bulk_not_applicable' %}" hx-target="#obligation-rows"
+            hx-swap="none">
+        {% csrf_token %}
+        {% for id in ids %}<input type="hidden" name="ids" value="{{ id }}">{% endfor %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="bulk-na-modal-title">{% translate "Mark Not Applicable" %}</h2>
+          <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                  @click="$dispatch('stacos:modal-close')"></button>
+        </div>
+
+        <div class="modal-body">
+          {% if obligations %}
+            <p class="text-muted small">
+              {% blocktranslate count count=obligations|length %}
+                This obligation will be marked Not Applicable:
+              {% plural %}
+                These {{ count }} obligations will be marked Not Applicable:
+              {% endblocktranslate %}
+            </p>
+            <ul class="small text-muted mb-3">
+              {% for obligation in obligations %}
+                <li>{{ obligation.title|strip_trailing_paren }} — {{ obligation.entity.name }}</li>
+              {% endfor %}
+            </ul>
+            {% crispy form %}
+          {% else %}
+            <p class="callout callout--attention small mb-0">
+              {% translate "None of the selected obligations could be found. They may have changed since you selected them — close this and try again." %}
+            </p>
+          {% endif %}
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary"
+                  @click="$dispatch('stacos:modal-close')">
+            {% translate "Cancel" %}
+          </button>
+          {% if obligations %}
+            <button type="submit" class="btn btn-danger">{% translate "Mark Not Applicable" %}</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

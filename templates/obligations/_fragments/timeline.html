@@ -20,7 +20,15 @@
       <div class="timeline__body">
         <span class="timeline__actor">{{ event.actor_label|default:"STACOS" }}</span>
         {% if event.kind == "TRANSITION" %}
-          {{ event.context.label|default:event.get_kind_display|lower }}
+          {% comment %}
+            The state names, not the transition's own label ("start work",
+            "reverse filing record") — a reader scanning history wants "what
+            did this become," and `from_state`/`to_state` are stored on every
+            transition event already, so this costs nothing new to show.
+          {% endcomment %}
+          {% blocktranslate with from=event.from_state|state_label to=event.to_state|state_label %}
+            Changed status: {{ from }} → {{ to }}
+          {% endblocktranslate %}
         {% else %}
           {{ event.get_kind_display|lower }}
         {% endif %}

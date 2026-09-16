@@ -11,10 +11,47 @@
 <tr id="obligation-{{ obligation.pk }}"
     class="{% if obligation.is_overdue %}row--overdue{% endif %}">
   <td>
+    {% comment %}
+      Offered unconditionally, same convention as the "Assign" control below:
+      whether *acting* on a selection succeeds is re-checked server-side, per
+      obligation, when the bulk form is submitted — see
+      `stacos.obligations.views.bulk_assign`/`bulk_not_applicable`.
+    {% endcomment %}
+    <input type="checkbox" class="form-check-input" name="ids" value="{{ obligation.pk }}"
+           aria-label="{% blocktranslate with title=obligation.title %}Select {{ title }}{% endblocktranslate %}">
+  </td>
+  <td>
     <div class="d-flex align-items-center flex-wrap gap-2">
       <a class="link-strong" href="{% url 'compliance:detail' obligation.pk %}"
          hx-get="{% url 'compliance:detail' obligation.pk %}"
-         hx-target="#main" hx-push-url="true">{{ obligation.title }}</a>
+         hx-target="#main" hx-push-url="true">{{ obligation.title|strip_trailing_paren }}</a>
+      {% with short_period=obligation.period_label|default:obligation.period_key|period_short %}
+        {% if short_period %}
+          {% comment %}
+            Outside the link and muted rather than appended inside it: inside
+            the anchor it inherited the link's colour and read as part of the
+            title rather than as the disambiguator sitting next to it.
+          {% endcomment %}
+          <span class="text-muted small">({{ short_period }})</span>
+        {% endif %}
+      {% endwith %}
+      {% comment %}
+        "Why does this apply?" — the pruned rule-trace explanation already
+        stored on every row (`obligation.reasons`, populated at materialisation
+        time; see `stacos.engine.rules.explain`), the same text the detail
+        page's own "Why this applies" card renders. A tooltip rather than a
+        popover: `assets/js/app.js` already initialises
+        `[data-bs-toggle="tooltip"]` after every HTMX swap, so this needs no
+        new client-side wiring.
+      {% endcomment %}
+      {% with why=obligation.reasons|join:" " %}
+        <button type="button" class="btn btn-sm btn-link p-0 text-muted"
+                data-bs-toggle="tooltip" data-bs-placement="top"
+                title="{% if why %}{{ why }}{% else %}{% translate 'This applies to every entity of this type.' %}{% endif %}"
+                aria-label="{% translate 'Why does this apply?' %}">
+          <c-icon name="info" size="14" />
+        </button>
+      {% endwith %}
       {% if not obligation.confirmed %}
         {% comment %}
           UNKNOWN applicability — materialised anyway and flagged, because
@@ -68,8 +105,11 @@
     {% endif %}
   </td>
   <td>
-    <c-status-chip :status="obligation.display_status"
-                   :label="obligation.get_state_display" />
+    {% comment %}
+      No explicit ``label`` — see ``detail_panel.html``'s comment on the same
+      chip: the word must track ``display_status``, not the raw stored state.
+    {% endcomment %}
+    <c-status-chip :status="obligation.display_status" />
   </td>
   <td class="text-muted small">
     {% comment %}
@@ -80,7 +120,8 @@
     {% endcomment %}
     <button type="button" class="btn btn-sm btn-link p-0"
             hx-get="{% url 'compliance:assign' obligation.pk %}"
-            hx-target="#modal-container" hx-swap="innerHTML">
+            hx-target="#modal-container" hx-swap="innerHTML"
+            title="{% if obligation.assigned_to %}{% translate 'Reassign this obligation' %}{% else %}{% translate 'Assign this obligation to someone' %}{% endif %}">
       {% if obligation.assigned_to %}{{ obligation.assigned_to }}{% else %}{% translate "Assign" %}{% endif %}
     </button>
   </td>

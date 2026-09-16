@@ -48,12 +48,21 @@ class TransitionForm(forms.Form):
         widget=forms.DateInput(attrs={"type": "date"}),
         help_text=_("Defaults to today. Set it if you are recording a past filing."),
     )
+    #: Only meaningful for "Defer" — see ``ObligationSuppression.expires_on``.
+    #: Optional: an indefinite deferral is a real, common answer, not a form
+    #: left half-filled.
+    defer_until = forms.DateField(
+        label=_("Come back to this on"),
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+        help_text=_("Leave blank if there is no date yet — you can always come back sooner."),
+    )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.helper = FormHelper()
         self.helper.form_tag = False
-        self.helper.layout = Layout("note", "filing_reference", "filed_on")
+        self.helper.layout = Layout("note", "filing_reference", "filed_on", "defer_until")
 
 
 #: What an acknowledgement may be. A portal hands back a PDF; a phone hands back
@@ -78,9 +87,9 @@ class FilingCompletedForm(forms.Form):
     """
 
     filed_on = forms.DateField(
-        label=_("Date of completion"),
+        label=_("Submission date"),
         widget=forms.DateInput(attrs={"type": "date"}),
-        help_text=_("The date it was actually filed, not the date you are recording it."),
+        help_text=_("The date it was actually submitted, not the date you are recording it."),
     )
     filing_reference = forms.CharField(
         label=_("Acknowledgement number"),
@@ -187,9 +196,22 @@ class FilingPendingForm(forms.Form):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        # A picker for "when will this be done" that still opens on last
+        # month invites a date that is already wrong the moment it is saved.
+        # The `min` attribute is a browser hint, not the guard — a client that
+        # ignores it still hits `clean_expected_completion_date` below.
+        today = timezone.localdate().isoformat()
+        self.fields["expected_completion_date"].widget.attrs["min"] = today
+
         self.helper = FormHelper()
         self.helper.form_tag = False
         self.helper.layout = Layout("pending_reason", "expected_completion_date")
+
+    def clean_expected_completion_date(self) -> date:
+        value: date = self.cleaned_data["expected_completion_date"]
+        if value < timezone.localdate():
+            raise forms.ValidationError(_("Pick today or a later date."))
+        return value
 
 
 class EntityEventForm(forms.ModelForm[EntityEvent]):
@@ -337,6 +359,28 @@ class CommentForm(forms.Form):
         max_length=2000,
     )
 
+
+class BulkNotApplicableForm(forms.Form):
+    """One shared reason behind a bulk "Mark Not Applicable".
+
+    Required at the form level, not just inside ``apply_transition``: a user
+    picking several rows at once should see the validation error before
+    anything is attempted, not after the first of ten obligations has already
+    failed for a reason the other nine share.
+    """
+
+    reason = forms.CharField(
+        label=_("Reason"),
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=_("Recorded on the timeline and in the audit trail of every obligation chosen."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("reason")
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.helper = FormHelper()
@@ -372,11 +416,19 @@ def _attribute_field(attribute: Any) -> forms.Field:
 #: a promise until something renders it, which is what lets one process serve a
 #: user in English and another in Hindi.
 STATUS_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
-    ("", _("Everything open")),
+    # The calendar's default landing scope — see `views._filtered`. Overdue,
+    # of any age, plus everything else due within 90 days: a work queue, not
+    # a fixed lookback/lookahead split, because a backlog does not stop
+    # mattering once it is more than ninety days old.
+    ("latest", _("Due now (overdue + next 90 days)")),
     ("overdue", _("Overdue")),
     ("due_soon", _("Due in 7 days")),
-    ("due_30", _("Due in 30 days")),
-    ("pending", _("Pending")),
+    # Upcoming only, unlike "latest" above — a planning view of what is
+    # coming, deliberately excluding the backlog "latest" already surfaces.
+    ("due_30", _("Due in 30 days (upcoming only)")),
+    ("due_90", _("Due in 90 days (upcoming only)")),
+    ("", _("Everything open")),
+    ("pending", _("Upcoming / later")),
     ("unconfirmed", _("Needs confirming")),
     ("needs_input", _("Waiting on a date")),
     ("completed", _("Completed")),

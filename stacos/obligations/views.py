@@ -188,28 +188,72 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
     PostgreSQL walk and discard every row before it.
     """
     as_of = _today()
-    queryset = _filtered(request, as_of=as_of)
+    # No ``status`` in the querystring at all means a fresh visit to the
+    # calendar, not an explicit "Everything open". Default that case to
+    # "latest" — overdue, of any age, plus everything due within 90 days —
+    # so the register opens on what's actionable without silently dropping
+    # the backlog; a present-but-empty ``status=`` is the user's own choice
+    # of "Everything open" via the dropdown and must be left alone.
+    status = request.GET.get("status", "latest")
+    search = request.GET.get("q", "").strip()
+    category = request.GET.get("category", "").strip()
+    entity_id = _parse_uuid(request.GET.get("entity", "").strip())
+
+    queryset = _filtered(
+        as_of=as_of, status=status, search=search, category=category, entity_id=entity_id
+    )
     page = keyset_page(queryset, cursor=request.GET.get("cursor", ""), page_size=PAGE_SIZE)
 
-    entity_id = _parse_uuid(request.GET.get("entity", "").strip())
+    cursor = request.GET.get("cursor", "")
     context = {
         "obligations": page.rows,
         "page": page,
         "as_of": as_of,
-        "counts": status_counts(as_of=as_of, entity_ids=[entity_id] if entity_id else None),
+        # The dashboard-style facet counts (Overdue, Due soon, Completed, …) —
+        # each scoped to the same search/category/entity as the list, but
+        # never to `status` itself: these are the *other* buckets a click
+        # could switch to.
+        "counts": status_counts(
+            as_of=as_of,
+            entity_ids=[entity_id] if entity_id else None,
+            category=category,
+            search=search,
+        ),
         "status_filters": STATUS_FILTERS,
-        "status": request.GET.get("status", ""),
-        "search": request.GET.get("q", ""),
-        "category": request.GET.get("category", ""),
+        "status": status,
+        "search": search,
+        "category": category,
         "categories": ComplianceCategory.choices,
         "entity": str(entity_id) if entity_id else "",
         "entity_id": entity_id,
         "entities": _entity_options(),
         "querystring": filters_querystring(request),
+        "scope_description": _scope_description(status, as_of=as_of),
+        "active_filters": _active_filters(
+            request, status=status, search=search, category=category, entity_id=entity_id
+        ),
+        # Distinguishes two empty states that look identical in the table but
+        # mean opposite things: nothing was ever generated for this tenant, vs.
+        # a search/category/entity pick happens to match nothing right now.
+        "has_narrowing_filters": bool(search or category or entity_id),
     }
+    # One COUNT(*) on the first screen of a filter combination, never on a
+    # "load more" — the register is deliberately uncounted while scrolling
+    # (see `stacos.core.pagination`), but "how many results" is exactly what
+    # the summary above the table promises, and one query for it is cheap
+    # next to the page it already had to run.
+    if not cursor:
+        context["total"] = queryset.count()
+        # Same reasoning as `total` above: a look-ahead alongside the register,
+        # not something a "load more" scroll needs recomputed. Scoped to the
+        # same category/search/entity as the toolbar, so it never advertises a
+        # workload the filtered list underneath it doesn't contain.
+        context["workload"] = _workload_forecast(
+            as_of=as_of, entity_id=entity_id, category=category, search=search
+        )
 
     # A cursor request is asking for more rows, not for the whole screen again.
-    if request.GET.get("cursor") and is_fragment_request(request):
+    if cursor and is_fragment_request(request):
         return render(request, "obligations/_fragments/calendar_rows.html", context)
 
     template = (
@@ -220,7 +264,14 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
     return render(request, template, context)
 
 
-def _filtered(request: HttpRequest, *, as_of: date) -> QuerySet[ObligationInstance]:
+def _filtered(
+    *,
+    as_of: date,
+    status: str,
+    search: str = "",
+    category: str = "",
+    entity_id: UUID | None = None,
+) -> QuerySet[ObligationInstance]:
     """Apply the toolbar filters.
 
     ``select_related`` on entity and tenant is not optional here: without it a
@@ -229,8 +280,16 @@ def _filtered(request: HttpRequest, *, as_of: date) -> QuerySet[ObligationInstan
     """
     queryset = live().select_related("entity", "assigned_to")
 
-    status = request.GET.get("status", "")
-    if status == "overdue":
+    if status == "latest":
+        # The default landing scope. Not lower-bounded at `as_of`, unlike
+        # `due_30`/`due_90` below — a list of what's coming up that silently
+        # omits what's already been missed is worse than no list.
+        queryset = queryset.filter(
+            state__in=_OPEN,
+            due_date__isnull=False,
+            due_date__lte=as_of + timedelta(days=DUE_IN_90_DAYS),
+        )
+    elif status == "overdue":
         queryset = queryset.filter(state__in=_OPEN, due_date__lt=as_of)
     elif status == "due_soon":
         queryset = queryset.filter(
@@ -244,10 +303,16 @@ def _filtered(request: HttpRequest, *, as_of: date) -> QuerySet[ObligationInstan
             due_date__gte=as_of,
             due_date__lte=as_of + timedelta(days=DUE_IN_30_DAYS),
         )
+    elif status == "due_90":
+        queryset = queryset.filter(
+            state__in=_OPEN,
+            due_date__gte=as_of,
+            due_date__lte=as_of + timedelta(days=DUE_IN_90_DAYS),
+        )
     elif status == "pending":
-        # The dashboard's "Pending" tile: open, but neither overdue nor due
-        # soon. Mirrors `pending = counts["open"] - overdue - due_soon` in
-        # `stacos.tenancy.views` — overdue and due-soon are disjoint subsets
+        # "Upcoming / later" tile: open, but neither overdue nor due soon.
+        # Mirrors `pending = counts["open"] - overdue - due_soon` in
+        # `queries.status_counts` — overdue and due-soon are disjoint subsets
         # of open, so excluding both here can never double-subtract.
         #
         # Each excluded clause pins `due_date__isnull=False` before the
@@ -274,24 +339,225 @@ def _filtered(request: HttpRequest, *, as_of: date) -> QuerySet[ObligationInstan
     elif status != "all":
         queryset = queryset.filter(state__in=_OPEN)
 
-    search = request.GET.get("q", "").strip()
-    if search:
-        queryset = queryset.filter(
-            Q(title__icontains=search)
-            | Q(definition_code__icontains=search)
-            | Q(scope_label__icontains=search)
-            | Q(entity__name__icontains=search)
-        )
+    queryset = apply_text_filters(queryset, category=category, search=search)
 
-    category = request.GET.get("category", "").strip()
-    if category:
-        queryset = queryset.filter(category=category)
-
-    entity_id = _parse_uuid(request.GET.get("entity", "").strip())
     if entity_id:
         queryset = queryset.filter(entity_id=entity_id)
 
     return annotate_status(queryset, as_of=as_of)
+
+
+def _workload_forecast(
+    *, as_of: date, entity_id: UUID | None, category: str, search: str
+) -> dict[str, Any]:
+    """The calendar's look-ahead widgets, bundled behind one call.
+
+    Each of the three functions this calls already takes the same
+    category/search/entity narrowing the toolbar itself applies to the
+    register (see ``apply_text_filters``), so this never carries a filtering
+    rule of its own — it can only ever agree with the list underneath it.
+    Weeks are counted from ``as_of``, the same clock ``_filtered`` uses, not a
+    second date calculation.
+
+    Rendered as ``<c-bar-list>`` rows — the same component the tenancy
+    dashboard's own "Upcoming workload"/"Overdue ageing" panels already use —
+    rather than another row of ``.stat-tile``s: the counts strip above the
+    table already owns that shape for "how many, right now", and a second row
+    of identical-looking tiles read as a duplicate of it rather than a
+    forecast.
+    """
+    entity_ids = [entity_id] if entity_id else None
+    workload = weekly_workload(
+        as_of=as_of, weeks=4, entity_ids=entity_ids, category=category, search=search
+    )
+    aging = overdue_aging(as_of=as_of, entity_ids=entity_ids, category=category, search=search)
+    penalty = overdue_penalty_exposure(
+        as_of=as_of, entity_ids=entity_ids, category=category, search=search
+    )
+
+    week_labels = (_("This week"), _("Next week"), _("Week 3"), _("Week 4"))
+    weekly_bars = scaled_bars(
+        [
+            (label, count, "status-in-progress")
+            for label, count in zip(week_labels, workload["weeks"], strict=True)
+        ]
+    )
+    # Same three buckets, same wording and colour as the dashboard's own
+    # "Overdue ageing" panel — one status split by recency, not three
+    # different ones, which is why every row shares a colour.
+    aging_bars = scaled_bars(
+        [
+            (_("1–7 days late"), aging["recent"], "status-overdue"),
+            (_("8–30 days late"), aging["stale"], "status-overdue"),
+            (_("31+ days late"), aging["old"], "status-overdue"),
+        ]
+    )
+    return {
+        "weekly_bars": weekly_bars,
+        "weekly_total": sum(workload["weeks"]),
+        "aging_bars": aging_bars,
+        "aging_total": aging["recent"] + aging["stale"] + aging["old"],
+        "penalty": penalty,
+    }
+
+
+def _scope_description(status: str, *, as_of: date) -> str:
+    """One line naming the date window a status filter implies.
+
+    Due date is the single most important fact on this page — see it wrong and
+    a filing is missed, not just miscounted — so which window is on screen is
+    always spelled out, not left for the user to infer from a dropdown label.
+    """
+
+    def _fmt(value: date) -> str:
+        # Not `%-d` — a GNU strftime extension the platform-provided Python on
+        # Windows (where `tasks.ps1` runs this same codebase) doesn't support.
+        return f"{value.day} {value.strftime('%b %Y')}"
+
+    window_end = _fmt(as_of + timedelta(days=DUE_IN_90_DAYS))
+    thirty_end = _fmt(as_of + timedelta(days=DUE_IN_30_DAYS))
+    soon_end = _fmt(as_of + timedelta(days=DUE_SOON_DAYS))
+    today = _fmt(as_of)
+
+    if status == "latest":
+        return _("Overdue items of any age, plus everything due through %(end)s.") % {
+            "end": window_end
+        }
+    if status == "overdue":
+        return _("Everything overdue as of %(today)s, regardless of age.") % {"today": today}
+    if status == "due_soon":
+        return _("Due between today and %(end)s. Overdue items are excluded.") % {"end": soon_end}
+    if status == "due_30":
+        return _("Due between today and %(end)s. Overdue items are excluded.") % {"end": thirty_end}
+    if status == "due_90":
+        return _("Due between today and %(end)s. Overdue items are excluded.") % {"end": window_end}
+    if status == "":
+        return _("Every open obligation, regardless of due date.")
+    if status == "all":
+        return _("Every obligation, including completed and not-applicable ones.")
+    return ""
+
+
+def _active_filters(
+    request: HttpRequest,
+    *,
+    status: str,
+    search: str,
+    category: str,
+    entity_id: UUID | None,
+) -> list[dict[str, str]]:
+    """Chips summarising every filter the user chose, each removable on its own.
+
+    A short list is easy to mistake for "there's nothing due" rather than "a
+    filter did this" — the toolbar's own controls already carry that signal
+    individually (the status select gets `.form-select--filtered`), but a user
+    who stacked a search term, a category and a status change has no single
+    place to see, or undo, all three at once without this.
+    """
+    filters: list[dict[str, str]] = []
+
+    def _without(*keys: str) -> str:
+        params = request.GET.copy()
+        for key in keys:
+            params.pop(key, None)
+        params.pop("cursor", None)
+        encoded = params.urlencode()
+        return f"?{encoded}" if encoded else "?"
+
+    if search:
+        filters.append({"label": _('Search: "%(term)s"') % {"term": search}, "href": _without("q")})
+    if category:
+        label = dict(ComplianceCategory.choices).get(category, category)
+        filters.append(
+            {"label": _("Category: %(name)s") % {"name": label}, "href": _without("category")}
+        )
+    if entity_id:
+        entity = Entity.objects.filter(pk=entity_id).only("name").first()
+        if entity is not None:
+            filters.append(
+                {"label": _("Entity: %(name)s") % {"name": entity.name}, "href": _without("entity")}
+            )
+    if status != "latest":
+        status_label = dict(STATUS_FILTERS).get(status, status)
+        filters.append(
+            {"label": _("Status: %(label)s") % {"label": status_label}, "href": _without("status")}
+        )
+
+    return filters
+
+
+# ---------------------------------------------------------------------------
+# Calendar subscription (.ics)
+# ---------------------------------------------------------------------------
+
+
+@require_permission("compliance.obligation.view")
+@require_http_methods(["GET"])
+def calendar_subscribe(request: HttpRequest) -> HttpResponse:
+    """The subscribe modal: whether a link already exists, never what it is.
+
+    The raw secret is only ever handed back once, from
+    ``calendar_subscribe_create`` — this view cannot show it again because it
+    was never stored, only its hash. A user who lost their link regenerates
+    rather than recovers one.
+    """
+    has_token = CalendarFeedToken.objects.filter(
+        user=request.user, revoked_at__isnull=True
+    ).exists()
+    return render(
+        request, "obligations/_fragments/subscribe_modal.html", {"has_token": has_token}
+    )
+
+
+@require_permission("compliance.obligation.view")
+@require_http_methods(["POST"])
+def calendar_subscribe_create(request: HttpRequest) -> HttpResponse:
+    """Issue a fresh subscription link, replacing any the user already had."""
+    _token, raw = create_feed_token(request.user)
+    feed_path = reverse("compliance:feed", args=[raw])
+    feed_url = request.build_absolute_uri(feed_path)
+    # `webcal://` is what makes "Subscribe to calendar" a one-click affair in
+    # Google Calendar/Outlook/Apple Calendar rather than a URL the user has to
+    # paste into an "Add by URL" dialog by hand; both schemes resolve to the
+    # same feed.
+    webcal_url = "webcal://" + feed_url.split("://", 1)[1]
+    return render(
+        request,
+        "obligations/_fragments/subscribe_modal.html",
+        {"has_token": True, "just_created": True, "webcal_url": webcal_url, "feed_url": feed_url},
+    )
+
+
+@require_permission("compliance.obligation.view")
+@require_http_methods(["POST"])
+def calendar_subscribe_revoke(request: HttpRequest) -> HttpResponse:
+    """Stop sharing: any calendar app already subscribed stops updating."""
+    token = CalendarFeedToken.objects.filter(user=request.user, revoked_at__isnull=True).first()
+    if token is not None:
+        revoke_feed_token(token)
+    return render(
+        request, "obligations/_fragments/subscribe_modal.html", {"has_token": False}
+    )
+
+
+@public_view
+@require_http_methods(["GET", "HEAD"])
+def calendar_feed(request: HttpRequest, token: str) -> HttpResponse:
+    """The feed itself. No session, no permission decorator — the token in the
+    URL *is* the credential, verified and scoped inside ``feed_events_for_user``
+    rather than by anything Django's session middleware provides here.
+    """
+    feed_token = resolve_feed_token(token)
+    if feed_token is None:
+        raise Http404
+    feed_token.last_used_at = timezone.now()
+    feed_token.save(update_fields=["last_used_at"])
+
+    obligations = feed_events_for_user(feed_token.user, as_of=_today())
+    body = render_ics(obligations, calendar_name=_("STACOS compliance calendar"))
+    response = HttpResponse(body, content_type="text/calendar; charset=utf-8")
+    response["Content-Disposition"] = 'inline; filename="stacos-compliance.ics"'
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -314,10 +580,15 @@ def calendar_month(request: HttpRequest) -> HttpResponse:
     first = anchor.replace(day=1)
     last = _month_end(first)
 
+    # `priority_rank` is an annotation, not a model field — through a variable
+    # rather than as literal `.order_by()` arguments, or the django-stubs mypy
+    # plugin resolves each literal against the model's declared fields and
+    # doesn't know about one added by `annotate_status` at runtime.
+    month_order: tuple[str, ...] = ("due_date", "priority_rank", "title")
     rows = annotate_status(
         live().filter(due_date__gte=first, due_date__lte=last).select_related("entity"),
         as_of=as_of,
-    ).order_by("due_date", "title")
+    ).order_by(*month_order)
 
     by_day: dict[date, list[ObligationInstance]] = {}
     for row in rows:
@@ -408,12 +679,16 @@ def obligation_detail(request: HttpRequest, pk: str) -> HttpResponse:
 
     events = list(obligation.events.select_related("actor")[:50])
     permissions = _permissions(request)
+    neighbours = sibling_instances(obligation, as_of=as_of)
 
     context = {
         "definition": definition,
         **_panel_context(obligation, request, as_of=as_of),
         **_discussion_context(events),
         "comment_form": CommentForm(),
+        "previous_obligation": neighbours["previous"],
+        "next_obligation": neighbours["next"],
+        "related_scope_obligations": related_scope_instances(obligation, as_of=as_of)[:8],
         "registrations": (
             EntityRegistration.objects.filter(
                 entity=obligation.entity, archived_at__isnull=True
@@ -454,47 +729,112 @@ def _discussion_context(events: list[ObligationEvent]) -> dict[str, Any]:
     return {"timeline_events": timeline_events, "comments": list(reversed(comments))}
 
 
-#: The four permissions that gated the maker-checker flow the detail page used
-#: to render as buttons — start work, request information, submit for review,
-#: approve. The transitions are still in the lifecycle table and the API still
-#: serialises them; this page simply stops offering them, because "is it done?"
-#: is now the only question it asks. Filtering here rather than deleting the
-#: transitions keeps one table describing the whole machine.
-_FLOW_PERMISSIONS: frozenset[str] = frozenset(
+#: The exact moves that only exist for a maker-checker review chain — asking a
+#: colleague for information, sending a draft for review, waiting on a
+#: client's sign-off. Manual tracking, as this product currently is, is one
+#: person recording their own progress; nobody else in the loop reads these
+#: fine gradations, and offering them back in "Update status" is exactly the
+#: complexity STACOS already decided against once (see ``status_questions.html``).
+#:
+#: Named as exact ``(source, target)`` pairs rather than "touches one of these
+#: four states", because a blanket rule catches more than it should: "Reverse
+#: filing record" lands at ``READY_TO_FILE`` too, purely as an implementation
+#: detail of where a corrected filing has to sit, and hiding *that* would take
+#: away the one way to undo a mistaken "yes, it is done" that this update was
+#: supposed to add. The states themselves stay in ``State`` and the
+#: transitions stay in the lifecycle table — legacy rows already sitting in
+#: one still work, and a future collaboration phase can surface them again —
+#: this only curates what a solo user is offered *now*.
+_MAKER_CHECKER_ONLY: frozenset[tuple[State, State]] = frozenset(
     {
-        "compliance.obligation.request_info",
-        "compliance.obligation.prepare",
-        "compliance.obligation.review",
-        "compliance.obligation.approve",
+        (State.NOT_STARTED, State.INFO_REQUESTED),
+        (State.INFO_REQUESTED, State.IN_PREPARATION),
+        (State.IN_PREPARATION, State.INFO_REQUESTED),
+        (State.IN_PREPARATION, State.PENDING_REVIEW),
+        (State.PENDING_REVIEW, State.IN_PREPARATION),
+        (State.PENDING_REVIEW, State.PENDING_CLIENT_APPROVAL),
+        (State.PENDING_REVIEW, State.READY_TO_FILE),
+        (State.PENDING_CLIENT_APPROVAL, State.READY_TO_FILE),
+        (State.PENDING_CLIENT_APPROVAL, State.IN_PREPARATION),
     }
 )
 
 
+def _visible_for_manual_tracking(move: Transition) -> bool:
+    """Whether ``move`` belongs on the "Update status" list for a solo tracker.
+
+    Recording the filing is excluded unconditionally — not because it is one of
+    the moves above, but because it is the "yes" answer to the question the
+    panel already opens with, and offering the same act twice on one page
+    invites two different dates for one filing.
+    """
+    if move.requires_filing_reference:
+        return False
+    return (move.source, move.target) not in _MAKER_CHECKER_ONLY
+
+
 def _action_context(obligation: ObligationInstance, permissions: frozenset[str]) -> dict[str, Any]:
-    """The two shapes the detail panel still renders actions as.
+    """Every control the panel can offer right now, named by what it *does*
+    rather than handed over as one undifferentiated list.
 
-    A plain state change is a button; a judgement call (deferring, disputing,
-    marking not applicable) needs a reason, so it is a tile that only opens its
-    note field once chosen. Grouped here, once, rather than in the template, so
-    an empty group renders no container at every one of this view's render
-    sites.
-
-    Recording the filing is deliberately *not* among them any more: it is the
-    "yes" answer to the question the panel opens with, and offering the same act
-    twice on one page invites two different dates for one filing.
+    A generic "pick a target, add a note" control asks the user to translate
+    their own intent into the engine's vocabulary. Naming each one — "start",
+    "complete", "reopen" — does that translation once, here, instead of on
+    every visit to the page. The lifecycle table underneath is unchanged: this
+    is still exactly ``available_actions``, sorted into the slots the template
+    already knows how to render.
     """
     actions = available_actions(obligation, permissions=permissions)
-    offered = [
-        a
-        for a in actions
-        if a.permission not in _FLOW_PERMISSIONS and not a.requires_filing_reference
-    ]
+    visible = [a for a in actions if _visible_for_manual_tracking(a)]
+    by_target = {a.target: a for a in visible}
+
     return {
         "actions": actions,
-        "plain_actions": [a for a in offered if not a.requires_note],
-        "note_actions": [a for a in offered if a.requires_note],
+        "start_action": (
+            by_target.get(State.IN_PREPARATION) if obligation.state == State.NOT_STARTED else None
+        ),
+        "undo_start_action": (
+            by_target.get(State.NOT_STARTED) if obligation.state == State.IN_PREPARATION else None
+        ),
+        "complete_action": by_target.get(State.CLOSED),
+        "undo_submission_action": by_target.get(State.READY_TO_FILE),
+        "reopen_action": (
+            by_target.get(State.FILED) if obligation.state == State.CLOSED else None
+        ),
+        "resume_action": (
+            by_target.get(State.NOT_STARTED)
+            if obligation.state in {State.DEFERRED, State.NOT_APPLICABLE}
+            else None
+        ),
+        # Disputed is the one state with two ways back, not one, so it gets its
+        # own pair rather than a single named slot.
+        "dispute_resolution_actions": (
+            [a for a in visible if a.target in {State.IN_PREPARATION, State.NOT_APPLICABLE}]
+            if obligation.state == State.DISPUTED
+            else []
+        ),
+        # Deferring, dismissing and disputing are the one thing left off the
+        # main ladder on purpose (see the manual-tracking status model's own
+        # note): offering them is never this obligation's *next* action, it is
+        # an exception to needing one. Excluded once already disputed, so this
+        # is not offered twice alongside `dispute_resolution_actions` above.
+        "special_actions": (
+            []
+            if obligation.state == State.DISPUTED
+            else [
+                a
+                for a in visible
+                if a.target in {State.DEFERRED, State.NOT_APPLICABLE, State.DISPUTED}
+            ]
+        ),
         "can_record_filing": "compliance.obligation.file" in permissions,
         "can_record_pending": "compliance.obligation.prepare" in permissions,
+        # Only meaningful once filed: closing is the one transition this can
+        # block, so this stays empty everywhere else rather than costing a
+        # query on every render of the panel.
+        "mandatory_evidence_outstanding": (
+            outstanding_mandatory_evidence(obligation) if obligation.state == State.FILED else []
+        ),
     }
 
 
@@ -523,6 +863,7 @@ def _panel_context(
         "pending_form": pending_form or FilingPendingForm(),
         "open_answer": open_answer,
         **_action_context(obligation, _permissions(request)),
+        **_off_path_context(obligation),
         "form": TransitionForm(),
         "event_form": (
             EntityEventForm(initial={"key": obligation.needs_input})
@@ -530,6 +871,103 @@ def _panel_context(
             else None
         ),
     }
+
+
+#: Off the main ladder entirely — not a stage of progress, an exception to
+#: needing one. The status chip already says which; this is what explains why.
+_OFF_PATH_STATES: frozenset[State] = frozenset(
+    {State.DEFERRED, State.NOT_APPLICABLE, State.DISPUTED}
+)
+
+
+def _off_path_context(obligation: ObligationInstance) -> dict[str, Any]:
+    """Why this obligation is off the ladder, for the one state-specific card
+    that needs to say so.
+
+    Reuses the timeline this page already renders rather than a second query
+    path: the transition that moved the obligation into its current off-path
+    state carries the actor, the note and the timestamp already, because
+    every transition writes exactly that row regardless of where it lands.
+    ``expires_on`` comes from ``ObligationSuppression`` — the one fact the
+    timeline does not carry, because it is a plan for the future, not a record
+    of what happened.
+    """
+    if obligation.state not in _OFF_PATH_STATES:
+        return {}
+    event = (
+        obligation.events.filter(
+            kind=ObligationEvent.Kind.TRANSITION, to_state=obligation.state
+        )
+        .select_related("actor")
+        .order_by("-occurred_at")
+        .first()
+    )
+    suppression = (
+        ObligationSuppression.objects.filter(
+            entity_id=obligation.entity_id,
+            definition_code=obligation.definition_code,
+            scope_ref=obligation.scope_ref,
+            period_key=obligation.period_key,
+            revoked_at__isnull=True,
+        ).first()
+        if obligation.state == State.DEFERRED
+        else None
+    )
+    return {"off_path_event": event, "off_path_suppression": suppression}
+
+
+def _evidence_fragment(obligation: ObligationInstance) -> Fragment | None:
+    """The "What you'll need" card, ready for an out-of-band swap.
+
+    Recording a filing or attaching an acknowledgement only swaps the working
+    panel, and either one can be the very thing that satisfies this card — so
+    every endpoint that can change whether the evidence is on file sends this
+    back alongside its main response, rather than leaving "Required" showing
+    beside a document the reader just uploaded until they reload. ``None``
+    when the definition names nothing to attach, so a caller can drop it from
+    ``also=`` with a plain truthiness check.
+    """
+    definition = (
+        DefinitionVersion.objects.filter(
+            definition__code=obligation.definition_code,
+            version=obligation.definition_version,
+        )
+        .first()
+    )
+    if definition is None or not definition.evidence_requirements:
+        return None
+    return Fragment(
+        "obligations/_fragments/evidence_card.html",
+        {
+            "obligation": obligation,
+            "definition": definition,
+            "mandatory_evidence_outstanding": (
+                outstanding_mandatory_evidence(obligation)
+                if obligation.state == State.FILED
+                else []
+            ),
+        },
+        oob_target="obligation-evidence",
+    )
+
+
+def _timeline_fragment(obligation: ObligationInstance) -> Fragment:
+    """The "Audit trail" card, ready for an out-of-band swap.
+
+    Every status change happens inside ``#obligation-panel`` — the timeline
+    beside it would otherwise show yesterday's history until the next full
+    reload, which is backwards for the one page whose point is showing what
+    just happened to this obligation. Unlike the evidence card, this one is
+    never ``None``: even the very first transition needs it, to stop showing
+    "Nothing has happened yet" beside a panel that just proved otherwise.
+    """
+    events = list(obligation.events.select_related("actor")[:50])
+    timeline_events = [event for event in events if event.kind != ObligationEvent.Kind.NOTE]
+    return Fragment(
+        "obligations/_fragments/audit_trail_card.html",
+        {"timeline_events": timeline_events},
+        oob_target="obligation-audit-trail",
+    )
 
 
 def _get(pk: str, *, as_of: date) -> ObligationInstance:
@@ -547,6 +985,34 @@ def _get(pk: str, *, as_of: date) -> ObligationInstance:
     if obligation is None:
         raise Http404
     return obligation
+
+
+def _bulk_get(ids: list[str], *, as_of: date) -> list[ObligationInstance]:
+    """Resolve several ids through the scoped manager, dropping what does not resolve.
+
+    Mirrors ``_get`` for one id, applied to many at once: an id outside the
+    caller's tenant or entity reach is treated exactly like one that does not
+    exist — silently absent from the result, never a 403 that would confirm
+    it is there. Order matches ``ids``, so a row does not appear to reshuffle
+    itself underneath the person who just selected it.
+    """
+    if not ids:
+        return []
+    valid_ids: list[UUID] = []
+    for raw_id in ids:
+        try:
+            valid_ids.append(UUID(raw_id))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    if not valid_ids:
+        return []
+    rows = {
+        obligation.pk: obligation
+        for obligation in annotate_status(ObligationInstance.objects.all(), as_of=as_of)
+        .select_related("entity", "assigned_to")
+        .filter(pk__in=valid_ids)
+    }
+    return [rows[pk] for pk in valid_ids if pk in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -581,6 +1047,7 @@ def obligation_transition(request: HttpRequest, pk: str) -> HttpResponse:
             note=form.cleaned_data.get("note", ""),
             filing_reference=form.cleaned_data.get("filing_reference", ""),
             filed_on=form.cleaned_data.get("filed_on"),
+            defer_until=form.cleaned_data.get("defer_until"),
             as_of=as_of,
         )
     except TransitionError as exc:
@@ -589,26 +1056,273 @@ def obligation_transition(request: HttpRequest, pk: str) -> HttpResponse:
         )
 
     refreshed = _get(pk, as_of=as_of)
-    counts = status_counts(as_of=as_of)
 
+    # The evidence card only ever reads `obligation.acknowledgement` (unmoved
+    # by any transition) and `mandatory_evidence_outstanding`, which is
+    # non-empty only in `FILED`. So the only transitions that can leave it
+    # stale are the ones crossing that boundary — reversing a filing, or
+    # reopening a closed one — and every other move can skip the query and the
+    # swap entirely.
+    evidence = (
+        _evidence_fragment(refreshed)
+        if State.FILED in (result.transition.source, result.transition.target)
+        else None
+    )
+    # Every transition is a new row in the audit trail, so unlike the evidence
+    # card above this is never conditional.
+    also = [_timeline_fragment(refreshed)] + ([evidence] if evidence else [])
+
+    # No `#calendar-counts` OOB fragment here, unlike the bulk actions below:
+    # this form only ever posts from `detail_panel.html`, which is only ever
+    # rendered as the standalone obligation page — a page that never has the
+    # calendar's counter strip in its DOM to begin with. Sending one anyway
+    # cost a query on every transition and logged `htmx:oobErrorNoTarget` in
+    # the console on every one of them, for a swap that could never land.
     return oob(
         request,
         Fragment(
             "obligations/_fragments/detail_panel.html",
             _panel_context(refreshed, request, as_of=as_of),
         ),
-        also=[
-            Fragment(
-                "obligations/_fragments/status_counts.html",
-                {"counts": counts},
-                oob_target="calendar-counts",
-            )
-        ],
+        also=also,
         toast=Toast(
             _("%(action)s — %(what)s")
             % {"action": result.transition.label, "what": obligation_display(refreshed)}
         ),
-        triggers={"stacos:obligation-changed": {"id": str(refreshed.pk)}},
+        # `modal-close` is safe unconditionally: the only caller left is the
+        # "Update status" modal below — see its own template note.
+        triggers={
+            "stacos:obligation-changed": {"id": str(refreshed.pk)},
+            "stacos:modal-close": True,
+        },
+    )
+
+
+@require_permission("compliance.obligation.view")
+def obligation_complete_modal(request: HttpRequest, pk: str) -> HttpResponse:
+    """"Mark as completed" — reviewed, not just clicked.
+
+    A ``GET`` only: the actual change still goes through
+    :func:`obligation_transition` (target ``CLOSED``), which already does the
+    one thing a status change requires — guard, row update, timeline entry,
+    audit row. This view's job is to show, before that POST fires, exactly
+    what the register is about to certify as complete: when it was submitted,
+    under what reference, and which of the evidence this definition asks for
+    is actually on file — the same question ``apply_transition`` enforces for
+    real, shown here so a blocked completion explains itself before the click
+    rather than after.
+    """
+    as_of = _today()
+    obligation = _get(pk, as_of=as_of)
+    action = _action_context(obligation, _permissions(request))["complete_action"]
+    if action is None:
+        raise Http404
+    definition = (
+        DefinitionVersion.objects.filter(
+            definition__code=obligation.definition_code,
+            version=obligation.definition_version,
+        ).first()
+    )
+    return render(
+        request,
+        "obligations/_fragments/complete_modal.html",
+        {
+            "obligation": obligation,
+            "action": action,
+            "definition": definition,
+            "mandatory_evidence_outstanding": outstanding_mandatory_evidence(obligation),
+        },
+    )
+
+
+@require_permission("compliance.obligation.view")
+def obligation_reopen_modal(request: HttpRequest, pk: str) -> HttpResponse:
+    """"Reopen" — a completed compliance, corrected without erasing that it
+    was ever marked done.
+
+    Same shape as :func:`obligation_complete_modal`: a ``GET`` that shows what
+    is about to change, a POST that still lands on :func:`obligation_transition`
+    (target ``FILED``). The reason is the point of this screen — ``Reopen`` is
+    the one transition in the lifecycle table that has always required a note,
+    because a completed record silently going back to work is exactly the kind
+    of change an audit trail exists to explain.
+    """
+    as_of = _today()
+    obligation = _get(pk, as_of=as_of)
+    action = _action_context(obligation, _permissions(request))["reopen_action"]
+    if action is None:
+        raise Http404
+    return render(
+        request,
+        "obligations/_fragments/reopen_modal.html",
+        {"obligation": obligation, "action": action},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Bulk actions
+# ---------------------------------------------------------------------------
+
+
+@require_permission("compliance.obligation.assign")
+@require_http_methods(["GET", "POST"])
+def bulk_assign(request: HttpRequest) -> HttpResponse:
+    """Assign several obligations to the same person in one step.
+
+    Same permission and the same ``AssignForm`` as the single-obligation
+    flow — ``ScopedUserChoiceField`` narrows the picker exactly as it does
+    there, so this needs no extra per-row check for the assignee's tenant.
+    What *is* per-row is which obligations resolve at all: see ``_bulk_get``.
+    """
+    as_of = _today()
+    ids = request.GET.getlist("ids") if request.method == "GET" else request.POST.getlist("ids")
+    obligations = _bulk_get(ids, as_of=as_of)
+
+    if request.method == "GET":
+        return render(
+            request,
+            "obligations/_fragments/bulk_assign_modal.html",
+            {"obligations": obligations, "ids": ids, "form": AssignForm()},
+        )
+
+    form = AssignForm(request.POST)
+    if not obligations or not form.is_valid():
+        return render(
+            request,
+            "obligations/_fragments/bulk_assign_modal.html",
+            {"obligations": obligations, "ids": ids, "form": form},
+            status=422,
+        )
+
+    assignee = form.cleaned_data["assigned_to"]
+    actor = current_user(request)
+    for obligation in obligations:
+        assign(obligation, assignee=assignee, actor=actor)
+
+    refreshed = _bulk_get([str(o.pk) for o in obligations], as_of=as_of)
+    counts = status_counts(as_of=as_of)
+    return oob(
+        request,
+        "",
+        also=[
+            *(
+                Fragment(
+                    "obligations/_fragments/obligation_row.html",
+                    {"obligation": obligation},
+                    oob_target=f"obligation-{obligation.pk}",
+                )
+                for obligation in refreshed
+            ),
+            Fragment(
+                "obligations/_fragments/status_counts.html",
+                {"counts": counts, "total": counts["total"]},
+                oob_target="calendar-counts",
+            ),
+        ],
+        toast=Toast(
+            _("Assigned %(count)d obligations to %(name)s.")
+            % {"count": len(refreshed), "name": assignee}
+            if assignee is not None
+            else _("Cleared the assignment on %(count)d obligations.") % {"count": len(refreshed)}
+        ),
+        triggers={"stacos:modal-close": True},
+    )
+
+
+@require_permission("compliance.obligation.view")
+@require_http_methods(["GET", "POST"])
+def bulk_not_applicable(request: HttpRequest) -> HttpResponse:
+    """Mark several obligations Not Applicable with one shared reason.
+
+    Declared permission is only ``view`` — same reasoning as
+    ``obligation_transition``: which obligations may actually make this move
+    is decided per row, inside ``apply_transition``, off the transition
+    table. A user who could not mark one obligation Not Applicable by hand
+    cannot do it here either; that row is skipped and counted, the rest still
+    go through — a bulk action fails safely one row at a time, not as a whole
+    batch on the first obstacle.
+    """
+    as_of = _today()
+    ids = request.GET.getlist("ids") if request.method == "GET" else request.POST.getlist("ids")
+    obligations = _bulk_get(ids, as_of=as_of)
+
+    if request.method == "GET":
+        return render(
+            request,
+            "obligations/_fragments/bulk_not_applicable_modal.html",
+            {"obligations": obligations, "ids": ids, "form": BulkNotApplicableForm()},
+        )
+
+    form = BulkNotApplicableForm(request.POST)
+    if not obligations or not form.is_valid():
+        return render(
+            request,
+            "obligations/_fragments/bulk_not_applicable_modal.html",
+            {"obligations": obligations, "ids": ids, "form": form},
+            status=422,
+        )
+
+    reason = form.cleaned_data["reason"]
+    actor = current_user(request)
+    permissions = _permissions(request)
+    succeeded: list[ObligationInstance] = []
+    failed = 0
+    for obligation in obligations:
+        try:
+            apply_transition(
+                obligation,
+                target=State.NOT_APPLICABLE,
+                actor=actor,
+                permissions=permissions,
+                note=reason,
+                as_of=as_of,
+            )
+            succeeded.append(obligation)
+        except TransitionError:
+            failed += 1
+
+    refreshed = _bulk_get([str(o.pk) for o in succeeded], as_of=as_of)
+    counts = status_counts(as_of=as_of)
+    row_fragments = [
+        Fragment(
+            "obligations/_fragments/obligation_row.html",
+            {"obligation": obligation},
+            oob_target=f"obligation-{obligation.pk}",
+        )
+        for obligation in refreshed
+    ]
+    row_fragments.append(
+        Fragment(
+            "obligations/_fragments/status_counts.html",
+            {"counts": counts, "total": counts["total"]},
+            oob_target="calendar-counts",
+        )
+    )
+
+    if failed and not succeeded:
+        message, level = (
+            _("Could not mark any of the %(count)d obligations Not Applicable.")
+            % {"count": failed},
+            "danger",
+        )
+    elif failed:
+        message, level = (
+            _("Marked %(done)d Not Applicable — %(skipped)d could not be changed.")
+            % {"done": len(succeeded), "skipped": failed},
+            "warning",
+        )
+    else:
+        message, level = (
+            _("Marked %(count)d obligations Not Applicable.") % {"count": len(succeeded)},
+            "success",
+        )
+
+    return oob(
+        request,
+        "",
+        also=row_fragments,
+        toast=Toast(message, level=level),
+        triggers={"stacos:modal-close": True},
     )
 
 
@@ -683,19 +1397,31 @@ def obligation_status(request: HttpRequest, pk: str) -> HttpResponse:
         return _detail_error(request, obligation, message=_("Answer yes or no."))
 
     refreshed = _get(pk, as_of=as_of)
+
+    # "Yes, it is done" always lands in `FILED`, which is exactly the state
+    # the evidence card's "attach this before closing" callout is keyed to —
+    # and a "yes" can itself carry the acknowledgement (`form.cleaned_data`
+    # above), so the card can go stale in the very same request that answers
+    # it, and it is a transition worth a row in the audit trail beside it.
+    # "No, not yet" changes no state and touches no evidence — it records a
+    # note instead, which lives in the discussion card, not this one — so it
+    # skips both queries and both swaps.
+    also: list[Fragment] = []
+    if answer == "yes":
+        also.append(_timeline_fragment(refreshed))
+        evidence = _evidence_fragment(refreshed)
+        if evidence is not None:
+            also.append(evidence)
+
+    # See `obligation_transition`'s own note: this form only ever posts from
+    # the standalone obligation page, which has no `#calendar-counts` to swap.
     return oob(
         request,
         Fragment(
             "obligations/_fragments/detail_panel.html",
             _panel_context(refreshed, request, as_of=as_of),
         ),
-        also=[
-            Fragment(
-                "obligations/_fragments/status_counts.html",
-                {"counts": status_counts(as_of=as_of)},
-                oob_target="calendar-counts",
-            )
-        ],
+        also=also,
         toast=Toast(message),
         triggers={"stacos:obligation-changed": {"id": str(refreshed.pk)}},
     )
@@ -742,12 +1468,14 @@ def obligation_acknowledgement(request: HttpRequest, pk: str) -> HttpResponse | 
             obligation, upload=form.cleaned_data["acknowledgement"], actor=current_user(request)
         )
         refreshed = _get(pk, as_of=as_of)
+        evidence = _evidence_fragment(refreshed)
         return oob(
             request,
             Fragment(
                 "obligations/_fragments/detail_panel.html",
                 _panel_context(refreshed, request, as_of=as_of),
             ),
+            also=[evidence] if evidence else [],
             toast=Toast(_("Acknowledgement attached.")),
         )
 
@@ -1327,7 +2055,7 @@ def _confirmed_response(
     counts = status_counts(as_of=as_of)
     counters = Fragment(
         "obligations/_fragments/status_counts.html",
-        {"counts": counts},
+        {"counts": counts, "total": counts["total"]},
         oob_target="calendar-counts",
     )
 

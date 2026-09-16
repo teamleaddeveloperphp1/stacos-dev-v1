@@ -8,6 +8,7 @@ module holds only the formatting and permission primitives those components need
 from __future__ import annotations
 
 import json
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -152,6 +153,37 @@ def state_label_filter(value: str | None) -> str:
     from stacos.engine.lifecycle import state_label
 
     return state_label(str(value))
+
+
+@register.filter(name="strip_trailing_paren")
+def strip_trailing_paren(value: str | None) -> str:
+    """``{{ obligation.title|strip_trailing_paren }}`` -> ``Form 24Q — quarterly TDS return``.
+
+    Several catalog titles end in a static clarifier — "Form 24Q — quarterly
+    TDS return (salaries)" — that reads fine once but is identical across
+    every period of that same definition, so it does nothing to tell a Q2 row
+    apart from a Q3 row. The register's row template replaces it with the
+    period instead, which actually differs.
+    """
+    if not value:
+        return ""
+    return re.sub(r"\s*\([^()]*\)\s*$", "", str(value))
+
+
+@register.filter(name="period_short")
+def period_short(value: str | None) -> str:
+    """``{{ obligation.period_label|period_short }}`` -> ``Q2 FY2026-27``.
+
+    ``period_label`` itself is ``Q2 FY2026-27 (Jul-Sep 2026)`` — right for the
+    register's own Period column, but repeated as a subline under a recurring
+    definition's title (so two "Form 24Q" rows read as different filings), the
+    date range is the same information the Period column already carries a few
+    cells over. Trimmed to the part before it so the two don't read as one
+    line duplicated twice.
+    """
+    if not value:
+        return ""
+    return str(value).split(" (", 1)[0]
 
 
 # ---------------------------------------------------------------------------

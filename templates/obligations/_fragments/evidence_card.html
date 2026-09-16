@@ -1,0 +1,41 @@
+{% load i18n %}
+{% comment %}
+  What closing this out actually takes, named up front rather than discovered
+  one rejected upload at a time. From the same catalog data
+  `stacos.engine.penalty` and the acknowledgement upload already read — this is
+  the first place on the page that shows it.
+
+  The register has exactly one place evidence can live today — the single
+  acknowledgement upload — so "attached" below means that one file, not a tick
+  per line. `mandatory_evidence_outstanding` is the same check
+  `apply_transition` enforces for real against `Close`, not a second, looser
+  one invented for display.
+
+  Its own fragment, with a stable id, rather than inline in `detail_body.html`:
+  recording a filing or attaching the acknowledgement only swaps the working
+  panel, and either can be the very thing that satisfies this card — so every
+  endpoint that can change that sends this back out of band too, instead of
+  leaving "Required" showing beside a document the reader just uploaded.
+{% endcomment %}
+<section class="card" id="obligation-evidence">
+  <h2 class="card__title"><c-icon name="folder" size="14" /> {% translate "What you'll need" %}</h2>
+  <ul class="reason-list">
+    {% for item in definition.evidence_requirements %}
+      <li>
+        {{ item.label }}
+        {% if item.mandatory_for_close %}
+          {% if obligation.acknowledgement %}
+            <span class="badge-soft">{% translate "Attached" %}</span>
+          {% else %}
+            <span class="badge-soft badge-soft--attention">{% translate "Required" %}</span>
+          {% endif %}
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  {% if mandatory_evidence_outstanding %}
+    <p class="callout callout--attention small mt-3 mb-0">
+      {% translate "Attach the acknowledgement below before this can be marked completed." %}
+    </p>
+  {% endif %}
+</section>

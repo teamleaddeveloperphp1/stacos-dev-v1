@@ -246,7 +246,19 @@ TRANSITIONS: tuple[Transition, ...] = (
         "compliance.obligation.request_info",
     ),
     Transition(
-        State.NOT_STARTED, State.IN_PREPARATION, "Start work", "compliance.obligation.prepare"
+        State.NOT_STARTED, State.IN_PREPARATION, "Start compliance", "compliance.obligation.prepare"
+    ),
+    # The one correction the manual tracker's primary action needs that the
+    # maker-checker table never did: that flow only ever moved forward out of
+    # preparation, because a real reviewer sending it back was always a
+    # deliberate, noted decision. A solo user starting this by mistake is not
+    # a judgement call to reverse, it is a typo — so this one carries no note,
+    # unlike every other backward move in this table.
+    Transition(
+        State.IN_PREPARATION,
+        State.NOT_STARTED,
+        "Move back to not started",
+        "compliance.obligation.prepare",
     ),
     Transition(
         State.INFO_REQUESTED,
@@ -303,7 +315,7 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(
         State.FILED,
         State.CLOSED,
-        "Close",
+        "Mark as completed",
         "compliance.obligation.close",
         requires_mandatory_evidence=True,
     ),
@@ -313,7 +325,7 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(
         State.FILED,
         State.READY_TO_FILE,
-        "Reverse filing record",
+        "Undo submission",
         "compliance.obligation.file",
         requires_note=True,
         confirmation="The acknowledgement number and filing date will be cleared.",
@@ -558,12 +570,12 @@ class StateDescriptor:
 _LABELS: Mapping[str, str] = {
     State.NOT_STARTED: "Not started",
     State.INFO_REQUESTED: "Information requested",
-    State.IN_PREPARATION: "In preparation",
+    State.IN_PREPARATION: "In progress",
     State.PENDING_REVIEW: "Pending review",
     State.PENDING_CLIENT_APPROVAL: "Pending client approval",
     State.READY_TO_FILE: "Ready to file",
-    State.FILED: "Filed",
-    State.CLOSED: "Closed",
+    State.FILED: "Submitted",
+    State.CLOSED: "Completed",
     State.NOT_APPLICABLE: "Not applicable",
     State.DEFERRED: "Deferred",
     State.DISPUTED: "Disputed",

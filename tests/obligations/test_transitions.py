@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 
 from stacos.core.models import AuditAction, AuditLog
 from stacos.core.scope import platform_scope
@@ -19,6 +20,7 @@ from stacos.obligations.models import ObligationEvent, ObligationInstance, Oblig
 from stacos.obligations.transitions import (
     TransitionError,
     apply_transition,
+    attach_acknowledgement,
     available_actions,
 )
 
@@ -246,3 +248,68 @@ def test_a_superseded_obligation_cannot_be_worked_on(
                 as_of=AS_OF,
             )
         assert exc.value.code == "superseded"
+
+
+def _file_it(an_obligation: ObligationInstance) -> None:
+    """Walk to FILED the same way the happy path does, so the evidence tests
+    below start from a realistic state rather than a hand-set one."""
+    for target, extra in (
+        (State.IN_PREPARATION, {}),
+        (State.PENDING_REVIEW, {}),
+        (State.READY_TO_FILE, {}),
+        (State.FILED, {"filing_reference": "AA240526000123X"}),
+    ):
+        apply_transition(
+            an_obligation, target=target, actor=None, permissions=ALL, as_of=AS_OF, **extra
+        )
+
+
+def test_closing_is_refused_without_the_required_evidence(
+    an_obligation: ObligationInstance,
+) -> None:
+    """GSTR-3B marks two evidence items ``mandatory_for_close``. Filing alone —
+    an acknowledgement *number* — is not the same claim as having the document,
+    and ``Close`` must not be gameable by typing a number with nothing attached.
+    """
+    with platform_scope(reason="test"):
+        _file_it(an_obligation)
+
+        assert all(
+            move.target != State.CLOSED
+            for move in available_actions(an_obligation, permissions=ALL)
+        )
+
+        with pytest.raises(TransitionError) as exc:
+            apply_transition(
+                an_obligation, target=State.CLOSED, actor=None, permissions=ALL, as_of=AS_OF
+            )
+        assert exc.value.code == "evidence_required"
+
+        an_obligation.refresh_from_db()
+        assert an_obligation.state == State.FILED
+
+
+def test_closing_succeeds_once_the_evidence_is_attached(
+    an_obligation: ObligationInstance,
+) -> None:
+    with platform_scope(reason="test"):
+        _file_it(an_obligation)
+        attach_acknowledgement(
+            an_obligation,
+            upload=SimpleUploadedFile(
+                "ack.pdf", b"%PDF-1.4 acknowledgement", content_type="application/pdf"
+            ),
+            actor=None,
+        )
+
+        assert any(
+            move.target == State.CLOSED
+            for move in available_actions(an_obligation, permissions=ALL)
+        )
+
+        apply_transition(
+            an_obligation, target=State.CLOSED, actor=None, permissions=ALL, as_of=AS_OF
+        )
+        an_obligation.refresh_from_db()
+
+    assert an_obligation.state == State.CLOSED

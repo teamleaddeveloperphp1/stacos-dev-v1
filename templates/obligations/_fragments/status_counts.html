@@ -1,33 +1,55 @@
 {% load i18n %}
 {% comment %}
   The counter strip above the calendar, and the out-of-band target every action
-  updates. Counts come from one conditional aggregation rather than five
-  `.count()` calls, so the tiles can never disagree with each other.
+  updates. Counts come from one conditional aggregation rather than several
+  `.count()` calls, so the tiles can never disagree with each other — and,
+  since `status_counts` now takes the toolbar's own search/category/entity
+  filters, typing "gst" or picking an entity narrows every tile to match, not
+  just the table underneath them.
 
   `aria-live` matters here: an HTMX swap is invisible to a screen reader
   otherwise, and "three overdue became two" is exactly the change a user needs
   announced.
 {% endcomment %}
 <div class="stat-row" id="calendar-counts" aria-live="polite" aria-atomic="true">
+  {% comment %}
+    Not a link — there is no single filter this number maps to, it *is* the
+    current combination of every filter. It changes with the toolbar and with
+    which tile below is active, so it answers "how many results, right now"
+    without the user having to count table rows or scroll to the bottom.
+  {% endcomment %}
+  <div class="stat-tile" role="status">
+    <span class="stat-tile__value">{{ total }}</span>
+    <span class="stat-tile__label">{% translate "Total" %}</span>
+    {% if scope_description %}<span class="stat-tile__sub">{{ scope_description }}</span>{% endif %}
+  </div>
+
   <a class="stat-tile stat-tile--overdue" href="?status=overdue"
      hx-get="?status=overdue" hx-target="#main" hx-push-url="true">
     <span class="stat-tile__value">{{ counts.overdue }}</span>
     <span class="stat-tile__label">{% translate "Overdue" %}</span>
+  </a>
+  {% comment %}
+    Shares the "overdue" colour rather than "due-soon": a filing due today is
+    a same-day emergency, not a heads-up — it reads closer to "about to be
+    overdue" than to "due sometime this week".
+  {% endcomment %}
+  <a class="stat-tile stat-tile--overdue" href="?status=due_soon#today"
+     hx-get="?status=due_soon" hx-target="#main" hx-push-url="true"
+     title="{% translate 'Due today, part of the 7-day window below' %}">
+    <span class="stat-tile__value">{{ counts.due_today }}</span>
+    <span class="stat-tile__label">{% translate "Due today" %}</span>
   </a>
   <a class="stat-tile stat-tile--due-soon" href="?status=due_soon"
      hx-get="?status=due_soon" hx-target="#main" hx-push-url="true">
     <span class="stat-tile__value">{{ counts.due_soon }}</span>
     <span class="stat-tile__label">{% translate "Due in 7 days" %}</span>
   </a>
-  <a class="stat-tile stat-tile--due-soon" href="?status=due_30"
-     hx-get="?status=due_30" hx-target="#main" hx-push-url="true">
-    <span class="stat-tile__value">{{ counts.due_30 }}</span>
-    <span class="stat-tile__label">{% translate "Due in 30 days" %}</span>
-  </a>
   <a class="stat-tile" href="?status="
-     hx-get="?status=" hx-target="#main" hx-push-url="true">
+     hx-get="?status=" hx-target="#main" hx-push-url="true"
+     title="{% translate 'The full open register, regardless of due date' %}">
     <span class="stat-tile__value">{{ counts.open }}</span>
-    <span class="stat-tile__label">{% translate "Open" %}</span>
+    <span class="stat-tile__label">{% translate "All open" %}</span>
   </a>
   {% if counts.unconfirmed %}
     <a class="stat-tile stat-tile--attention" href="?status=unconfirmed"

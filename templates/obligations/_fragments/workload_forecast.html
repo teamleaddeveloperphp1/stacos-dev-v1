@@ -1,0 +1,63 @@
+{% load i18n %}
+{% comment %}
+  A look-ahead alongside the register, not a second source of truth for it.
+
+  `workload` is built by `_workload_forecast` in `stacos.obligations.views`
+  from the same functions the tenancy dashboard already uses
+  (`weekly_workload`/`overdue_aging` in `stacos.obligations.queries`), scoped
+  to the calendar toolbar's own category/search/entity — so this can only
+  ever agree with the filtered table underneath it, never disagree with it.
+
+  Rendered as `<c-bar-list>`, the exact component the dashboard's own
+  "Upcoming workload"/"Overdue ageing" panels use — deliberately not another
+  row of `.stat-tile`s, which is what `status_counts.html` above already
+  uses for "how many, right now". Two rows of identical-looking tiles read
+  as the same number said twice, not as a forecast.
+
+  The penalty figure reuses `stacos.engine.penalty.compute_penalties`, the
+  same function the detail page's own exposure card calls for one obligation
+  at a time — just summed across the filtered overdue set.
+
+  Only rendered on the first screen of a filter combination (see
+  `calendar_list`), the same as `total` above it: a "load more" scroll does
+  not need this recomputed.
+{% endcomment %}
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <strong class="small">{% translate "Workload forecast" %}</strong>
+      </div>
+      <div class="card-body">
+        {% if workload.weekly_total %}
+          <c-bar-list :rows="workload.weekly_bars" />
+        {% else %}
+          <p class="text-muted small mb-0">
+            {% translate "Nothing due in the next 4 weeks." %}
+          </p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">
+        <strong class="small">{% translate "Overdue ageing" %}</strong>
+      </div>
+      <div class="card-body">
+        {% if workload.aging_total %}
+          <c-bar-list :rows="workload.aging_bars" />
+          {% if workload.penalty.total_minor %}
+            <p class="text-muted small mt-2 mb-0">
+              {% if workload.penalty.partial %}{% translate "At least" %}{% endif %}
+              {{ workload.penalty.total_minor|minor|inr }}
+              {% translate "potential penalty across the overdue register." %}
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="text-muted small mb-0">{% translate "Nothing overdue right now." %}</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

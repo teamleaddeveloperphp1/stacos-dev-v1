@@ -28,10 +28,10 @@
       is recorded as one.
     {% endcomment %}
     <h3 class="ask__question">
-      <c-icon name="check" size="14" /> {% translate "Recorded as filed" %}
+      <c-icon name="check" size="14" /> {% translate "Recorded as submitted" %}
     </h3>
     <dl class="key-values">
-      <dt>{% translate "Date of completion" %}</dt>
+      <dt>{% translate "Submission date" %}</dt>
       <dd>{{ obligation.filed_on|date:"j M Y" }}</dd>
       <dt>{% translate "Acknowledgement number" %}</dt>
       <dd>{{ obligation.filing_reference|default:"—" }}</dd>
@@ -66,7 +66,9 @@
               hx-encoding="multipart/form-data"
               hx-target="#obligation-panel" hx-swap="outerHTML">
           {% csrf_token %}
-          <label for="ack-late-{{ obligation.pk }}">{% translate "Acknowledgement document" %}</label>
+          <label for="ack-late-{{ obligation.pk }}">
+            {% translate "Acknowledgement document" %}<span class="asteriskField">*</span>
+          </label>
           <input class="form-control form-control-sm" type="file" required
                  id="ack-late-{{ obligation.pk }}" name="acknowledgement"
                  accept=".pdf,.png,.jpg,.jpeg">
@@ -78,7 +80,7 @@
 
   {% elif can_record_filing or can_record_pending %}
     <fieldset class="ask__choices">
-      <legend class="ask__question">{% translate "Is this filing completed?" %}</legend>
+      <legend class="ask__question">{% translate "Has this been submitted?" %}</legend>
 
       {% comment %}
         Real radios rather than two buttons with `aria-pressed`. Arrow-key
@@ -88,7 +90,7 @@
       {% if can_record_filing %}
         <label class="ask__choice">
           <input type="radio" name="answer-{{ obligation.pk }}" value="yes" x-model="answer">
-          <span class="ask__choice-label">{% translate "Yes, it is done" %}</span>
+          <span class="ask__choice-label">{% translate "Yes, submitted" %}</span>
           <span class="ask__choice-hint">{% translate "Record the date and acknowledgement" %}</span>
         </label>
       {% endif %}
@@ -110,7 +112,7 @@
         <input type="hidden" name="answer" value="yes">
         {{ completed_form|crispy }}
         <button class="btn btn-sm btn-primary" type="submit">
-          <c-icon name="check" size="14" /> {% translate "Record it as filed" %}
+          <c-icon name="check" size="14" /> {% translate "Record submission" %}
         </button>
       </form>
     {% endif %}
@@ -123,14 +125,14 @@
         <input type="hidden" name="answer" value="no">
         {{ pending_form|crispy }}
         <button class="btn btn-sm btn-outline-secondary" type="submit">
-          {% translate "Record where it stands" %}
+          {% translate "Save" %}
         </button>
       </form>
     {% endif %}
 
   {% else %}
     <p class="text-muted small mb-0">
-      {% translate "You can see this filing but not record where it has got to." %}
+      {% translate "You can see this compliance but not record where it has got to." %}
     </p>
   {% endif %}
 

@@ -1,0 +1,80 @@
+{% load i18n %}
+{% comment %}
+  Subscribe to calendar: a read-only ``webcal://`` link an external calendar
+  app polls on its own schedule. One-way — nothing typed into Google Calendar,
+  Outlook or Apple Calendar can change data here, see
+  ``stacos.obligations.feed``.
+
+  Same modal shape as ``assign_modal.html``: closed via
+  ``$dispatch('stacos:modal-close')``, no single "main" target since this can
+  open from anywhere the calendar toolbar is rendered.
+
+  No ``{% csrf_token %}`` needed on the buttons below: `hx-headers` on
+  `<body>` (see ``templates/layouts/app_shell.html``) already attaches
+  ``X-CSRFToken`` to every HTMX request.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="subscribe-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="subscribe-modal-title">{% translate "Subscribe to calendar" %}</h2>
+        <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                @click="$dispatch('stacos:modal-close')"></button>
+      </div>
+
+      <div class="modal-body">
+        <p class="text-muted small">
+          {% translate "Add your due dates to Google Calendar, Outlook or Apple Calendar. It only reads your compliance dates — nothing here can be changed from a calendar app." %}
+        </p>
+
+        {% if just_created %}
+          <label class="form-label small fw-semibold" for="subscribe-url">
+            {% translate "Your subscription link" %}
+          </label>
+          <div class="input-group input-group-sm mb-2">
+            <input id="subscribe-url" type="text" class="form-control" readonly
+                   value="{{ webcal_url }}" onclick="this.select()">
+            <button type="button" class="btn btn-outline-secondary"
+                    onclick="navigator.clipboard.writeText('{{ webcal_url|escapejs }}')">
+              {% translate "Copy" %}
+            </button>
+          </div>
+          <p class="callout callout--attention small mb-0">
+            {% translate "Save this now — for your security we cannot show it to you again. Regenerating replaces it." %}
+          </p>
+        {% elif has_token %}
+          <p class="small mb-3">
+            {% translate "You already have an active subscription link. If you have lost it, regenerate a new one — the old link stops working." %}
+          </p>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary"
+                    hx-post="{% url 'compliance:subscribe_create' %}"
+                    hx-target="#modal-container" hx-swap="innerHTML">
+              {% translate "Regenerate link" %}
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger"
+                    hx-post="{% url 'compliance:subscribe_revoke' %}"
+                    hx-target="#modal-container" hx-swap="innerHTML"
+                    hx-confirm="{% translate 'Stop sharing your compliance calendar? Any calendar app already subscribed will stop updating.' %}">
+              {% translate "Stop sharing" %}
+            </button>
+          </div>
+        {% else %}
+          <button type="button" class="btn btn-sm btn-primary"
+                  hx-post="{% url 'compliance:subscribe_create' %}"
+                  hx-target="#modal-container" hx-swap="innerHTML">
+            {% translate "Generate calendar link" %}
+          </button>
+        {% endif %}
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary"
+                @click="$dispatch('stacos:modal-close')">
+          {% translate "Close" %}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
