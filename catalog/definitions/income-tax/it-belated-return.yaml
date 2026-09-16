@@ -1,42 +1,49 @@
-code: IN-IT-BELATED-RETURN
-country: IN
-category: TAX_DIRECT
-family: Income tax
-authority: CBDT
-version: 1
-title: Belated return of income
-plain_language_summary: 'A safety net rather than a plan: if the return was not filed on time, there is
-  still a window. Losses other than house-property losses cannot be carried forward from a belated return,
-  which is usually the expensive part.'
-statutory_reference: Section 139(4) Income-tax Act
-filing_portal_url: https://www.incometax.gov.in
-trigger_kind: INTERNAL
-tags:
-- income-tax
-- return
-- correction
-periodicity: ANNUAL
-period_anchor: FY
-instance_scope: ENTITY
-applicability:
-  all:
-  - fact: registrations
-    op: includes
-    value: PAN
-    explain: you hold a PAN
-due:
-  anchor: PERIOD_END
-  offset:
-    months: 9
-    day_of_month: 31
-  shift_if_holiday: NONE
-evidence:
-- key: ack
-  label: ITR-V acknowledgement
-  kind: DOC
-default_owner_role: org-owner
-penalty_summary: Late filing fee, interest and restrictions on carry-forward of certain losses may apply.
-effective_from: '1962-04-01'
-reviewed_by: Skorydov compliance desk
-reviewed_at: '2026-09-03'
-confidence: MEDIUM
+# Temporarily disabled — commented out so `loadcatalog` skips this file entirely
+# (a fully-commented YAML parses to `None` and is ignored, per iter_documents in
+# stacos/catalog/loader.py). The definition's `is_active` flag was also set to
+# False in the database so it stops appearing anywhere for existing/new entities.
+# To restore: uncomment below, run `.\tasks.ps1 check` sanity, then `loadcatalog`
+# (which will set is_active back to True on load).
+#
+# code: IN-IT-BELATED-RETURN
+# country: IN
+# category: TAX_DIRECT
+# family: Income tax
+# authority: CBDT
+# version: 1
+# title: Belated return of income
+# plain_language_summary: 'A safety net rather than a plan: if the return was not filed on time, there is
+#   still a window. Losses other than house-property losses cannot be carried forward from a belated return,
+#   which is usually the expensive part.'
+# statutory_reference: Section 139(4) Income-tax Act
+# filing_portal_url: https://www.incometax.gov.in
+# trigger_kind: INTERNAL
+# tags:
+# - income-tax
+# - return
+# - correction
+# periodicity: ANNUAL
+# period_anchor: FY
+# instance_scope: ENTITY
+# applicability:
+#   all:
+#   - fact: registrations
+#     op: includes
+#     value: PAN
+#     explain: you hold a PAN
+# due:
+#   anchor: PERIOD_END
+#   offset:
+#     months: 9
+#     day_of_month: 31
+#   shift_if_holiday: NONE
+# evidence:
+# - key: ack
+#   label: ITR-V acknowledgement
+#   kind: DOC
+# default_owner_role: org-owner
+# penalty_summary: Late filing fee, interest and restrictions on carry-forward of certain losses may apply.
+# effective_from: '1962-04-01'
+# reviewed_by: Skorydov compliance desk
+# reviewed_at: '2026-09-03'
+# confidence: MEDIUM

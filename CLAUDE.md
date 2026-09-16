@@ -88,7 +88,7 @@ A number with no WhatsApp account cannot be reached, and **WhatsApp is a hard re
 
 | App | What it owns | The line it will not cross |
 |---|---|---|
-| `catalog` | ~140 versioned compliance definitions, loaded from YAML | A published version is immutable; correcting a rule means a new one with a new effective window |
+| `catalog` | Versioned compliance definitions, loaded from YAML — this fork carries only GST, income-tax and TDS | A published version is immutable; correcting a rule means a new one with a new effective window |
 | `obligations` | The register: what each entity owes, and where it has got to | Never destroys an instance carrying history; suppressions are an input to the planner |
 | `vault` | Documents, content-addressed and linked from anywhere | Bytes never leave without a permission check, a scan, and a download row |
 | `requests` | Information requests, as a checklist rather than a message | State is derived from the items, never set by hand |
