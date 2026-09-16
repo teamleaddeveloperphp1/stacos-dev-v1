@@ -183,7 +183,17 @@ def oob(
     if toast is not None:
         events["stacos:toast"] = toast.as_payload()
     if events:
-        response["HX-Trigger"] = json.dumps(events)
+        # A plain HX-Trigger fires before HTMX swaps anything in — including
+        # the `also=` fragments below. A listener that reacts to one of these
+        # events by tearing down the element that made the request (closing a
+        # modal, most often) can detach it before HTMX resolves the OOB
+        # targets against it, and the swap silently no-ops. HX-Trigger-After-Swap
+        # fires once every swap in this response — main and OOB alike — has
+        # already landed, so there is nothing left to race. Responses with no
+        # `also=` have nothing an early trigger could pull out from under a
+        # swap, so they keep the immediate header.
+        header = "HX-Trigger-After-Swap" if also else "HX-Trigger"
+        response[header] = json.dumps(events)
     if retarget:
         response["HX-Retarget"] = retarget
     if reswap:
@@ -211,7 +221,22 @@ def _wrap_oob(html: str, *, target: str, swap: str) -> str:
     A wrapper div is used rather than requiring every component to carry
     ``hx-swap-oob`` itself, so the same partial can be rendered either normally
     or out of band without knowing which.
+
+    A `<tr>` is the one shape that cannot take this wrapper: once the browser's
+    HTML parser has opened a `<div>`, it has left table-parsing context, and a
+    `<tr>`/`<td>` encountered there is a parse error that gets dropped —
+    silently discarding the tag but not its content, so the row's cells
+    collapse into a flat run of inline text and controls directly inside the
+    div. HTMX still swaps that div into the table (out-of-band targets are
+    matched and replaced as nodes, not re-parsed as table markup), leaving a
+    `<div>` sitting where a `<tr>` used to be — one row's columns break while
+    every other row, untouched by this response, still lines up. The fix
+    HTMX itself documents for OOB table rows is to carry `hx-swap-oob`
+    directly on the `<tr>`, with no wrapper at all.
     """
+    stripped = html.lstrip()
+    if stripped[:3].lower() == "<tr":
+        return stripped[:3] + f' hx-swap-oob="{swap}:#{target}"' + stripped[3:]
     return f'<div id="{target}" hx-swap-oob="{swap}:#{target}">{html}</div>'
 
 

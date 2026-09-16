@@ -335,7 +335,7 @@ def test_entity_can_be_created_through_the_modal(
     # One request, three regions: the row, the sidebar counter, and a toast.
     assert b"New Ventures Pvt Ltd" in response.content
     assert b"hx-swap-oob" in response.content
-    assert "stacos:toast" in response["HX-Trigger"]
+    assert "stacos:toast" in response["HX-Trigger-After-Swap"]
 
 
 def test_invalid_entity_form_returns_422_and_keeps_the_modal_open(

@@ -269,7 +269,7 @@ def test_answering_updates_the_screen_without_a_reload(
     assert response.status_code == 200
     assert "hx-swap-oob" in body, "nothing was updated out of band"
     assert "calendar-counts" in body, "the counters were left stale"
-    assert "stacos:modal-close" in response.headers.get("HX-Trigger", "")
+    assert "stacos:modal-close" in response.headers.get("HX-Trigger-After-Swap", "")
 
 
 def test_not_sure_yet_changes_nothing(

@@ -231,6 +231,15 @@ document.body.addEventListener("htmx:afterSwap", (event) => {
     const heading = target.querySelector("h1, [role=heading]");
     const announcer = document.getElementById("route-announcer");
     if (announcer && heading) announcer.textContent = heading.textContent.trim();
+
+    // Every `#main` swap in this app is a navigation to a genuinely different
+    // page — it always carries `hx-push-url` (see e.g. `calendar_body.html`,
+    // `detail_body.html`), never a same-page filter refresh. The `morph` swap
+    // above exists precisely to *preserve* scroll position across an in-place
+    // update, which is the wrong thing here: without this, opening a shorter
+    // page while scrolled halfway down a long one leaves the reader dropped
+    // wherever the old scroll position happened to land, not at its top.
+    window.scrollTo(0, 0);
   }
   initTooltips(target);
 });
@@ -276,12 +285,21 @@ document.body.addEventListener("stacos:modal-close", () => {
 // A 422 re-renders the form inside the still-open modal. Without this the
 // response would be swapped into the list target and the modal would sit there
 // looking like nothing happened.
+//
+// Retargeting alone is not enough: an action modal's form submits with
+// hx-swap="none" (the real update travels separately, as an out-of-band
+// fragment), and HTMX reads the swap *style* from that same form regardless
+// of where beforeSwap points the target. Left alone, the retarget succeeds
+// but nothing is ever drawn into it — the modal just sits there with no sign
+// anything happened. swapOverride is what HTMX actually consults, so the
+// style has to be forced here too.
 document.body.addEventListener("htmx:beforeSwap", (event) => {
   if (event.detail.xhr?.status !== 422) return;
   const container = document.getElementById("modal-container");
   if (!container || !container.querySelector(".modal")) return;
   event.detail.shouldSwap = true;
   event.detail.target = container;
+  event.detail.swapOverride = "innerHTML";
 });
 
 // ---------------------------------------------------------------------------
