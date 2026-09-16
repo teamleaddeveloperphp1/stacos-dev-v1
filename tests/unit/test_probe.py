@@ -8,7 +8,7 @@ if it ever does, the catalog browser silently hides an obligation and a client
 misses a filing they were never shown.
 
 So the headline test is not an example. It is a property, checked against the
-real 248-definition catalog and the whole persona library:
+real catalog and the whole persona library:
 
     possible_for(rule, known) is FALSE  ⟹  evaluate(rule, facts) is FALSE
     for every facts that agrees with known.
@@ -104,12 +104,19 @@ def test_an_absent_collection_is_not_definite_absence() -> None:
 
 
 def test_entity_type_still_refutes(documents: list) -> None:
-    """The probe has to be useful as well as safe."""
-    aoc4 = next(d for d in documents if d.code == "IN-MCA-AOC4")
-    llp8 = next(d for d in documents if d.code == "IN-MCA-LLP-FORM8")
+    """The probe has to be useful as well as safe.
 
-    assert aoc4.possible_entity_types == ["PVT_LTD", "PUBLIC_LTD", "OPC", "SECTION_8"]
-    assert llp8.possible_entity_types == ["LLP"]
+    IN-MCA-AOC4/IN-MCA-LLP-FORM8 (the original pair here) no longer exist —
+    this fork's catalog carries only GST, income-tax and TDS — but
+    IN-IT-ITR-COMPANY/IN-IT-ITR5 make the same point: one rule restricted to
+    companies, the other to firms/LLPs, refuted down to disjoint entity-type
+    sets.
+    """
+    itr_company = next(d for d in documents if d.code == "IN-IT-ITR-COMPANY")
+    itr5 = next(d for d in documents if d.code == "IN-IT-ITR5")
+
+    assert itr_company.possible_entity_types == ["PVT_LTD", "PUBLIC_LTD", "OPC"]
+    assert itr5.possible_entity_types == ["LLP", "PARTNERSHIP"]
 
 
 def test_an_empty_rule_is_possible_for_everyone() -> None:
