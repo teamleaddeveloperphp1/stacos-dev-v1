@@ -32,17 +32,25 @@ from stacos.core.audit import record_event
 from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob
 from stacos.core.models import AuditAction
 from stacos.core.pagination import filters_querystring
-from stacos.core.permissions import require_permission
+from stacos.core.permissions import public_view, require_permission
 from stacos.core.typing import current_user
-from stacos.engine.lifecycle import CLOSED_STATES, DUE_SOON_DAYS, OPEN_STATES
+from stacos.engine.lifecycle import CLOSED_STATES, DUE_SOON_DAYS, OPEN_STATES, State, Transition
 from stacos.engine.lifecycle import days_late as _days_late_calc
 from stacos.engine.penalty import compute_penalties
 from stacos.engine.types import occurrence_number
 from stacos.jurisdictions.events import EVENT_TYPES
+from stacos.obligations.feed import (
+    create_feed_token,
+    feed_events_for_user,
+    render_ics,
+    resolve_feed_token,
+    revoke_feed_token,
+)
 from stacos.obligations.forms import (
     STATUS_FILTERS,
     AcknowledgementForm,
     AssignForm,
+    BulkNotApplicableForm,
     CommentForm,
     EntityEventForm,
     FilingCompletedForm,
@@ -52,12 +60,14 @@ from stacos.obligations.forms import (
     obligation_display,
 )
 from stacos.obligations.models import (
+    CalendarFeedToken,
     EntityEvent,
     MaterialisationRun,
     ObligationEvent,
     ObligationInclusion,
     ObligationInstance,
     ObligationStep,
+    ObligationSuppression,
 )
 from stacos.obligations.preview import (
     adopt_pack,
@@ -65,11 +75,23 @@ from stacos.obligations.preview import (
     preview_entity,
     revoke_pack,
     suggest_packs,
-    total_obligation_count,
 )
 from stacos.obligations.profile import build_profile_view
-from stacos.obligations.queries import annotate_status, keyset_page, live, status_counts
+from stacos.obligations.queries import (
+    annotate_status,
+    apply_text_filters,
+    keyset_page,
+    live,
+    overdue_aging,
+    overdue_penalty_exposure,
+    related_scope_instances,
+    scaled_bars,
+    sibling_instances,
+    status_counts,
+    weekly_workload,
+)
 from stacos.obligations.services import materialise
+from stacos.obligations.services import preview as preview_materialisation
 from stacos.obligations.transitions import (
     TransitionError,
     add_comment,
@@ -81,6 +103,7 @@ from stacos.obligations.transitions import (
     block_step,
     complete_step,
     nudge,
+    outstanding_mandatory_evidence,
     record_completion,
     record_pending,
     reopen_step,
@@ -98,6 +121,12 @@ PAGE_SIZE = 50
 #: ``display_status`` or the overdue/due-soon parity those two enforce, it is
 #: just a wider, independent slice of the same open queryset.
 DUE_IN_30_DAYS = 30
+
+#: Same reasoning as ``DUE_IN_30_DAYS``, one window wider. Also the width of the
+#: calendar's default landing scope (``status="latest"``, see ``_filtered``) —
+#: unlike the "Due in 90 days" chip, that scope has no lower bound at ``as_of``,
+#: so it is the same number of days but not the same query.
+DUE_IN_90_DAYS = 90
 
 #: Rendered once rather than per request. Sorted so generated SQL is stable and
 #: query-plan caching is not defeated by set iteration order.
@@ -1501,12 +1530,13 @@ def rebuild_calendar(request: HttpRequest, entity_pk: str) -> HttpResponse:
     to, and no dependency on ``app.js`` having been rebuilt. The toast still
     arrives, because ``HX-Trigger`` is processed first.
 
-    The dashboard rather than the entity page: finishing setup is the end of
-    setting *this* entity up, and the next thing anyone does is look at what
-    they now owe across everything. ``entity_detail`` is safe to leave either
-    way — its "have you ever built" guard is a ``MaterialisationRun.exists()``
-    check, which this run has just satisfied, so it no longer bounces back
-    into the flow whenever the user navigates there themselves.
+    The calendar, filtered to this entity, rather than the dashboard: finishing
+    setup is the moment the obligations that were just planned become visible,
+    and the calendar is where they live. ``entity_detail`` is safe to leave
+    either way — its "have you ever built" guard is a
+    ``MaterialisationRun.exists()`` check, which this run has just satisfied,
+    so it no longer bounces back into the flow whenever the user navigates
+    there themselves.
     """
     as_of = _today()
     entity = Entity.objects.filter(pk=entity_pk, archived_at__isnull=True).first()
@@ -1531,7 +1561,7 @@ def rebuild_calendar(request: HttpRequest, entity_pk: str) -> HttpResponse:
         response = oob(request, toast=toast, triggers=triggers)
         response["HX-Location"] = json.dumps(
             {
-                "path": reverse("app:dashboard"),
+                "path": f"{reverse('compliance:calendar')}?entity={entity.pk}",
                 "target": "#main",
                 "swap": "morph:innerHTML",
             }
@@ -1631,7 +1661,14 @@ def _accepted_pack_codes(entity: Entity) -> frozenset[str]:
 
 
 def entity_preview_context(
-    entity: Entity, *, as_of: date, hide_build: bool = False, in_setup: bool = False
+    entity: Entity,
+    *,
+    as_of: date,
+    hide_build: bool = False,
+    in_setup: bool = False,
+    hide_questions: bool = False,
+    hide_columns: bool = False,
+    hide_packs: bool = False,
 ) -> dict[str, Any]:
     """What applies to this entity right now, and what would settle the rest.
 
@@ -1639,24 +1676,35 @@ def entity_preview_context(
     the same card so what the user is looking at reflects the plan that just
     ran), by ``answer_entity_question``/``toggle_entity_pack`` (has to
     re-render the same numbers after writing one fact or one pack), and by the
-    guided setup flow (``stacos.tenancy.entity_setup``), whose Preview and Build
-    steps both show this exact card with its build button suppressed —
-    ``hide_build`` is the only reason this card ever renders without one.
+    guided setup flow (``stacos.tenancy.entity_setup``), whose four steps each
+    show this exact card with a different subset of its sections switched off
+    — ``hide_build`` is the only reason this card ever renders without a
+    button at all.
 
     ``in_setup`` says the card is being shown inside the guided setup flow
     rather than on the entity page it lives on permanently. The pack strip hangs
     off it: a first-run suggestion, not something the steady-state page should
     keep offering.
 
-    Both flags have to survive the card re-rendering itself — answering a
+    ``hide_questions``/``hide_columns``/``hide_packs`` say which of the card's
+    other sections to leave out — the question queue, the category breakdown,
+    and the pack strip respectively. The guided setup's four steps each ask
+    for a different combination: the Answers step hides the columns and packs
+    so a question's effect is felt against the headline counts alone; the
+    Packs step hides the questions and columns; the final Review step hides
+    the questions and packs, leaving the columns as a stable snapshot. The
+    steady-state entity page passes none of them, and sees the whole card, as
+    it always has.
+
+    All five flags have to survive the card re-rendering itself — answering a
     question and toggling a pack are each their own POST, with nothing but the
     URL to carry the calling page's identity across. They are therefore handed
     to the templates pre-rendered as ``card_query``, one string built in one
-    place, rather than three templates each rebuilding the same querystring by
-    hand.
+    place, rather than every template that posts to one of these endpoints
+    rebuilding the same querystring by hand.
 
     Nothing here decides ``finish_setup``. That flag belongs to one button on
-    one page — the setup flow's Build step, which renders it in its wizard
+    one page — the setup flow's Review step, which renders it in its wizard
     footer, outside this card. It used to be derived here, back when the button
     lived in the card header and every re-render of the card had to reconstruct
     it; moving the button out of the swapped region removed the problem rather
@@ -1667,32 +1715,92 @@ def entity_preview_context(
     packs = suggest_packs(
         profile, preview, country=entity.country, accepted=_accepted_pack_codes(entity)
     )
+    # Whether a calendar has ever been built, for the button's label — "Build"
+    # reads as an offer, "Rebuild" as a correction, and confusing the two the
+    # first time somebody opens a brand-new entity is the whole first
+    # impression of the product. A run, not an instance count: an entity
+    # with no registrations yet can run materialisation and truthfully
+    # create nothing, and "Build" would then never stop being offered for
+    # an entity that has already been asked.
+    has_calendar = MaterialisationRun.objects.filter(entity=entity).exists()
+    # The button only ever names a number while it still says "Create my
+    # calendar" (see `entity_build_button_label.html`) — once a calendar
+    # exists and this isn't the wizard, it says "Save changes" and no count is
+    # rendered, so there is nothing here worth the extra planner run.
+    #
+    # `preview.applies_count` used to stand in for this number, which is a
+    # count of *rules*, not of the rows a build creates — one rule can cover
+    # several registrations and, over the horizon, several filing periods
+    # each. `services.preview` runs the real planner against the entity's
+    # actual, current facts (packs already accepted included, since those are
+    # written to `ObligationInclusion` the moment a pack is toggled).
+    #
+    # The number shown is the *total* the register will hold once this build
+    # runs, not `len(plan.to_create)` alone. Those agree for a brand-new
+    # entity, but the guided setup's Build step is also reachable for an
+    # entity that already has a calendar (browser back, a bookmarked step)
+    # — there, a rule that already has its obligation on file needs no new
+    # row, `to_create` is correctly empty, and a button reading "0
+    # obligations" for an entity that plainly has some already reads as
+    # broken rather than as "nothing changed". `live()` is the same "not
+    # archived, not superseded" filter the calendar's own total tile counts
+    # by, so this number matches what the calendar shows immediately
+    # afterwards in both the first-build and the revisit case.
+    show_obligation_count = not has_calendar or in_setup
+    obligation_count = 0
+    if show_obligation_count:
+        plan = preview_materialisation(entity, as_of=as_of).plan
+        live_now = live(ObligationInstance.objects.filter(entity=entity)).count()
+        obligation_count = (
+            live_now
+            + len(plan.to_create)
+            + len(plan.to_revive)
+            - len(plan.to_archive)
+            - len(plan.to_supersede)
+        )
     return {
         "entity": entity,
         "preview": preview,
         "packs": packs,
-        "total_count": total_obligation_count(preview, packs),
-        # Whether a calendar has ever been built, for the button's label — "Build"
-        # reads as an offer, "Rebuild" as a correction, and confusing the two the
-        # first time somebody opens a brand-new entity is the whole first
-        # impression of the product. A run, not an instance count: an entity
-        # with no registrations yet can run materialisation and truthfully
-        # create nothing, and "Build" would then never stop being offered for
-        # an entity that has already been asked.
-        "has_calendar": MaterialisationRun.objects.filter(entity=entity).exists(),
+        "total_count": obligation_count,
+        "show_obligation_count": show_obligation_count,
+        "has_calendar": has_calendar,
         "hide_build": hide_build,
         "in_setup": in_setup,
-        "card_query": _card_query(hide_build=hide_build, in_setup=in_setup),
+        "hide_questions": hide_questions,
+        "hide_columns": hide_columns,
+        "hide_packs": hide_packs,
+        "card_query": _card_query(
+            hide_build=hide_build,
+            in_setup=in_setup,
+            hide_questions=hide_questions,
+            hide_columns=hide_columns,
+            hide_packs=hide_packs,
+        ),
     }
 
 
-def _card_query(*, hide_build: bool, in_setup: bool) -> str:
+def _card_query(
+    *,
+    hide_build: bool,
+    in_setup: bool,
+    hide_questions: bool = False,
+    hide_columns: bool = False,
+    hide_packs: bool = False,
+) -> str:
     """The querystring every action on this card has to carry back.
 
-    Built here, once, so the flags cannot drift apart across the three
-    templates that post to these endpoints — see ``entity_preview_context``.
+    Built here, once, so the flags cannot drift apart across the templates
+    that post to these endpoints — see ``entity_preview_context``.
     """
-    params = [(name, "1") for name, on in (("hide_build", hide_build), ("setup", in_setup)) if on]
+    flags = (
+        ("hide_build", hide_build),
+        ("setup", in_setup),
+        ("hide_questions", hide_questions),
+        ("hide_columns", hide_columns),
+        ("hide_packs", hide_packs),
+    )
+    params = [(name, "1") for name, on in flags if on]
     return f"?{urlencode(params)}" if params else ""
 
 
@@ -1709,10 +1817,29 @@ def _hide_build(request: HttpRequest) -> bool:
 def _in_setup(request: HttpRequest) -> bool:
     """Whether this card is being shown inside the guided setup flow at all.
 
-    Separate from :func:`_hide_build` because they disagree on the build step:
-    that step is in setup *and* shows its button.
+    Separate from :func:`_hide_build` because they disagree on the Review
+    step: that step is in setup *and* shows its button.
     """
     return request.GET.get("setup") == "1"
+
+
+def _hide_questions(request: HttpRequest) -> bool:
+    """Whether the question queue is left off this render of the card — see
+    ``entity_preview_context``."""
+    return request.GET.get("hide_questions") == "1"
+
+
+def _hide_columns(request: HttpRequest) -> bool:
+    """Whether the category breakdown is left off this render of the card —
+    see ``entity_preview_context``."""
+    return request.GET.get("hide_columns") == "1"
+
+
+def _hide_packs(request: HttpRequest) -> bool:
+    """Whether the pack strip is left off this render of the card, on top of
+    ``in_setup`` already gating it entirely on the steady-state page — see
+    ``entity_preview_context``."""
+    return request.GET.get("hide_packs") == "1"
 
 
 @require_permission("compliance.obligation.view")
@@ -1731,6 +1858,9 @@ def entity_summary(request: HttpRequest, entity_pk: str) -> HttpResponse:
             as_of=as_of,
             hide_build=_hide_build(request),
             in_setup=_in_setup(request),
+            hide_questions=_hide_questions(request),
+            hide_columns=_hide_columns(request),
+            hide_packs=_hide_packs(request),
         ),
     )
 
@@ -1748,6 +1878,16 @@ def answer_entity_question(request: HttpRequest, entity_pk: str, fact_key: str) 
     millisecond, and it is what makes the queue shrink faster than the user
     expects: answering "yes, GST registered" settles thirty definitions at once
     and the remaining questions reorder around what is left.
+
+    A question stays in the queue once it is answered rather than disappearing
+    (``stacos.obligations.questions.answered_questions``), so "Not sure yet" now
+    has a real job here: chosen again on a fact that already carries a value,
+    it is not "nothing was submitted" but "go back to not knowing", and has to
+    clear that value rather than be silently skipped — the whole point of
+    letting somebody come back and change their mind. It is only skipped for a
+    ``fact_key`` the form did not recognise in the first place (``form.fact``
+    unset), which nothing on screen can ever submit but a hand-built request
+    could.
     """
     as_of = _today()
     entity = Entity.objects.filter(pk=entity_pk, archived_at__isnull=True).first()
@@ -1757,18 +1897,17 @@ def answer_entity_question(request: HttpRequest, entity_pk: str, fact_key: str) 
     form = QuestionForm(request.POST, fact_key=fact_key)
 
     toast = None
-    if form.is_valid():
+    if form.is_valid() and getattr(form, "fact", None) is not None:
         answer = form.answer()
-        if answer is not None:
-            with transaction.atomic():
-                record_fact(entity, fact_key, answer, actor=current_user(request), as_of=as_of)
-                materialise(
-                    entity,
-                    as_of=as_of,
-                    trigger=MaterialisationRun.Trigger.MANUAL,
-                    actor=current_user(request),
-                )
-    else:
+        with transaction.atomic():
+            record_fact(entity, fact_key, answer, actor=current_user(request), as_of=as_of)
+            materialise(
+                entity,
+                as_of=as_of,
+                trigger=MaterialisationRun.Trigger.MANUAL,
+                actor=current_user(request),
+            )
+    elif not form.is_valid():
         # An invalid answer used to be discarded in silence — the field just
         # reverted on the next render with no explanation, which reads as the
         # page ignoring what was typed rather than as a rejected value.
@@ -1782,6 +1921,9 @@ def answer_entity_question(request: HttpRequest, entity_pk: str, fact_key: str) 
         toast=toast,
         hide_build=_hide_build(request),
         in_setup=_in_setup(request),
+        hide_questions=_hide_questions(request),
+        hide_columns=_hide_columns(request),
+        hide_packs=_hide_packs(request),
     )
 
 
@@ -1819,6 +1961,9 @@ def toggle_entity_pack(request: HttpRequest, entity_pk: str, code: str) -> HttpR
         toast=Toast(_("Pack added.") if added else _("Pack removed.")),
         hide_build=_hide_build(request),
         in_setup=_in_setup(request),
+        hide_questions=_hide_questions(request),
+        hide_columns=_hide_columns(request),
+        hide_packs=_hide_packs(request),
     )
 
 
@@ -1830,6 +1975,9 @@ def _render_entity_preview(
     toast: Toast | None,
     hide_build: bool = False,
     in_setup: bool = False,
+    hide_questions: bool = False,
+    hide_columns: bool = False,
+    hide_packs: bool = False,
 ) -> HttpResponse:
     """Re-render the whole Compliance card after an answer or a pack toggle.
 
@@ -1839,12 +1987,36 @@ def _render_entity_preview(
     inconsistent screen. Swapping the outer ``#entity-obligations`` section
     outerHTML — the same target ``rebuild_calendar`` swaps — is what keeps its
     ``aria-live`` region the single thing a screen reader has to watch.
+
+    ``hide_build`` means the button itself is rendered outside this section —
+    the wizard footer, currently — so the outerHTML swap above never touches
+    it. Its obligation count still has to track every answer, so it is
+    refreshed separately, out of band, by its own id
+    (``entity_build_button.html``'s ``#build-button-label``) rather than by
+    moving the button into the swapped region — see that template's comment
+    on why ``finish_setup`` depends on the button staying put.
     """
-    return oob(
-        request,
-        Fragment(
-            ENTITY_SUMMARY_TEMPLATE,
-            entity_preview_context(entity, as_of=as_of, hide_build=hide_build, in_setup=in_setup),
-        ),
-        toast=toast,
+    context = entity_preview_context(
+        entity,
+        as_of=as_of,
+        hide_build=hide_build,
+        in_setup=in_setup,
+        hide_questions=hide_questions,
+        hide_columns=hide_columns,
+        hide_packs=hide_packs,
     )
+    also = []
+    if hide_build:
+        also.append(
+            Fragment(
+                "obligations/_fragments/entity_build_button_label.html",
+                {
+                    "has_calendar": context["has_calendar"],
+                    "total_count": context["total_count"],
+                    "in_setup": context["in_setup"],
+                },
+                oob_target="build-button-label",
+                swap="innerHTML",
+            )
+        )
+    return oob(request, Fragment(ENTITY_SUMMARY_TEMPLATE, context), also=also, toast=toast)

@@ -19,9 +19,14 @@ urlpatterns = [
         name="entity_setup_registrations",
     ),
     path(
-        "entities/<uuid:pk>/setup/preview/",
-        entity_setup.preview,
-        name="entity_setup_preview",
+        "entities/<uuid:pk>/setup/answers/",
+        entity_setup.answers,
+        name="entity_setup_answers",
+    ),
+    path(
+        "entities/<uuid:pk>/setup/packs/",
+        entity_setup.packs,
+        name="entity_setup_packs",
     ),
     path(
         "entities/<uuid:pk>/setup/build/",

@@ -1,0 +1,28 @@
+{% load i18n %}
+{% comment %}
+  Step three — reached only when `stacos.tenancy.entity_setup.packs` found at
+  least one suggestion to offer; it redirects straight past itself otherwise,
+  so a step with nothing on it never has to be rendered at all.
+
+  Kept off the previous step's screen deliberately: a pack is a suggestion,
+  not a rule-evaluated result, and showing it beside "what applies" made an
+  opt-in bundle read as part of the deterministic count above it.
+{% endcomment %}
+<c-page-header title="{{ entity.name }}"
+               subtitle="{% translate 'Optional. These add obligations the rules cannot infer on their own — skip anything you are unsure of, you can add or remove a pack later from this entity’s Compliance section.' %}">
+</c-page-header>
+
+{% include "tenancy/setup/_fragments/steps.html" %}
+
+<div class="wizard wizard--wide">
+  {% include "obligations/_fragments/entity_summary.html" %}
+
+  <div class="wizard__actions">
+    <a class="btn btn-outline-secondary" href="{{ back_url }}">
+      {% translate "Back" %}
+    </a>
+    <a class="btn btn-primary" href="{% url 'app:entity_setup_build' entity.pk %}">
+      {% translate "Next: review and create" %}
+    </a>
+  </div>
+</div>

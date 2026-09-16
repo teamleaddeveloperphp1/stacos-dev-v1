@@ -1,0 +1,25 @@
+{% load i18n %}
+{% comment %}
+  Just the button's text, split out of `entity_build_button.html` so it can be
+  refreshed on its own out-of-band swap — see that template's comment on why
+  the button itself, and the `?finish_setup=1` its form posts, must not be
+  re-rendered by every question answered or pack toggled.
+
+  `in_setup` overrides `has_calendar` here. The two aren't the same question:
+  `has_calendar` asks whether a `MaterialisationRun` exists at all, which goes
+  true the moment this wizard's own Build step is first submitted — so a user
+  who lands back on this step (browser back, a re-entered setup) mid-flow
+  would otherwise read "Save changes" on the one button that hasn't built
+  anything yet from where they're standing. The wizard only ever frames this
+  step as building a calendar; "save changes" is the steady-state dashboard
+  card's phrasing for a real edit to an existing one.
+{% endcomment %}
+{% if has_calendar and not in_setup %}
+  {% translate "Save changes" %}
+{% else %}
+  {% blocktranslate count counter=total_count %}
+    Create my calendar with {{ counter }} obligation
+  {% plural %}
+    Create my calendar with {{ counter }} obligations
+  {% endblocktranslate %}
+{% endif %}

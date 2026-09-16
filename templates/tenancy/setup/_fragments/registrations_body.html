@@ -8,9 +8,14 @@
   either.
 
   "Next" is always enabled. An entity with zero registrations is unusual but
-  not invalid — some genuinely have none — and the preview step ahead says so
-  honestly (`stacos.obligations.preview.for_preview`) rather than this step
-  refusing to let anyone past it.
+  not invalid — some genuinely have none — and the step ahead says so honestly
+  (`stacos.obligations.preview.for_preview`) rather than this step refusing to
+  let anyone past it.
+
+  Always to the answers step specifically, never straight to the packs or
+  review steps — those are reached in order, one at a time, so nobody skips a
+  ranked question because their first entity happened to have no
+  registrations yet.
 {% endcomment %}
 <c-page-header title="{{ entity.name }}"
                subtitle="{% translate 'Set up compliance for this entity, one step at a time.' %}">
@@ -51,8 +56,8 @@
 
   <div class="wizard__actions">
     <span></span>
-    <a class="btn btn-primary" href="{% url 'app:entity_setup_preview' entity.pk %}">
-      {% translate "Next: what applies to you" %}
+    <a class="btn btn-primary" href="{% url 'app:entity_setup_answers' entity.pk %}">
+      {% translate "Next: answer what applies" %}
     </a>
   </div>
 </div>

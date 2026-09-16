@@ -1,0 +1,31 @@
+{% load i18n %}
+{% comment %}
+  Step two: the ranked question queue, on its own — see
+  `stacos.tenancy.entity_setup.answers`. The headline counts stay visible so
+  an answer's effect is felt immediately against them; the category
+  breakdown and any pack suggestions wait for their own steps further on,
+  rather than reflowing underneath the queue on every answer the way the
+  single combined step used to.
+
+  "Next" always goes to the packs step, whether or not this entity has any —
+  `entity_setup.packs` redirects straight past itself when there is nothing
+  to offer, so this link never has to know that in advance.
+{% endcomment %}
+<c-page-header title="{{ entity.name }}"
+               subtitle="{% translate 'Answer what you can. Ordered by how much each answer settles, not by how easy it is to ask — skip anything you are not sure of, you can always come back and change it.' %}">
+</c-page-header>
+
+{% include "tenancy/setup/_fragments/steps.html" %}
+
+<div class="wizard wizard--wide">
+  {% include "obligations/_fragments/entity_summary.html" %}
+
+  <div class="wizard__actions">
+    <a class="btn btn-outline-secondary" href="{{ back_url }}">
+      {% translate "Back" %}
+    </a>
+    <a class="btn btn-primary" href="{% url 'app:entity_setup_packs' entity.pk %}">
+      {% translate "Next" %}
+    </a>
+  </div>
+</div>

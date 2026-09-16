@@ -4,39 +4,46 @@
   {% translate "Ordered by how much each answer settles, not by how easy it is to ask." %}
 </p>
 
-{% for question in preview.questions %}
-  <form class="question-card"
-        hx-post="{% url 'compliance:answer_entity_question' entity.pk question.key %}{{ card_query }}"
-        hx-target="#entity-obligations"
-        hx-swap="outerHTML"
-        hx-trigger="change">
-    {% csrf_token %}
-    <div class="question-card__head">
-      <label class="question-card__label" for="q-{{ question.key }}">
-        {{ question.fact.label }}
-      </label>
-      <div class="question-card__meter">
-        <span class="question-card__unlocks">
-          {% blocktranslate count counter=question.unlocks %}
-            Settles {{ counter }} rule
-          {% plural %}
-            Settles {{ counter }} rules
-          {% endblocktranslate %}
-        </span>
-        <span class="question-card__progress" aria-hidden="true">
-          <span class="question-card__progress-fill"
-                style="width: {% widthratio question.unlocks preview.max_question_unlocks 100 %}%"></span>
-        </span>
+<div class="question-queue__list">
+  {% for question in preview.questions %}
+    <form class="question-card{% if question.is_answered %} question-card--answered{% endif %}"
+          hx-post="{% url 'compliance:answer_entity_question' entity.pk question.key %}{{ card_query }}"
+          hx-target="#entity-obligations"
+          hx-swap="outerHTML"
+          hx-trigger="change">
+      {% csrf_token %}
+      <div class="question-card__head">
+        <div>
+          <label class="question-card__label" for="q-{{ question.key }}">
+            {{ question.fact.label }}
+          </label>
+          {% if question.is_answered %}
+            <c-status-chip status="complete" label="{% translate 'Answered' %}" />
+          {% endif %}
+        </div>
+        <div class="question-card__meter">
+          <span class="question-card__unlocks">
+            {% blocktranslate count counter=question.unlocks %}
+              Settles {{ counter }} rule
+            {% plural %}
+              Settles {{ counter }} rules
+            {% endblocktranslate %}
+          </span>
+          <span class="question-card__progress" aria-hidden="true">
+            <span class="question-card__progress-fill"
+                  style="width: {% widthratio question.unlocks preview.max_question_unlocks 100 %}%"></span>
+          </span>
+        </div>
       </div>
-    </div>
-    {% if question.fact.help_text %}
-      <p class="question-card__help">{{ question.fact.help_text }}</p>
-    {% endif %}
+      {% if question.fact.help_text %}
+        <p class="question-card__help">{{ question.fact.help_text }}</p>
+      {% endif %}
 
-    {% include "obligations/_fragments/entity_question_input.html" %}
-  </form>
-{% empty %}
-  <c-empty-state title="{% translate 'Nothing left to ask' %}"
-                 body="{% translate 'Everything we can decide from what you have told us is decided.' %}">
-  </c-empty-state>
-{% endfor %}
+      {% include "obligations/_fragments/entity_question_input.html" %}
+    </form>
+  {% empty %}
+    <c-empty-state title="{% translate 'Nothing left to ask' %}"
+                   body="{% translate 'Everything we can decide from what you have told us is decided.' %}">
+    </c-empty-state>
+  {% endfor %}
+</div>

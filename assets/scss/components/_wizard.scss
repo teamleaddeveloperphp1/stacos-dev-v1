@@ -216,12 +216,30 @@
   margin: 0 0 1rem;
 }
 
+// A long fact bag (turnover, headcount, entity type, every GST toggle) would
+// otherwise push the build button below the fold. Scrolling this list rather
+// than the whole card keeps the button and the "settles" ranking always in
+// view, and answered cards stay in this same scroll rather than being pushed
+// out of it — see `stacos.obligations.questions.answered_questions`.
+.question-queue__list {
+  max-height: 26rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
 .question-card {
   background: var(--stacos-surface);
   border: 1px solid var(--stacos-border);
   border-radius: var(--stacos-radius-md);
   padding: 0.875rem;
   margin-bottom: 0.75rem;
+}
+
+// Answered, but still here to change your mind on — the status chip already
+// carries the colour and icon; this just quiets the card a shade so a still-open
+// question reads as the one asking for attention.
+.question-card--answered {
+  background: var(--stacos-surface-sunken);
 }
 
 .question-card__head {

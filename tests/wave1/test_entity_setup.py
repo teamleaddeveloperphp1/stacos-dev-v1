@@ -1,15 +1,17 @@
 """
 The guided path from "an entity now exists" to "its calendar exists".
 
-Three steps — registrations, preview, build — reached only while an entity
-owns no obligations at all; `entity_detail` redirects here for as long as
-that holds and never again once a calendar exists. See
-`stacos.tenancy.entity_setup`.
+Four steps — registrations, answers, packs, review — reached only while an
+entity owns no obligations at all; `entity_detail` redirects here for as long
+as that holds and never again once a calendar exists. The packs step is
+skipped when there is nothing to suggest. See `stacos.tenancy.entity_setup`.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from unittest.mock import patch
 
 import pytest
 from django.test import Client
@@ -17,12 +19,29 @@ from django.urls import reverse
 
 from stacos.accounts.models import User
 from stacos.core.scope import platform_scope
+from stacos.tenancy import entity_setup
 from stacos.tenancy.models import Entity, Tenant
 from tests.conftest import sign_in
 
 pytestmark = pytest.mark.django_db
 
 HTMX = {"HX-Request": "true"}
+
+
+def _hiding_packs(real: Callable[..., dict[str, object]]) -> Callable[..., dict[str, object]]:
+    """A stand-in for `entity_setup.entity_preview_context` reporting no pack
+    suggestions at all, for exercising the packs step's skip-when-empty
+    behaviour without needing a fixture entity/jurisdiction combination that
+    happens to have none. An already-accepted pack stays listed (with a
+    "Remove" action) rather than disappearing from `packs`, so adopting every
+    real suggestion does not produce this state — see
+    `stacos.obligations.preview.suggest_packs`.
+    """
+
+    def fake(*args: object, **kwargs: object) -> dict[str, object]:
+        return {**real(*args, **kwargs), "packs": []}
+
+    return fake
 
 
 @pytest.fixture
@@ -89,12 +108,12 @@ def test_step_one_renders_both_ways(signed_in: Client, entity_a: Entity) -> None
     assert b'class="app-shell"' not in fragment.content
 
 
-def test_step_one_offers_next_to_preview(signed_in: Client, entity_a: Entity) -> None:
+def test_step_one_offers_next_to_answers(signed_in: Client, entity_a: Entity) -> None:
     body = signed_in.get(
         reverse("app:entity_setup_registrations", args=[entity_a.pk])
     ).content.decode()
 
-    assert reverse("app:entity_setup_preview", args=[entity_a.pk]) in body
+    assert reverse("app:entity_setup_answers", args=[entity_a.pk]) in body
 
 
 def test_step_one_is_a_404_for_another_tenants_entity(
@@ -108,16 +127,28 @@ def test_step_one_is_a_404_for_another_tenants_entity(
 
 
 # ---------------------------------------------------------------------------
-# Step two — preview
+# Step two — answers
 # ---------------------------------------------------------------------------
 
 
-def test_step_two_hides_the_build_button(signed_in: Client, entity_a: Entity) -> None:
-    body = signed_in.get(reverse("app:entity_setup_preview", args=[entity_a.pk])).content.decode()
+def test_step_two_shows_the_question_queue_and_not_the_build_button(
+    signed_in: Client, entity_a: Entity
+) -> None:
+    body = signed_in.get(reverse("app:entity_setup_answers", args=[entity_a.pk])).content.decode()
 
+    assert "Answer these first" in body
     assert "Create my calendar" not in body
-    assert "Rebuild calendar" not in body
-    assert reverse("app:entity_setup_build", args=[entity_a.pk]) in body
+    assert reverse("app:entity_setup_registrations", args=[entity_a.pk]) in body
+
+
+def test_step_two_does_not_show_the_category_breakdown_or_packs(
+    signed_in: Client, entity_a: Entity
+) -> None:
+    """Both belong to later steps — see `stacos.tenancy.entity_setup.answers`."""
+    body = signed_in.get(reverse("app:entity_setup_answers", args=[entity_a.pk])).content.decode()
+
+    assert "What applies to you, by category" not in body
+    assert "Sets other businesses like yours track" not in body
 
 
 def test_step_two_is_a_404_for_another_tenants_entity(
@@ -125,47 +156,98 @@ def test_step_two_is_a_404_for_another_tenants_entity(
 ) -> None:
     signed_in = sign_in(client, org_owner, step_up=True)
 
-    response = signed_in.get(reverse("app:entity_setup_preview", args=[rival_entity.pk]))
+    response = signed_in.get(reverse("app:entity_setup_answers", args=[rival_entity.pk]))
 
     assert response.status_code == 404
 
 
-def test_answering_a_question_on_step_two_keeps_the_button_hidden(
+def test_answering_a_question_on_step_two_stays_on_the_reduced_card(
     signed_in: Client, entity_a: Entity
 ) -> None:
-    """The interactive re-render has to carry `hide_build` forward itself —
-    nothing else on the request says which page asked for it."""
+    """The card re-renders itself on every answered question — it must come
+    back matching this step's own reduced shape (no columns, no packs), not
+    the full permanent-page card. See `stacos.obligations.views._card_query`.
+    """
     response = signed_in.post(
         reverse("compliance:answer_entity_question", args=[entity_a.pk, "qrmp_opted"])
-        + "?hide_build=1",
+        + "?hide_build=1&setup=1&hide_columns=1&hide_packs=1",
         {"answer": "no"},
         headers=HTMX,
     )
 
     assert response.status_code == 200
-    assert b"Create my calendar" not in response.content
-    assert b"Rebuild calendar" not in response.content
+    body = response.content.decode()
+    assert "Answer these first" in body
+    assert "What applies to you, by category" not in body
+    assert "Sets other businesses like yours track" not in body
 
 
 # ---------------------------------------------------------------------------
-# Step three — build
+# Step three — packs
 # ---------------------------------------------------------------------------
 
 
-def test_step_three_shows_the_build_button(signed_in: Client, entity_a: Entity) -> None:
+def test_packs_are_offered_on_their_own_step(signed_in: Client, entity_a: Entity) -> None:
+    body = signed_in.get(reverse("app:entity_setup_packs", args=[entity_a.pk])).content.decode()
+
+    assert "Sets other businesses like yours track" in body
+    assert "Answer these first" not in body
+    assert "What applies to you, by category" not in body
+
+
+def test_packs_step_is_skipped_when_there_is_nothing_to_suggest(
+    signed_in: Client, entity_a: Entity
+) -> None:
+    """`entity_setup.packs` redirects straight past itself when there is
+    nothing to offer, rather than rendering an empty step."""
+    with patch.object(
+        entity_setup, "entity_preview_context", _hiding_packs(entity_setup.entity_preview_context)
+    ):
+        response = signed_in.get(reverse("app:entity_setup_packs", args=[entity_a.pk]), follow=True)
+
+    assert response.status_code == 200
+    assert response.redirect_chain
+    assert response.redirect_chain[-1][0] == reverse("app:entity_setup_build", args=[entity_a.pk])
+
+
+def test_packs_step_is_a_404_for_another_tenants_entity(
+    client: Client, org_owner: User, rival_entity: Entity
+) -> None:
+    signed_in = sign_in(client, org_owner, step_up=True)
+
+    response = signed_in.get(reverse("app:entity_setup_packs", args=[rival_entity.pk]))
+
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Step four — review & create
+# ---------------------------------------------------------------------------
+
+
+def test_step_four_shows_the_build_button(signed_in: Client, entity_a: Entity) -> None:
     body = signed_in.get(reverse("app:entity_setup_build", args=[entity_a.pk])).content.decode()
 
     assert "Create my calendar" in body
-    assert reverse("app:entity_setup_preview", args=[entity_a.pk]) in body
 
 
-def test_step_three_puts_the_build_button_in_the_wizard_footer(
+def test_step_four_shows_the_category_breakdown_not_the_question_queue_or_packs(
     signed_in: Client, entity_a: Entity
 ) -> None:
-    """Where steps one and two put their "Next", and where a user who has
+    body = signed_in.get(reverse("app:entity_setup_build", args=[entity_a.pk])).content.decode()
+
+    assert "What applies to you, by category" in body
+    assert "Answer these first" not in body
+    assert "Sets other businesses like yours track" not in body
+
+
+def test_step_four_puts_the_build_button_in_the_wizard_footer(
+    signed_in: Client, entity_a: Entity
+) -> None:
+    """Where every earlier step puts its "Next", and where a user who has
     scrolled to the bottom of a wizard looks for the thing that ends it.
 
-    Step three used to be the only step whose `wizard__actions` had an empty
+    This step used to be the only one whose `wizard__actions` had an empty
     `<span></span>` on that side, with the real action a small button in the
     Compliance card's header instead — several rows up, at the far right of the
     page, reading "Rebuild calendar" as often as not. People scrolled down,
@@ -183,7 +265,7 @@ def test_step_three_puts_the_build_button_in_the_wizard_footer(
     assert body.count(reverse("compliance:rebuild", args=[entity_a.pk])) == 1
 
 
-def test_the_card_on_step_three_has_no_build_button_of_its_own(
+def test_the_card_on_step_four_has_no_build_button_of_its_own(
     signed_in: Client, entity_a: Entity
 ) -> None:
     """The Compliance card re-renders itself on every answered question. The
@@ -195,7 +277,7 @@ def test_the_card_on_step_three_has_no_build_button_of_its_own(
     assert reverse("compliance:rebuild", args=[entity_a.pk]) not in card
 
 
-def test_step_three_is_a_404_for_another_tenants_entity(
+def test_step_four_is_a_404_for_another_tenants_entity(
     client: Client, org_owner: User, rival_entity: Entity
 ) -> None:
     signed_in = sign_in(client, org_owner, step_up=True)
@@ -205,9 +287,7 @@ def test_step_three_is_a_404_for_another_tenants_entity(
     assert response.status_code == 404
 
 
-def test_building_the_calendar_navigates_to_the_dashboard(
-    signed_in: Client, entity_a: Entity
-) -> None:
+def test_building_the_calendar_navigates_to_it(signed_in: Client, entity_a: Entity) -> None:
     """`?finish_setup=1` — the one thing the build button adds on this page —
     is what turns "rebuild in place" into "the last step of the flow".
 
@@ -215,7 +295,7 @@ def test_building_the_calendar_navigates_to_the_dashboard(
     uses: the button that fires this request sits inside the region the
     response swaps, so the trigger route had to win a race against the card
     replacing itself and lost — obligations built, button gone, user still on
-    "what applies to you". htmx acts on `HX-Location` in core, before any swap.
+    the setup page. htmx acts on `HX-Location` in core, before any swap.
     """
     response = signed_in.post(
         reverse("compliance:rebuild", args=[entity_a.pk]) + "?finish_setup=1", headers=HTMX
@@ -223,7 +303,10 @@ def test_building_the_calendar_navigates_to_the_dashboard(
 
     assert response.status_code == 200
     location = json.loads(response["HX-Location"])
-    assert location["path"] == reverse("app:dashboard")
+    # The calendar, filtered to this entity — not the dashboard. Finishing
+    # setup is the moment the obligations just planned become visible, and
+    # the calendar is where they live.
+    assert location["path"] == f"{reverse('compliance:calendar')}?entity={entity_a.pk}"
     assert location["target"] == "#main", "a bare path reloads the whole shell"
 
     # The toast still has to survive: htmx reads HX-Trigger before HX-Location.
@@ -251,45 +334,6 @@ def test_rebuilding_without_finish_setup_does_not_navigate(
     assert "stacos:navigate" not in triggers
 
 
-def test_answering_a_question_on_step_three_keeps_the_flow_endable(
-    signed_in: Client, entity_a: Entity
-) -> None:
-    """The bug this guards: the build button silently stopped ending the flow.
-
-    `finish_setup` used to be a context variable the Build view set once, on a
-    button rendered inside the Compliance card. Every re-render of that card
-    went through `entity_preview_context`, which knew nothing about it — so
-    answering a single question first replaced the button with one that posted
-    without `?finish_setup=1`, and clicking it rebuilt in place and left the
-    user sitting on the same page.
-
-    The button now lives in the wizard footer, outside `#entity-obligations`,
-    so a re-render of the card cannot touch it. What this asserts is that
-    structural fact: the card comes back with no build button in it at all, and
-    therefore with nothing to get wrong.
-    """
-    response = signed_in.post(
-        reverse("compliance:answer_entity_question", args=[entity_a.pk, "qrmp_opted"])
-        + "?hide_build=1&setup=1",
-        {"answer": "no"},
-        headers=HTMX,
-    )
-
-    assert response.status_code == 200
-    body = response.content.decode()
-    assert reverse("compliance:rebuild", args=[entity_a.pk]) not in body, (
-        "the card re-rendered a build button of its own — it is the footer's job now"
-    )
-    # The card itself did come back; it is the button that is absent, not the swap.
-    assert 'id="entity-obligations"' in body
-
-
-def test_packs_are_offered_during_setup(signed_in: Client, entity_a: Entity) -> None:
-    body = signed_in.get(reverse("app:entity_setup_preview", args=[entity_a.pk])).content.decode()
-
-    assert "Sets other businesses like yours track" in body
-
-
 def test_packs_are_not_offered_on_the_entity_page(signed_in: Client, materialised: Entity) -> None:
     """Packs are a first-run suggestion, not a permanent fixture on the page an
     entity keeps — see the comment in `entity_summary.html`."""
@@ -300,3 +344,53 @@ def test_packs_are_not_offered_on_the_entity_page(signed_in: Client, materialise
     assert "Sets other businesses like yours track" not in body
     # The card itself is still there; only the strip went.
     assert "Compliance" in body
+
+
+def test_the_step_rail_drops_packs_when_none_are_suggested(
+    signed_in: Client, entity_a: Entity
+) -> None:
+    """The rail must not promise a step that is about to redirect away — see
+    `stacos.tenancy.entity_setup._step_context`.
+    """
+    with patch.object(
+        entity_setup, "entity_preview_context", _hiding_packs(entity_setup.entity_preview_context)
+    ):
+        body = signed_in.get(
+            reverse("app:entity_setup_registrations", args=[entity_a.pk])
+        ).content.decode()
+
+    assert "Optional add-ons" not in body
+
+
+def test_waiting_on_link_crosses_to_the_answers_step_from_review(entity_a: Entity) -> None:
+    """On the Review step the question queue lives on a different page (the
+    Answers step), so a "Waiting on" link has to cross pages rather than
+    jump to a same-page anchor — see `entity_category_row.html`. On the
+    steady-state entity page, where the queue is still on the same page, the
+    link must stay a same-page anchor.
+    """
+    from types import SimpleNamespace
+
+    from django.template.loader import render_to_string
+
+    item = SimpleNamespace(
+        row=SimpleNamespace(title="GSTR-3B (Monthly)"),
+        status="waiting",
+        waiting_label="GST scheme",
+        question=SimpleNamespace(key="gst_scheme"),
+        is_askable_later=False,
+    )
+    answers_url = reverse("app:entity_setup_answers", args=[entity_a.pk])
+
+    review_html = render_to_string(
+        "obligations/_fragments/entity_category_row.html",
+        {"item": item, "entity": entity_a, "hide_questions": True, "in_setup": True},
+    )
+    assert f'href="{answers_url}#q-gst_scheme"' in review_html
+
+    steady_state_html = render_to_string(
+        "obligations/_fragments/entity_category_row.html",
+        {"item": item, "entity": entity_a, "hide_questions": False, "in_setup": False},
+    )
+    assert 'href="#q-gst_scheme"' in steady_state_html
+    assert answers_url not in steady_state_html

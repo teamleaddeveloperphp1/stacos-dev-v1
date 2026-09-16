@@ -32,14 +32,27 @@
     {% endcomment %}
     {% include "obligations/_fragments/entity_preview_stats.html" %}
 
-    <div class="row g-4 mt-1">
-      <div class="col-12 col-lg-4">
-        {% include "obligations/_fragments/entity_question_queue.html" %}
+    {% comment %}
+      Each section can be switched off independently — see
+      `stacos.obligations.views.entity_preview_context`'s `hide_questions`/
+      `hide_columns`. The guided setup flow shows at most one of these two at
+      once, on its own step, rather than both side by side; the steady-state
+      entity page passes neither flag and keeps seeing both, as it always has.
+    {% endcomment %}
+    {% if not hide_questions or not hide_columns %}
+      <div class="row g-4 mt-1">
+        {% if not hide_questions %}
+          <div class="col-12 {% if not hide_columns %}col-lg-4{% endif %}">
+            {% include "obligations/_fragments/entity_question_queue.html" %}
+          </div>
+        {% endif %}
+        {% if not hide_columns %}
+          <div class="col-12 {% if not hide_questions %}col-lg-8{% endif %}">
+            {% include "obligations/_fragments/entity_preview_columns.html" %}
+          </div>
+        {% endif %}
       </div>
-      <div class="col-12 col-lg-8">
-        {% include "obligations/_fragments/entity_preview_columns.html" %}
-      </div>
-    </div>
+    {% endif %}
 
     {% comment %}
       Packs are a first-run suggestion, so they belong to the guided setup flow
@@ -49,12 +62,13 @@
       to bolt on obligations nobody asked for when it never goes away.
 
       Only the strip is conditional. `packs` is still computed either way —
-      accepted packs count toward the build button's total
-      (`total_obligation_count`), and an entity that adopted one during setup must
-      not have it silently dropped from the count afterwards. Removing an already
-      accepted pack now happens on the obligations themselves.
+      an accepted pack is written to `ObligationInclusion` the moment it is
+      toggled, so it already counts toward the build button's total
+      (`stacos.obligations.views.entity_preview_context`, via the real
+      planner run) whether or not this strip is on screen. Removing an
+      already accepted pack now happens on the obligations themselves.
     {% endcomment %}
-    {% if in_setup %}
+    {% if in_setup and not hide_packs %}
       {% include "obligations/_fragments/entity_pack_strip.html" %}
     {% endif %}
   </div>

@@ -1,17 +1,42 @@
 {% load i18n %}
 {% comment %}
-  "Build" reads as an offer and "Rebuild" reads as a correction — confusing the
-  two the first time somebody opens a brand-new entity would be the whole first
-  impression of the product, so the label is decided by `has_calendar`
+  "Create my calendar" reads as an offer; once a calendar already exists the
+  button instead says "Save changes" — "Rebuild calendar" read as "start over
+  from scratch" to a user who had just answered one more question, when what
+  actually happens is a re-run of materialisation against whatever is on file
+  now. The label is decided by `has_calendar`
   (`stacos.obligations.views.entity_preview_context`), not repeated in two
-  places.
+  places — except inside the guided setup wizard, where `in_setup` overrides
+  it back to the "create" phrasing regardless; see
+  `entity_build_button_label.html`.
 
-  The number is `preview.applies_count` plus whatever accepted packs add on top
-  (`stacos.obligations.preview.total_obligation_count`) — the count of rows a
-  build will actually create, not just the rule-evaluated ones. Posting to
-  `compliance:rebuild` either way: the planner never destroys an obligation
-  carrying history, so a "build" on an entity that already has a calendar is
-  exactly as safe as a "rebuild".
+  The button's own colour follows the same `in_setup` override, not
+  `has_calendar` alone — a user revisiting the wizard on an entity that
+  already has a calendar (browser back, a bookmarked step) still reads
+  "Create my calendar" here, and a muted outline button under text that says
+  "create" disagreed with itself, easy to miss beside "Back" in the wizard
+  footer where it is the only forward action on the screen. The steady-state
+  entity page, where this same button can genuinely say "Save changes", is
+  the one place the quieter outline style still applies.
+
+  The number is the real total the register will hold once a build runs
+  right now — the planner run behind `stacos.obligations.services.preview`,
+  not the count of rules that apply (`preview.applies_count`, shown
+  separately above this button — see `entity_preview_stats.html`). One rule
+  commonly becomes many rows: a GST rule fires once per GST registration, and
+  a monthly rule fires once per month inside the materialisation horizon, so
+  "6 rules" honestly building "64 obligations" is expected, not a bug — see
+  that template's explanatory line for what tells the user so before they
+  click.
+
+  Deliberately the *total*, not `len(plan.to_create)`: this button also
+  renders for an entity revisiting the guided setup after already having a
+  calendar (browser back, a bookmarked step), where most of what applies is
+  already on file and the planner correctly finds nothing new to create —
+  showing "0 obligations" there would read as broken rather than as "nothing
+  changed". Posting to `compliance:rebuild` either way: the planner never
+  destroys an obligation carrying history, so a "build" on an entity that
+  already has a calendar is exactly as safe as a "rebuild".
 
   `finish_setup` tells `rebuild_calendar` to send the browser on to the
   dashboard once this succeeds, which is what turns this button into the last
@@ -25,21 +50,22 @@
   `button_class` lets that footer ask for a full-size primary button, matching
   the "Next" button every earlier step of the wizard ends with. The card header
   wants the small one, so that is the default.
+
+  The count lives in its own ``#build-button-label`` span so it can be kept
+  current with an out-of-band swap when this button sits outside the region
+  that answering a question or toggling a pack re-renders — see
+  ``stacos.obligations.views._render_entity_preview``. That swap only ever
+  touches this span's contents, never the surrounding ``<form>``, so a
+  ``finish_setup`` querystring baked into its action survives untouched.
 {% endcomment %}
 <form hx-post="{% url 'compliance:rebuild' entity.pk %}{% if finish_setup %}?finish_setup=1{% endif %}"
       hx-target="#entity-obligations" hx-swap="outerHTML">
   {% csrf_token %}
   <button type="submit"
-          class="{{ button_class|default:'btn btn-sm' }} {% if has_calendar %}btn-outline-secondary{% else %}btn-primary{% endif %}"
+          class="{{ button_class|default:'btn btn-sm' }} {% if has_calendar and not in_setup %}btn-outline-secondary{% else %}btn-primary{% endif %}"
           hx-disabled-elt="this">
-    {% if has_calendar %}
-      {% translate "Rebuild calendar" %}
-    {% else %}
-      {% blocktranslate count counter=total_count %}
-        Create my calendar with {{ counter }} obligation
-      {% plural %}
-        Create my calendar with {{ counter }} obligations
-      {% endblocktranslate %}
-    {% endif %}
+    <span id="build-button-label">
+      {% include "obligations/_fragments/entity_build_button_label.html" %}
+    </span>
   </button>
 </form>

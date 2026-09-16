@@ -6,8 +6,26 @@
   itself instead of being squeezed into whichever column the category
   breakdown ends up sharing space with.
 
-  ``applies_count`` and the number on the build button come from the full,
-  untruncated set — see ``stacos.obligations.preview.EntityPreview``.
+  ``applies_count`` comes from the full, untruncated set — see
+  ``stacos.obligations.preview.EntityPreview``. The build button's own count
+  (``total_count``) is a different, larger number by design: this row counts
+  *rules* — one line in the catalog, such as "GSTR-3B monthly" — while the
+  button counts the *obligations* those rules cover, which is that same rule
+  multiplied out once per registration it covers and once per filing period
+  inside the calendar's horizon. The paragraph below this row says so
+  explicitly, whenever the build button is about to show that larger number
+  (``show_obligation_count``, set alongside it in
+  ``stacos.obligations.views.entity_preview_context``) — a business owner
+  who picked "6 rules" and then watched the calendar fill with 64 rows
+  otherwise has no way to know that is correct.
+
+  Said as "your calendar will hold", never "will create": ``total_count`` is
+  the register's total after the build, not the count of new rows. Those
+  agree the first time an entity is built, but this same card also renders
+  on a revisit to an entity that already has a calendar (browser back, a
+  bookmarked setup step) — there, most or all of what applies is already on
+  file, and a sentence that says "create" against a number that hasn't moved
+  reads as broken.
 {% endcomment %}
 <div class="stat-row">
   <div class="stat-card">
@@ -26,3 +44,8 @@
 <p class="verdict-grid__footnote">
   {% blocktranslate with n=preview.considered %}{{ n }} rules considered.{% endblocktranslate %}
 </p>
+{% if show_obligation_count %}
+  <p class="verdict-grid__footnote">
+    {% blocktranslate with rules=preview.applies_count obligations=total_count %}{{ rules }} rules apply. Each one covers every registration and filing period it applies to, so your calendar will hold {{ obligations }} obligations in total — the individual filings you'll actually track.{% endblocktranslate %}
+  </p>
+{% endif %}

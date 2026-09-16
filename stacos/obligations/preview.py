@@ -32,7 +32,12 @@ from stacos.engine.rules import V, evaluate
 from stacos.engine.types import DefinitionSnapshot
 from stacos.jurisdictions.facts import REGISTRY
 from stacos.obligations.models import ObligationInclusion
-from stacos.obligations.questions import Question, askable_facts, rank_questions
+from stacos.obligations.questions import (
+    Question,
+    answered_questions,
+    askable_facts,
+    rank_questions,
+)
 from stacos.tenancy.models import Entity, Tenant
 
 __all__ = [
@@ -48,7 +53,6 @@ __all__ = [
     "preview_entity",
     "revoke_pack",
     "suggest_packs",
-    "total_obligation_count",
 ]
 
 #: How many rows to show under a heading before folding the rest away.
@@ -409,7 +413,11 @@ def preview_entity(
         applies=tuple(applies),
         might_apply=tuple(might),
         does_not_apply=tuple(excluded),
-        questions=rank_questions(catalog=catalog, facts=profile.facts, limit=question_limit),
+        # Still-open questions first, ranked by consequence; already-answered
+        # ones after, so a person can find and change one without it crowding
+        # out what is still genuinely unknown.
+        questions=rank_questions(catalog=catalog, facts=profile.facts, limit=question_limit)
+        + answered_questions(catalog=catalog, facts=profile.facts),
         considered=len(catalog),
     )
 
@@ -488,26 +496,6 @@ def suggest_packs(
 
     suggestions.sort(key=lambda suggestion: (-suggestion.adds, suggestion.pack.name))
     return suggestions
-
-
-def total_obligation_count(preview: EntityPreview, packs: list[PackSuggestion]) -> int:
-    """What building the calendar will actually create — rules, plus accepted packs.
-
-    ``preview.applies_count`` alone used to be the number on the "Create my
-    calendar" button, so accepting or dropping a pack changed what was about to
-    be built without changing the number promising what it would build. A union
-    of codes rather than summing each pack's own ``adds``: two accepted packs
-    that both cover the same definition must not be counted twice.
-    """
-    already = {row.code for row in preview.applies}
-    added_by_packs = {
-        code
-        for suggestion in packs
-        if suggestion.accepted
-        for code in suggestion.pack.definition_codes
-        if code not in already
-    }
-    return preview.applies_count + len(added_by_packs)
 
 
 def adopt_pack(tenant: Tenant, entity: Entity, code: str, *, user: User) -> None:

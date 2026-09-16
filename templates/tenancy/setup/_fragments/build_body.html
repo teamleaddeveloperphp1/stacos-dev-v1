@@ -1,15 +1,18 @@
 {% load i18n %}
 {% comment %}
-  Step three, and the end of the guided setup: the same Compliance card as step
-  two, and the build button in the wizard footer where steps one and two put
-  their forward action.
+  Step four, and the end of the guided setup: the reviewed result — the same
+  headline counts and category breakdown the entity detail page shows later —
+  plus the build button in the wizard footer where every earlier step put its
+  forward action. Neither the question queue nor the pack strip render here;
+  both belong to the steps behind this one, so this is a stable snapshot to
+  check over, not a screen still asking for more input.
 
   The footer, not the card header. Two reasons, and the first is the one a user
   feels: this is a wizard, the button that ends it belongs where the button that
-  advanced every previous step was, and step three used to be the only step
-  whose `wizard__actions` held an empty `<span></span>` on that side — the
-  primary action was a small secondary-looking button in a card header instead,
-  and people scrolled to the bottom looking for it and concluded there was none.
+  advanced the previous step was, and this step used to be the only one whose
+  `wizard__actions` held an empty `<span></span>` on that side — the primary
+  action was a small secondary-looking button in a card header instead, and
+  people scrolled to the bottom looking for it and concluded there was none.
 
   The second is structural. The card re-renders itself whenever a question is
   answered or a pack is toggled (`_render_entity_preview` swaps
@@ -25,7 +28,7 @@
   re-rendering the card.
 {% endcomment %}
 <c-page-header title="{{ entity.name }}"
-               subtitle="{% translate 'Ready when you are. You can always add more and rebuild later.' %}">
+               subtitle="{% translate 'This is what creating the calendar will do. Nothing here is final — you can always come back and rebuild.' %}">
 </c-page-header>
 
 {% include "tenancy/setup/_fragments/steps.html" %}
@@ -34,7 +37,7 @@
   {% include "obligations/_fragments/entity_summary.html" %}
 
   <div class="wizard__actions">
-    <a class="btn btn-outline-secondary" href="{% url 'app:entity_setup_preview' entity.pk %}">
+    <a class="btn btn-outline-secondary" href="{{ back_url }}">
       {% translate "Back" %}
     </a>
     {% include "obligations/_fragments/entity_build_button.html" with finish_setup=True button_class="btn" %}

@@ -29,7 +29,7 @@ from stacos.engine.rules import V, evaluate
 from stacos.engine.types import DefinitionSnapshot, Periodicity
 from stacos.jurisdictions.facts import REGISTRY, FactDef, FactSource
 
-__all__ = ["Question", "askable_facts", "rank_questions"]
+__all__ = ["Question", "answered_questions", "askable_facts", "rank_questions"]
 
 #: How much an undecided definition is worth to the ranking, by how often it
 #: recurs. A monthly filing is worth twelve annual ones to somebody deciding
@@ -66,10 +66,20 @@ class Question:
     #: A handful of codes, so the UI can say "answering this settles GSTR-3B,
     #: GSTR-1 and 28 others" rather than showing a bare number.
     decisive_for: tuple[str, ...] = ()
+    #: The value already on file for this fact, or ``None`` when nobody has
+    #: answered it yet. A question stays in the queue once it is decided
+    #: rather than disappearing outright — see :func:`answered_questions` —
+    #: so this is what a template reads to pre-select the control and to mark
+    #: the card as settled rather than open.
+    answered_value: Any = None
 
     @property
     def key(self) -> str:
         return self.fact.key
+
+    @property
+    def is_answered(self) -> bool:
+        return self.answered_value is not None
 
 
 def rank_questions(
@@ -119,6 +129,72 @@ def rank_questions(
     # order and a golden test on it is stable.
     questions.sort(key=lambda question: (-question.weight, -question.unlocks, question.fact.key))
     return tuple(questions[:limit])
+
+
+def answered_questions(
+    *, catalog: Sequence[DefinitionSnapshot], facts: Mapping[str, Any]
+) -> tuple[Question, ...]:
+    """Already-answered facts still worth a card, so a person can change their
+    mind on one — but only while it is still deciding something.
+
+    ``rank_questions`` only ever returns a fact that is *missing* for some
+    still-undecided definition — by construction, since it reads
+    ``Verdict.missing_facts``. The moment an answer decides the last rule it was
+    holding open, that fact can never appear there again, and "Answer these
+    first" would quietly lose the one control that could change it.
+
+    This asks the same question in reverse: take the fact away and see which
+    now-decided definitions would revert to ``UNKNOWN`` without it. Only a fact
+    still doing something for at least one definition earns a card — a
+    profile carries plenty of facts (``country``, ``sector``, ``entity_type``
+    once every rule that turned on it is settled some other way) that were
+    never asked *as* a question and would otherwise turn "Answer these first"
+    into a wall of "Settles 0 rules" cards nobody asked to see.
+    """
+    candidates = sorted(
+        key
+        for key, value in facts.items()
+        if value is not None
+        and (fact_def := REGISTRY.get(key)) is not None
+        and fact_def.source not in _UNASKABLE_SOURCES
+    )
+    if not candidates:
+        return ()
+
+    decided = [
+        (definition, evaluate(definition.applicability_rule, facts)) for definition in catalog
+    ]
+    decided = [(d, v) for d, v in decided if v.result is not V.UNKNOWN]
+
+    unlocks: dict[str, int] = {}
+    weight: dict[str, int] = {}
+    examples: dict[str, list[str]] = {}
+
+    for key in candidates:
+        facts_without = {k: v for k, v in facts.items() if k != key}
+        for definition, _verdict in decided:
+            without = evaluate(definition.applicability_rule, facts_without)
+            if key not in without.missing_facts:
+                continue
+            recurrence = _PERIODICITY_WEIGHT.get(definition.periodicity, 1)
+            unlocks[key] = unlocks.get(key, 0) + 1
+            weight[key] = weight.get(key, 0) + recurrence
+            if len(examples.setdefault(key, [])) < 5:
+                examples[key].append(definition.code)
+
+    questions = [
+        Question(
+            fact=fact,
+            unlocks=unlocks[key],
+            weight=weight[key],
+            decisive_for=tuple(examples.get(key, ())),
+            answered_value=facts[key],
+        )
+        for key in unlocks
+        if (fact := REGISTRY.get(key)) is not None
+    ]
+    questions.sort(key=lambda question: (-question.weight, -question.unlocks, question.fact.key))
+    return tuple(questions)
 
 
 def askable_facts(missing: frozenset[str]) -> set[str]:

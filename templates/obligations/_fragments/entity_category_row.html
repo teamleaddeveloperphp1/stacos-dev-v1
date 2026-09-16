@@ -8,8 +8,16 @@
       Straight to the control that clears this row. This anchor is what turns
       "which answer settles which obligation" from something a reader has to
       work out into one click.
+
+      Same-page when the question queue is on this page (`hide_questions` is
+      unset — the steady-state entity page). On the guided setup's Review
+      step, the queue lives on the Answers step instead
+      (`stacos.tenancy.entity_setup.answers`), so the link has to cross pages
+      to land on it — the browser still jumps straight to the anchor once
+      that page loads.
     {% endcomment %}
-    <a class="category-list__ask" href="#q-{{ item.question.key }}">
+    <a class="category-list__ask"
+       href="{% if hide_questions and in_setup %}{% url 'app:entity_setup_answers' entity.pk %}{% endif %}#q-{{ item.question.key }}">
       <c-status-chip status="waiting"
                       label="{% blocktranslate with fact=item.waiting_label %}Waiting on: {{ fact }} →{% endblocktranslate %}" />
     </a>

@@ -122,6 +122,56 @@ def test_answering_a_question_writes_the_fact_and_rebuilds(
         assert profile.facts.get("qrmp_opted") is False
 
 
+def test_an_answered_question_stays_in_the_queue_pre_selected(
+    signed_in: Client, entity_with_gst: Entity
+) -> None:
+    """Answering a question used to make its card vanish outright —
+    ``rank_questions`` only ever returns a fact still missing for something
+    undecided, by construction. That is correct for ranking what to ask next
+    and wrong for "let me change my mind": once decided, the fact could never
+    appear there again. See ``stacos.obligations.questions.answered_questions``.
+    """
+    signed_in.post(
+        reverse("compliance:answer_entity_question", args=[entity_with_gst.pk, "qrmp_opted"]),
+        {"answer": "no"},
+        headers=HTMX,
+    )
+
+    body = signed_in.get(
+        reverse("compliance:entity_summary", args=[entity_with_gst.pk]), headers=HTMX
+    ).content.decode()
+
+    assert "Opted for QRMP" in body, "the answered question dropped out of the queue"
+    card = body.split('id="q-qrmp_opted"', 1)[1].split("</div>", 1)[0]
+    assert 'value="no" checked' in card, "the recorded answer is not pre-selected"
+
+
+def test_choosing_not_sure_yet_again_clears_a_previous_answer(
+    signed_in: Client, entity_with_gst: Entity
+) -> None:
+    """"Not sure yet" used to be a no-op placeholder, never a real value a
+    request could submit — reachable only as the untouched default. Now that
+    an answered question stays on screen with "Not sure yet" as one of its
+    three real choices, picking it again has to mean "go back to not
+    knowing", not "nothing was submitted"."""
+    signed_in.post(
+        reverse("compliance:answer_entity_question", args=[entity_with_gst.pk, "qrmp_opted"]),
+        {"answer": "no"},
+        headers=HTMX,
+    )
+    with platform_scope(reason="test"):
+        assert EntityProfile.objects.get(entity=entity_with_gst).facts.get("qrmp_opted") is False
+
+    signed_in.post(
+        reverse("compliance:answer_entity_question", args=[entity_with_gst.pk, "qrmp_opted"]),
+        {"answer": ""},
+        headers=HTMX,
+    )
+
+    with platform_scope(reason="test"):
+        assert EntityProfile.objects.get(entity=entity_with_gst).facts.get("qrmp_opted") is None
+
+
 def test_another_tenants_entity_cannot_be_answered_for(
     client: Client, org_owner: User, rival_entity: Entity
 ) -> None:

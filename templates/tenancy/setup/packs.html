@@ -1,0 +1,6 @@
+{% extends "layouts/app_shell.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Optional add-ons" %} · {{ entity.name }} · STACOS{% endblock %}
+
+{% block main %}{% include "tenancy/setup/_fragments/packs_body.html" %}{% endblock %}
