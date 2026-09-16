@@ -296,7 +296,20 @@ document.body.addEventListener("stacos:modal-close", () => {
 document.body.addEventListener("htmx:beforeSwap", (event) => {
   if (event.detail.xhr?.status !== 422) return;
   const container = document.getElementById("modal-container");
-  if (!container || !container.querySelector(".modal")) return;
+  const existing = container?.querySelector(".modal");
+  if (!container || !existing) return;
+
+  // The innerHTML swap below destroys `existing` out from under its still-shown
+  // Modal instance. Bootstrap appends that instance's backdrop to <body>, a
+  // sibling of #modal-container, so the swap never touches it — and the only
+  // thing that ever removes it is that instance's own .hide(), which this path
+  // skips. Tear both down synchronously first so no backdrop is orphaned.
+  Modal.getInstance(existing)?.dispose();
+  document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
+  document.body.classList.remove("modal-open");
+  document.body.style.removeProperty("overflow");
+  document.body.style.removeProperty("padding-right");
+
   event.detail.shouldSwap = true;
   event.detail.target = container;
   event.detail.swapOverride = "innerHTML";
