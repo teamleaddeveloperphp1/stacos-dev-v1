@@ -610,7 +610,7 @@ class InviteColleagueForm(forms.Form):
     produce a membership whose permissions name features that are not there.
     """
 
-    email = forms.EmailField(label=_("Their work email"))
+    email = forms.EmailField(label=_("Their email"))
     role: forms.ModelChoiceField[Role] = forms.ModelChoiceField(
         label=_("What can they do?"), queryset=Role.objects.none()
     )

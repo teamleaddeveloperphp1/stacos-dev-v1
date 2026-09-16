@@ -54,7 +54,7 @@ SIZES = (
 class ContactForm(forms.Form):
     topic = forms.ChoiceField(label=_("What is this about?"), choices=TOPICS, initial="sales")
     name = forms.CharField(label=_("Your name"), max_length=120)
-    email = forms.EmailField(label=_("Work email"))
+    email = forms.EmailField(label=_("Email"))
     phone = forms.CharField(label=_("Phone"), max_length=32, required=False)
     organisation = forms.CharField(label=_("Organisation"), max_length=160, required=False)
     size = forms.ChoiceField(label=_("How many entities?"), choices=SIZES, required=False)
