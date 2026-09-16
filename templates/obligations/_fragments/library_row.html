@@ -24,36 +24,36 @@
         </div>
       {% endif %}
     {% elif row.state == "removed" %}
-      <span class="badge-soft">{% translate "Removed" %}</span>
+      <c-status-chip status="na" label="{% translate 'Removed' %}" />
     {% elif row.blocked_reason %}
-      <span class="badge-soft" title="{{ row.blocked_reason }}">
-        {% translate "Not added yet" %}
+      <span title="{{ row.blocked_reason }}">
+        <c-status-chip status="na" label="{% translate 'Not added yet' %}" />
       </span>
     {% else %}
-      <span class="text-muted small">{% translate "Not added yet" %}</span>
+      <c-status-chip status="na" label="{% translate 'Not added yet' %}" />
     {% endif %}
   </td>
   <td class="text-end">
     {% if can_manage %}
       {% if row.state == "added" %}
-        <button type="button" class="btn btn-sm btn-outline-secondary"
+        <button type="button" class="btn btn-sm btn-outline-secondary library-action-btn"
                 hx-get="{% url 'compliance:library_remove' entity.pk row.code %}"
                 hx-target="#modal-container" hx-swap="innerHTML">
           {% translate "Remove" %}
         </button>
       {% elif row.state == "removed" %}
-        <button type="button" class="btn btn-sm btn-outline-secondary"
+        <button type="button" class="btn btn-sm btn-outline-secondary library-action-btn"
                 hx-post="{% url 'compliance:library_restore' entity.pk row.code %}"
                 hx-swap="none">
           {% translate "Restore" %}
         </button>
       {% elif row.blocked_reason %}
-        <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+        <button type="button" class="btn btn-sm btn-outline-secondary library-action-btn" disabled
                 title="{{ row.blocked_reason }}">
           {% translate "Add" %}
         </button>
       {% else %}
-        <button type="button" class="btn btn-sm btn-outline-primary"
+        <button type="button" class="btn btn-sm btn-outline-primary library-action-btn"
                 hx-get="{% url 'compliance:library_force_add' entity.pk row.code %}"
                 hx-target="#modal-container" hx-swap="innerHTML">
           {% translate "Add" %}

@@ -1,16 +1,38 @@
-// The compliance library: one category at a time, each its own small table
-// inside the same data-table shell.
-.library-category {
-  border-bottom: 1px solid var(--stacos-border);
+// The compliance library: one shared table for every category, each one
+// introduced by its own full-width row rather than a table of its own — a
+// table per category left each free to size its Compliance/Status/Actions
+// columns independently, so the column edges jumped sideways at every
+// category boundary.
+.library-category-row td {
+  display: flex;
+  align-items: center;
+  gap: $stacos-space-2;
+  padding-top: $stacos-space-3;
+  font-size: $stacos-text-sm;
+  font-weight: 600;
+  background: var(--stacos-surface-sunken);
+}
 
-  &:last-child { border-bottom: none; }
+// The count of definitions in this category — a quiet pill, not a second
+// heading, so the eye still lands on the category name first.
+.library-category__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding: 0 0.375rem;
+  border-radius: var(--stacos-radius-pill);
+  background: var(--stacos-surface);
+  color: var(--stacos-text-muted);
+  font-size: $stacos-text-xs;
+  font-weight: 600;
+}
 
-  &__title {
-    margin: 0;
-    padding: $stacos-space-3 $stacos-space-3 0;
-    font-size: $stacos-text-sm;
-    font-weight: 600;
-  }
+// Add / Remove / Restore in the library table swap for one another depending
+// on row state — a fixed width keeps the button from shifting the row's
+// right edge as its label changes length.
+.library-action-btn {
+  min-width: 5.5rem;
 }
 
 // The data table: dense, scannable, and the same everywhere.

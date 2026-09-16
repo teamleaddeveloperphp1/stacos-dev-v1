@@ -1,30 +1,47 @@
 {% load i18n %}
 {% comment %}
-  The catalog, grouped by category. Swapped as a whole by the filter toolbar;
-  each row also carries its own id so a single action (remove/force-add/
-  restore) can update just its row via an out-of-band swap.
+  The catalog, grouped by category, in one shared table — matching every other
+  list in the product (see calendar_body.html) — with each category introduced
+  by its own full-width row rather than a table of its own. A table per
+  category left each one free to size its Compliance/Status/Actions columns
+  independently, so the column edges jumped sideways every time a new category
+  started. Swapped as a whole by the filter toolbar; each row also carries its
+  own id so a single action (remove/force-add/restore) can update just its row
+  via an out-of-band swap.
 {% endcomment %}
-{% if groups %}
-  {% for code, label, rows in groups %}
-    <div class="library-category">
-      <h3 class="library-category__title">{{ label }}</h3>
-      <div class="data-table__scroll">
-        <table class="table mb-0">
-          <tbody>
-            {% for row in rows %}
-              {% include "obligations/_fragments/library_row.html" %}
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  {% endfor %}
-{% else %}
-  <c-empty-state title="{% translate 'Nothing matches that filter' %}"
-                 body="{% translate 'Try a different search term, or clear a filter.' %}">
-    <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:library' entity.pk %}"
-       hx-get="{% url 'compliance:library' entity.pk %}" hx-target="#main" hx-push-url="true">
-      {% translate "Clear filters" %}
-    </a>
-  </c-empty-state>
-{% endif %}
+<table class="table mb-0">
+  <thead>
+    <tr>
+      <th>{% translate "Compliance" %}</th>
+      <th>{% translate "Status" %}</th>
+      <th class="text-end"><span class="visually-hidden">{% translate "Actions" %}</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if groups %}
+      {% for code, label, rows in groups %}
+        <tr class="library-category-row">
+          <td colspan="3">
+            {{ label }}
+            <span class="library-category__count">{{ rows|length }}</span>
+          </td>
+        </tr>
+        {% for row in rows %}
+          {% include "obligations/_fragments/library_row.html" %}
+        {% endfor %}
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="3" class="p-0">
+          <c-empty-state title="{% translate 'Nothing matches that filter' %}"
+                         body="{% translate 'Try a different search term, or clear a filter.' %}">
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:library' entity.pk %}"
+               hx-get="{% url 'compliance:library' entity.pk %}" hx-target="#main" hx-push-url="true">
+              {% translate "Clear filters" %}
+            </a>
+          </c-empty-state>
+        </td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
