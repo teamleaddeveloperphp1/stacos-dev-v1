@@ -54,8 +54,9 @@ def keyset_page[M: models.Model](
     page_size: int = 50,
     descending: bool = False,
     null_sentinel: date | datetime | None = None,
+    secondary: str | None = None,
 ) -> KeysetPage[M]:
-    """Fetch one page after ``cursor``, ordered by ``(order_by, id)``.
+    """Fetch one page after ``cursor``, ordered by ``(order_by, secondary, id)``.
 
     :param order_by: a date or datetime field on the model.
     :param descending: newest first. Most lists in this product want this; the
@@ -65,10 +66,16 @@ def keyset_page[M: models.Model](
         default: on the calendar an obligation whose date could not be resolved
         belongs at the end, not at the top pretending to be the most urgent thing
         the user owns.
+    :param secondary: the name of an integer annotation already present on
+        ``queryset``, used to break ties on ``order_by`` before falling back to
+        ``id``. Optional, and additive to every existing caller — the compliance
+        calendar uses it to put what still needs action ahead of what is already
+        confirmed or filed when several rows share a due date; nothing else in
+        the product needs a second key, so it costs them nothing.
 
-    The tiebreaker is not optional. Two rows sharing a sort value is the normal
-    case — the 20th of the month carries several filings — and without one a
-    cursor skips or repeats rows across pages.
+    The final tiebreaker (``id``) is not optional. Two rows sharing a sort value
+    is the normal case — the 20th of the month carries several filings — and
+    without one a cursor skips or repeats rows across pages.
     """
     field = queryset.model._meta.get_field(order_by)
     if not isinstance(field, models.DateField):  # DateTimeField subclasses this
@@ -94,17 +101,37 @@ def keyset_page[M: models.Model](
         sort_key = "_keyset"
 
     prefix = "-" if descending else ""
-    ordered = sorted_queryset.order_by(f"{prefix}{sort_key}", f"{prefix}id")
+    order_fields = [f"{prefix}{sort_key}"]
+    if secondary is not None:
+        order_fields.append(f"{prefix}{secondary}")
+    order_fields.append(f"{prefix}id")
+    ordered = sorted_queryset.order_by(*order_fields)
 
     if cursor:
-        after = _parse_cursor(cursor, wants_datetime=isinstance(field, models.DateTimeField))
+        after = _parse_cursor(
+            cursor,
+            wants_datetime=isinstance(field, models.DateTimeField),
+            wants_secondary=secondary is not None,
+        )
         if after is not None:
-            value, row_id = after
             beyond = "lt" if descending else "gt"
-            ordered = ordered.filter(
-                Q(**{f"{sort_key}__{beyond}": value})
-                | Q(**{sort_key: value, f"id__{beyond}": row_id})
-            )
+            if secondary is not None:
+                value, secondary_value, row_id = after
+                ordered = ordered.filter(
+                    Q(**{f"{sort_key}__{beyond}": value})
+                    | Q(**{sort_key: value}, **{f"{secondary}__{beyond}": secondary_value})
+                    | Q(
+                        **{sort_key: value},
+                        **{secondary: secondary_value},
+                        **{f"id__{beyond}": row_id},
+                    )
+                )
+            else:
+                value, row_id = after
+                ordered = ordered.filter(
+                    Q(**{f"{sort_key}__{beyond}": value})
+                    | Q(**{sort_key: value, f"id__{beyond}": row_id})
+                )
 
     # One more than asked for, so "is there another page?" costs no extra query.
     rows = list(ordered[: page_size + 1])
@@ -116,24 +143,41 @@ def keyset_page[M: models.Model](
         last = rows[-1]
         sort_value: date | datetime | None = getattr(last, order_by, None) or null_sentinel
         if sort_value is not None:
-            next_cursor = f"{sort_value.isoformat()}{CURSOR_SEPARATOR}{last.pk}"
+            if secondary is not None:
+                next_cursor = (
+                    f"{sort_value.isoformat()}{CURSOR_SEPARATOR}"
+                    f"{getattr(last, secondary)}{CURSOR_SEPARATOR}{last.pk}"
+                )
+            else:
+                next_cursor = f"{sort_value.isoformat()}{CURSOR_SEPARATOR}{last.pk}"
 
     return KeysetPage(rows=tuple(rows), next_cursor=next_cursor, has_more=has_more)
 
 
-def _parse_cursor(cursor: str, *, wants_datetime: bool) -> tuple[Any, UUID] | None:
+def _parse_cursor(
+    cursor: str, *, wants_datetime: bool, wants_secondary: bool = False
+) -> tuple[Any, ...] | None:
     """Decode a cursor, or ``None`` if it is unusable.
 
     A malformed cursor is a mangled URL — a link pasted into chat and broken by a
     trailing bracket — not an attack. Starting the list again beats a 500.
     """
-    value_raw, _, id_raw = cursor.partition(CURSOR_SEPARATOR)
+    parts = cursor.split(CURSOR_SEPARATOR)
     try:
+        if wants_secondary:
+            value_raw, secondary_raw, id_raw = parts
+            value = (
+                datetime.fromisoformat(value_raw)
+                if wants_datetime
+                else date.fromisoformat(value_raw)
+            )
+            return value, int(secondary_raw), UUID(id_raw)
+        value_raw, id_raw = parts
         value = (
             datetime.fromisoformat(value_raw) if wants_datetime else date.fromisoformat(value_raw)
         )
         return value, UUID(id_raw)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 
