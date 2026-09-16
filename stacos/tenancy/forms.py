@@ -47,6 +47,7 @@ ENTITY_TYPE_LABELS: dict[str, str] = {
     "LIAISON_OFFICE": "Liaison Office",
     "COOPERATIVE": "Co-operative Society",
     "HUF": "Hindu Undivided Family",
+    "GOVERNMENT": "Government",
 }
 
 #: Derived from the subdivision table rather than hand-maintained. The old

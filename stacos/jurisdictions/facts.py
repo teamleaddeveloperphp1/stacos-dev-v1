@@ -217,6 +217,7 @@ ENTITY_TYPES: tuple[str, ...] = (
     "LIAISON_OFFICE",
     "COOPERATIVE",
     "HUF",
+    "GOVERNMENT",
 )
 
 REGISTRATION_TYPES: tuple[str, ...] = (

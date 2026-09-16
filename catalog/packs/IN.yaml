@@ -76,6 +76,7 @@ entity_types:
   - { code: LIAISON_OFFICE, name: Liaison office }
   - { code: COOPERATIVE, name: Co-operative society }
   - { code: HUF, name: Hindu undivided family }
+  - { code: GOVERNMENT, name: Government }
 
 # `catalog` is the flat identifier vocabulary (unchanged in spirit from before);
 # `by_entity_type` is the Add/Edit Entity screen's mapping of "which identifiers
@@ -136,6 +137,7 @@ registration_types:
     LIAISON_OFFICE: [{ code: PAN, requirement: M }, TAN, GST, { code: FCRN, requirement: M }, ESIC, PF, RBI_APPROVAL]
     COOPERATIVE: [{ code: PAN, requirement: M }, TAN, GST, { code: COOP_REGN, requirement: M }, ESIC, PF, UDYAM, IEC]
     HUF: [{ code: PAN, requirement: M }, TAN, GST, ESIC, PF, { code: KARTA_PAN, requirement: M }]
+    GOVERNMENT: [{ code: PAN, requirement: M }, TAN, GST, { code: CIN, requirement: C }, ESIC, PF, IEC, UDYAM]
 
 # Sunday only. Note what this is *not*: a statement that Indian due dates move
 # off a Sunday. They do not — the portals accept filings on a Sunday and relief
