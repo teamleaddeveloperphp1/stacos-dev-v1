@@ -48,10 +48,9 @@ def _payload(entity: Entity, **overrides: str) -> dict[str, str]:
     what is actually on file is what a real browser does too — the fields are
     real inputs in the same ``<form>``, pre-filled by the GET.
 
-    ``aggregate_turnover``/``employee_count`` are mandatory for every entity
-    type now that ``org-owner`` also holds ``tenancy.profile.edit`` — a plain
-    form-level rule, not entity-type conditional, so a fixed valid pair
-    belongs in every payload here rather than varying per test.
+    ``aggregate_turnover``/``employee_count`` are optional, but a fixed valid
+    pair belongs in every payload here anyway, so tests exercising other
+    fields are not also exercising the blank case.
 
     PAN is mandatory for every entity type too, and the base fixtures
     deliberately carry no registrations at all (``test_entity_preview`` has a

@@ -404,9 +404,10 @@ class EntityRegistrationFieldsForm(forms.Form):
 
 
 class EntityProfileForm(forms.ModelForm[EntityProfile]):
-    """Turnover and headcount — mandatory for every entity type per the
-    product spec, but a plain form-level rule rather than something the
-    jurisdiction pack decides, since it does not vary by entity type.
+    """Turnover and headcount — optional on every entity type. Leaving either
+    blank is a legitimate "unknown" fact: the engine resolves the applicable
+    rule to UNKNOWN and materialises the obligation unconfirmed rather than
+    guessing, so onboarding must not force a value out of the user.
 
     Deliberately independent of ``EntityRegistrationFieldsForm``: these two
     facts live on ``EntityProfile``, not as an ``EntityRegistration`` row, so
@@ -428,8 +429,8 @@ class EntityProfileForm(forms.ModelForm[EntityProfile]):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.fields["aggregate_turnover"].required = True
-        self.fields["employee_count"].required = True
+        self.fields["aggregate_turnover"].required = False
+        self.fields["employee_count"].required = False
 
         self.helper = FormHelper()
         self.helper.form_tag = False
