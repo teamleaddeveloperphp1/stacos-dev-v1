@@ -203,6 +203,14 @@ def _domain_resolves(domain: str) -> bool:
     nonexistence", not a precise deliverability guarantee — SMTP delivery is
     what will actually prove that, the moment the code is sent.
 
+    ``getaddrinfo`` raises ``gaierror`` for two DNS outcomes that must not be
+    treated alike: ``EAI_NONAME`` ("no such name") is a real typo, but
+    ``EAI_NODATA`` means the name exists and answered, it just has no
+    ``A``/``AAAA`` record — the normal shape of a domain that only publishes
+    ``MX`` records (e.g. Google Workspace mail with no website behind the
+    apex). Only ``EAI_NONAME`` is treated as "this domain does not exist";
+    everything else fails open, same as the generic ``OSError`` branch below.
+
     The timeout is applied via ``socket.setdefaulttimeout`` and restored in a
     ``finally``, rather than threaded through as an argument: ``getaddrinfo``
     has no timeout parameter of its own, and this is the standard-library idiom
@@ -214,10 +222,11 @@ def _domain_resolves(domain: str) -> bool:
     socket.setdefaulttimeout(_DOMAIN_LOOKUP_TIMEOUT_SECONDS)
     try:
         socket.getaddrinfo(domain, None)
-    except socket.gaierror:
-        # The one answer that means something: no such name. Anything else
-        # here is "the check itself did not work", not "the domain is fake".
-        return False
+    except socket.gaierror as exc:
+        if exc.errno == socket.EAI_NONAME:
+            return False
+        logger.warning("accounts.email_domain_lookup_failed", domain=domain, errno=exc.errno)
+        return True
     except OSError:
         logger.warning("accounts.email_domain_lookup_failed", domain=domain)
         return True

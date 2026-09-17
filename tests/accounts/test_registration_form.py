@@ -138,6 +138,24 @@ def test_dns_verification_is_off_by_default_in_tests(settings: Any) -> None:
     assert form.is_valid(), form.errors
 
 
+def test_a_domain_with_mx_but_no_website_is_accepted(settings: Any) -> None:
+    """A domain that only publishes ``MX`` records (e.g. Google Workspace mail
+    with no website behind the apex) answers DNS with ``EAI_NODATA``, not
+    ``EAI_NONAME`` — the name exists, it just has no ``A``/``AAAA`` record.
+    That is a real, mail-capable domain and must not be rejected as if the
+    lookup had returned "no such name".
+    """
+    import socket as socket_module
+
+    settings.EMAIL_DOMAIN_VERIFICATION_ENABLED = True
+    nodata_error = socket_module.gaierror(
+        socket_module.EAI_NODATA, "No address associated with hostname"
+    )
+    with patch("socket.getaddrinfo", side_effect=nodata_error):
+        form = RegistrationForm(_valid_data(email="asha@mail-only-domain.example"))
+        assert form.is_valid(), form.errors
+
+
 def test_a_resolver_failure_fails_open_not_closed(settings: Any) -> None:
     """A timeout or an unreachable resolver is a problem with the check, not
     proof the domain is fake — this must never turn into a sign-up nobody can
