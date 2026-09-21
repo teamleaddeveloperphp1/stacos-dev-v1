@@ -11,6 +11,15 @@
 {% if destinations %}
   <div class="palette__group-label">{% translate "Jump to" %}</div>
   {% for destination in destinations %}
+    {% comment %}
+      `x-on:click`, not `@click`: the search input has no explicit
+      `hx-swap`, so it inherits the shell's global default of `morph`
+      (`htmx.config.defaultSwapStyle`, assets/js/app.js) — every keystroke
+      re-morphs #palette-results against these same anchors. Idiomorph
+      patches matched nodes with the real DOM `setAttribute()`, which
+      rejects `@` as an invalid XML Name character and throws
+      `InvalidCharacterError`, aborting the swap. `x-on:` survives it.
+    {% endcomment %}
     <a class="palette__item"
        data-palette-item
        href="{{ destination.url }}"
@@ -18,7 +27,7 @@
        hx-target="#main"
        hx-swap="morph:innerHTML"
        hx-push-url="true"
-       @click="hide()"
+       x-on:click="hide()"
        role="option"
        aria-selected="false">
       <c-icon :name="destination.icon" size="14" />
@@ -42,7 +51,7 @@
        hx-target="#main"
        hx-swap="morph:innerHTML"
        hx-push-url="true"
-       @click="hide()"
+       x-on:click="hide()"
        role="option"
        aria-selected="false">
       <span class="avatar">{{ entity.name|slice:":1"|upper }}</span>

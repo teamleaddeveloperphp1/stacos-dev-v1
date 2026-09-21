@@ -35,8 +35,20 @@
     "Confirm" controls already follow — each bulk endpoint re-checks its own
     permission per obligation when the form is actually submitted.
   {% endcomment %}
+  {% comment %}
+    `x-on:change`, not the `@change` shorthand: this fragment is delivered
+    through htmx's `morph` swap (the shell's default for `#main`, and this
+    form's own `hx-swap="morph"` below). Idiomorph patches matched nodes by
+    calling the real DOM `setAttribute()`, which enforces the XML Name
+    production — and `@` is not a valid Name character. The HTML parser is
+    lenient about it on first paint, so `@change` looks fine until idiomorph
+    re-morphs this element on a later swap and `setAttribute('@change', ...)`
+    throws `InvalidCharacterError`, aborting the swap and leaving `#main`
+    blank. `x-on:` (colon is a valid Name character) is functionally
+    identical to Alpine and survives the morph.
+  {% endcomment %}
   <div class="data-table" x-data="{ selectedCount: 0 }"
-       @change="selectedCount = $el.querySelectorAll('input[name=ids]:checked').length">
+       x-on:change="selectedCount = $el.querySelectorAll('input[name=ids]:checked').length">
     {% comment %}
       `align-items-stretch` overrides the toolbar's own `align-items: center`
       — written for its original single-row layout, where it *vertically*
@@ -172,7 +184,7 @@
             <th style="width: 2rem">
               <input type="checkbox" class="form-check-input"
                      aria-label="{% translate 'Select all' %}"
-                     @click="
+                     x-on:click="
                        const boxes = $el.closest('.data-table').querySelectorAll('input[name=ids]');
                        boxes.forEach((box) => { box.checked = $el.checked; });
                        selectedCount = $el.checked ? boxes.length : 0;
