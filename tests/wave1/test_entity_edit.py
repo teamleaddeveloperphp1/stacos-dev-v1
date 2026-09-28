@@ -103,6 +103,34 @@ def test_the_create_modal_still_says_add(signed_in: Client) -> None:
     assert "Just the essentials for now" in body
 
 
+@pytest.mark.parametrize("edit", [False, True], ids=["create", "edit"])
+def test_the_modal_does_not_dismiss_on_backdrop_or_esc(
+    signed_in: Client, entity_a: Entity, edit: bool
+) -> None:
+    """A stray click outside the dialog must not throw away a half-filled form."""
+    url = reverse("app:entity_edit", args=[entity_a.pk]) if edit else reverse("app:entity_create")
+    body = signed_in.get(url, headers=HTMX).content.decode()
+
+    assert 'data-bs-backdrop="static"' in body
+    assert 'data-bs-keyboard="false"' in body
+
+
+def test_the_modal_stays_static_after_a_validation_error(
+    signed_in: Client, entity_a: Entity, entity_b: Entity
+) -> None:
+    """The 422 re-render replaces the modal element, so it must carry the options again."""
+    response = signed_in.post(
+        reverse("app:entity_edit", args=[entity_a.pk]),
+        _payload(entity_a, name=entity_b.name),
+        headers=HTMX,
+    )
+    body = response.content.decode()
+
+    assert response.status_code == 422
+    assert 'data-bs-backdrop="static"' in body
+    assert 'data-bs-keyboard="false"' in body
+
+
 def test_the_edit_modal_drops_the_onboarding_copy(signed_in: Client, entity_a: Entity) -> None:
     """Someone correcting a typo has already been told what comes next."""
     body = signed_in.get(

@@ -16,8 +16,16 @@
   modal stays open and keeps what the user typed. HTMX is configured to swap
   422 responses precisely for this, and app.js retargets them back into
   #modal-container so the form does not land in the list.
+
+  The backdrop is static and Esc is off, so a stray click outside the dialog or
+  a reflexive Esc cannot throw away a half-filled form. It closes only by the
+  X, Cancel, or a successful save (the view's stacos:modal-close trigger). The
+  attributes live here, not in app.js, because Bootstrap reads them from the
+  element when the hook creates the instance — the 422 re-render carries them
+  again — and every other modal keeps the default.
 {% endcomment %}
-<div class="modal fade" tabindex="-1" aria-labelledby="entity-form-title" aria-hidden="true">
+<div class="modal fade" tabindex="-1" aria-labelledby="entity-form-title" aria-hidden="true"
+     data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">
 
