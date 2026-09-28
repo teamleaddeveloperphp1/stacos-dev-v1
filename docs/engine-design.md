@@ -111,6 +111,12 @@ Three axes were added on top of `category` and `family`:
   over the persona library asserts that soundness. It cannot use `evaluate`:
   `exists` is deliberately never UNKNOWN there, and an empty `registrations` list
   is definite absence, so an `evaluate`-based probe hides most of the catalog.
+  Its reader is the **Learn** page (`stacos/catalog/learn.py`): legal form in,
+  catalog rows out, before any entity exists — with "next due" from the
+  planner's own `generate_periods` / `resolve_due_date` run with no profile. It
+  re-probes any row whose `probe_signature` is not current, and the loader
+  folds that signature into its checksum so `loadcatalog` re-derives the index
+  whenever the entity-type vocabulary changes.
 
 **Compliance packs** (`catalog/bundles/*.yaml` → `CompliancePack`) are the
 curated half: what a business *like yours* usually tracks, as opposed to what the

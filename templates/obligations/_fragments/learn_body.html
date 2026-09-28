@@ -1,0 +1,49 @@
+{% load i18n %}
+{% comment %}
+  Learn, first page: every legal form the jurisdiction recognises, each with a
+  count of what the compliance catalog carries that could apply to it.
+
+  The notice above the cards is load-bearing copy, not decoration. A count here
+  is the probe index — a rule that cannot be ruled out knowing only the legal
+  form — and to anyone skimming, "12 obligations" reads as "you file twelve
+  things". So the page says what the number is before it shows one, on every
+  visit.
+{% endcomment %}
+<c-page-header title="{% translate 'Learn' %}"
+               subtitle="{% translate 'What Indian law would ask of each kind of business, in plain language.' %}" />
+
+<p class="learn-intro">
+  {% translate "Every rule in the compliance catalog is written once, then checked against a real business by the rules engine — see a client's own compliance library for that. This page is the other direction: pick a legal form and see what the catalog currently carries for it, before any entity exists to check it against." %}
+</p>
+
+<aside class="callout callout--info" aria-label="{% translate 'What these counts mean' %}">
+  <p>{% translate "A count here says a rule cannot be ruled out for this legal form knowing only its type — it is navigation, not a filing calendar. What actually applies to one business depends on its registrations, turnover, sector and other facts." %}</p>
+</aside>
+
+{% if cards %}
+  <ul class="learn-grid">
+    {% for card in cards %}
+      <li class="card learn-card">
+        <h2 class="learn-card__name">
+          <a class="stretched-link" title="{{ card.entity_type.name }}" href="{% url 'compliance:learn_type' card.entity_type.code %}"
+             hx-get="{% url 'compliance:learn_type' card.entity_type.code %}"
+             hx-target="#main" hx-push-url="true">{{ card.entity_type.name }}</a>
+        </h2>
+        {% if card.entity_type.description %}
+          <p class="learn-card__description">{{ card.entity_type.description }}</p>
+        {% endif %}
+        <p class="learn-card__count">
+          {% blocktranslate with shown=card.obligation_count|num count counter=card.obligation_count %}{{ shown }} obligation in the catalog{% plural %}{{ shown }} obligations in the catalog{% endblocktranslate %}
+        </p>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <c-empty-state title="{% translate 'No legal forms to browse yet' %}"
+                 body="{% translate 'The jurisdiction pack for your country has not been loaded, so there is nothing to list here.' %}">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:dashboard' %}"
+       hx-get="{% url 'app:dashboard' %}" hx-target="#main" hx-push-url="true">
+      {% translate "Go to the dashboard" %}
+    </a>
+  </c-empty-state>
+{% endif %}

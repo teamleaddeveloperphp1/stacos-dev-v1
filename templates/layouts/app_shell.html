@@ -109,6 +109,18 @@
               <span>{% translate "Compliance library" %}</span>
             </a>
           {% endif %}
+          {% comment %}
+            The catalog by legal form, before any entity exists. Gated on the
+            permission that reads the catalog — the one every row there links
+            through to — which the dealer role, seeing no compliance data at
+            all, does not hold.
+          {% endcomment %}
+          {% if "catalog.view" in access_scope.permissions %}
+            <a class="app-nav__link" href="{% url 'compliance:learn' %}" preload data-nav-match="/app/compliance/learn/">
+              <c-icon name="book" />
+              <span>{% translate "Learn" %}</span>
+            </a>
+          {% endif %}
         </div>
 
         {% comment %}

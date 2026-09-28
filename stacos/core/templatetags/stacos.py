@@ -117,6 +117,30 @@ def periodicity_label(value: str | None) -> str:
     return _PERIODICITY_LABELS.get(str(value).upper(), str(value).title())
 
 
+_PERIODICITY_ADJECTIVES = {
+    "MONTHLY": "Monthly",
+    "QUARTERLY": "Quarterly",
+    "HALF_YEARLY": "Half-yearly",
+    "ANNUAL": "Annual",
+    "EVENT_BASED": "Event-based",
+    "ONE_TIME": "One-time",
+}
+
+
+@register.filter(name="periodicity_adjective")
+def periodicity_adjective(value: str | None) -> str:
+    """``{{ version.periodicity|periodicity_adjective }}`` -> ``Monthly``.
+
+    The other half of ``periodicity_label``, on purpose. That one follows a
+    "Frequency" label and reads as "Frequency: Month"; this one stands alone in
+    a table cell with nothing before it, where a bare "Month" reads as a column
+    of dates rather than as how often a filing recurs.
+    """
+    if not value:
+        return ""
+    return _PERIODICITY_ADJECTIVES.get(str(value).upper(), str(value).title())
+
+
 @register.filter(name="display_status_label")
 def display_status_label_filter(value: str | None) -> str:
     """``{{ obligation.display_status|display_status_label }}`` -> ``Pending``.

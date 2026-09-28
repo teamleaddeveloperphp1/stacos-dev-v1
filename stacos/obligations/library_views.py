@@ -14,7 +14,9 @@ no controls to change any of them.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
+from typing import Protocol
 
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
@@ -133,9 +135,21 @@ def _filtered(rows: tuple[LibraryRow, ...], *, request: HttpRequest) -> list[Lib
     return filtered
 
 
-def _grouped(rows: list[LibraryRow]) -> list[tuple[str, str, list[LibraryRow]]]:
-    """Rows grouped by category, category label resolved once per group."""
-    groups: dict[str, list[LibraryRow]] = {}
+class _CatalogRow(Protocol):
+    @property
+    def category(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+
+def group_by_category[RowT: _CatalogRow](rows: Iterable[RowT]) -> list[tuple[str, str, list[RowT]]]:
+    """Rows grouped by category, category label resolved once per group.
+
+    Groups in label order, rows by title within each. Shared with the Learn page
+    (``learn_views``) so the two catalog listings order categories identically.
+    """
+    groups: dict[str, list[RowT]] = {}
     for row in rows:
         groups.setdefault(row.category, []).append(row)
 
@@ -162,7 +176,7 @@ def library_detail(request: HttpRequest, entity_pk: str) -> HttpResponse:
     context = {
         "entity": entity,
         "totals": _totals(rows),
-        "groups": _grouped(_filtered(rows, request=request)),
+        "groups": group_by_category(_filtered(rows, request=request)),
         "state": request.GET.get("state", ""),
         "progress": request.GET.get("progress", ""),
         "category": request.GET.get("category", ""),

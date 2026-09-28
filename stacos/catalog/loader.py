@@ -55,6 +55,7 @@ __all__ = [
     "iter_documents",
     "load_catalog",
     "parse_document",
+    "probe_entity_types",
 ]
 
 #: Where the YAML lives. One file per definition, grouped by family, so a diff
@@ -94,7 +95,15 @@ _PAYLOAD_FIELDS = (
 _DERIVED_SCHEMA_VERSION = 1
 
 #: Fingerprint of the entity-type vocabulary the probe index was computed
-#: against, stored on each version so a system check can spot a stale index.
+#: against, stored on each version so a reader can tell a stale index from a
+#: current one.
+#:
+#: Also folded into the checksum, for the same reason as the version above:
+#: adding an entity type changes what ``possible_entity_types`` *means* without
+#: touching a line of YAML. With only the version in the hash, every
+#: ``loadcatalog`` after GOVERNMENT was added reported "unchanged", and the new
+#: type stayed absent from every row of the index — appearing to have no
+#: obligations at all, with nothing anywhere failing.
 PROBE_SIGNATURE = hashlib.sha256(",".join(ENTITY_TYPES).encode("utf-8")).hexdigest()[:16]
 
 #: Mirrors ``ComplianceDefinition.TriggerKind``. A literal here, like
@@ -172,20 +181,30 @@ class DefinitionDocument:
         """Legal forms this rule cannot be refuted for, knowing only country and
         entity type.
 
-        Note that ``known`` carries exactly two keys. Everything else is unknown
-        *by construction* rather than by remembering to leave it out — which is
-        what keeps the probe honest. Hand it a profile-shaped dict and
-        ``registrations: []`` would read as definite absence and turn most of the
-        catalog FALSE at once.
+        See :func:`probe_entity_types`, which is the whole computation.
         """
-        return [
-            entity_type
-            for entity_type in ENTITY_TYPES
-            if possible_for(
-                self.applicability_rule, {"country": self.country, "entity_type": entity_type}
-            )
-            is not V.FALSE
-        ]
+        return probe_entity_types(self.applicability_rule, country=self.country)
+
+
+def probe_entity_types(rule: Mapping[str, Any], *, country: str) -> list[str]:
+    """Legal forms ``rule`` cannot be refuted for, knowing only country and
+    entity type, in vocabulary order.
+
+    Note that ``known`` carries exactly two keys. Everything else is unknown
+    *by construction* rather than by remembering to leave it out — which is
+    what keeps the probe honest. Hand it a profile-shaped dict and
+    ``registrations: []`` would read as definite absence and turn most of the
+    catalog FALSE at once.
+
+    Public because the index has one reader that must not trust a row computed
+    against an older vocabulary (``stacos.catalog.learn``), and that reader
+    recomputes such a row with this function rather than with a copy of it.
+    """
+    return [
+        entity_type
+        for entity_type in ENTITY_TYPES
+        if possible_for(rule, {"country": country, "entity_type": entity_type}) is not V.FALSE
+    ]
 
 
 @dataclass(slots=True)
@@ -243,9 +262,10 @@ def _checksum(raw: Mapping[str, Any]) -> str:
     edit trips the immutability guard.
     """
     canonical = yaml.safe_dump(dict(raw), sort_keys=True, default_flow_style=False)
-    # The derived-schema version is part of the hash so that a change to a
-    # *computed* column invalidates every row. See _DERIVED_SCHEMA_VERSION.
-    canonical = f"v{_DERIVED_SCHEMA_VERSION}\n{canonical}"
+    # The derived-schema version and the probe vocabulary are part of the hash so
+    # that a change to a *computed* column, or to what it is computed against,
+    # invalidates every row. See _DERIVED_SCHEMA_VERSION and PROBE_SIGNATURE.
+    canonical = f"v{_DERIVED_SCHEMA_VERSION}:{PROBE_SIGNATURE}\n{canonical}"
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

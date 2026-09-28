@@ -1,0 +1,93 @@
+{% load i18n %}
+{% comment %}
+  Learn, one legal form: every definition the catalog carries that could apply
+  to it, one section per category, each with the standard statutory date it
+  next falls due.
+
+  The caveat under the description is load-bearing copy. "Next due" is the date
+  the statute states, resolved by the same engine as a client's calendar but
+  with no business attached — not anyone's deadline — so the page says that in
+  words above the first date it shows.
+
+  One table per category rather than the compliance library's single shared
+  table, because each category is a section with its own heading a screen
+  reader can jump between. `table-layout: fixed` with the widths in `<colgroup>`
+  keeps the Frequency and Next due columns at the same x in every table, which
+  is what the library's single table was protecting.
+{% endcomment %}
+{% blocktranslate asvar subtitle with shown=total|num count counter=total %}{{ shown }} obligation in the catalog{% plural %}{{ shown }} obligations in the catalog{% endblocktranslate %}
+<c-page-header title="{{ entity_type.name }}" subtitle="{{ subtitle }}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:learn' %}"
+     hx-get="{% url 'compliance:learn' %}" hx-target="#main" hx-push-url="true">
+    {% translate "All legal forms" %}
+  </a>
+</c-page-header>
+
+<section class="learn-about">
+  {% if entity_type.description %}
+    <p class="learn-about__description">{{ entity_type.description }}</p>
+  {% endif %}
+  <p class="callout callout--info">
+    {% translate "This shows what could apply to this legal form under Indian law today — it is navigation, not a filing calendar. 'Next due' is the standard statutory date for that filing, not a specific business's deadline. Which of these actually apply to a given business, and its real due dates, depend on its registrations, turnover, sector and other facts. Add the entity to see the calendar built for it." %}
+  </p>
+</section>
+
+{% if groups %}
+  {% for code, label, rows in groups %}
+    <section class="learn-group" aria-labelledby="learn-group-{{ code }}">
+      <h2 class="learn-group__title" id="learn-group-{{ code }}">{{ label }}</h2>
+      <div class="data-table">
+        <div class="data-table__scroll">
+          <table class="table mb-0 learn-table">
+            <colgroup>
+              <col>
+              <col class="learn-table__frequency">
+              <col class="learn-table__due">
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">{% translate "Obligation" %}</th>
+                <th scope="col">{% translate "Frequency" %}</th>
+                <th scope="col">{% translate "Next due" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  <td>
+                    <a class="link-strong" href="{% url 'compliance:definition' row.code %}?learn={{ entity_type.code }}"
+                       hx-get="{% url 'compliance:definition' row.code %}?learn={{ entity_type.code }}"
+                       hx-target="#main" hx-push-url="true">{{ row.title }}</a>
+                    {% if row.version.plain_language_summary %}
+                      <p class="learn-table__summary">{{ row.version.plain_language_summary }}</p>
+                    {% endif %}
+                    {% include "obligations/_fragments/definition_caveat.html" with version=row.version compact=True %}
+                  </td>
+                  <td>{{ row.version.periodicity|periodicity_adjective }}</td>
+                  <td>
+                    {% if row.next_due %}
+                      <c-due-badge :date="row.next_due.effective_date"
+                                   :original="row.next_due.original_date"
+                                   :notification="row.notification" />
+                    {% else %}
+                      <span class="text-muted" aria-hidden="true">&mdash;</span>
+                      <span class="visually-hidden">{% translate "No standard date" %}</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  {% endfor %}
+{% else %}
+  <c-empty-state title="{% translate 'Nothing in the catalog for this legal form yet' %}"
+                 body="{% translate 'No rule in the compliance catalog could apply to it today. Not every legal form is covered yet.' %}">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:learn' %}"
+       hx-get="{% url 'compliance:learn' %}" hx-target="#main" hx-push-url="true">
+      {% translate "Back to all legal forms" %}
+    </a>
+  </c-empty-state>
+{% endif %}

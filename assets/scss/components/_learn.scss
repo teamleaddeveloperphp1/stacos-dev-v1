@@ -1,0 +1,136 @@
+// -----------------------------------------------------------------------------
+// Learn — the compliance catalog by legal form (obligations/learn*.html).
+//
+// Built from the pieces every other screen uses — `.card`, `.callout`,
+// `.data-table`, the due badge — so only the arrangement is its own: a grid of
+// legal forms, then one table per category whose columns line up from one
+// category to the next.
+// -----------------------------------------------------------------------------
+
+// What the page is for, in the reader's terms, before the notice about what its
+// numbers are not.
+.learn-intro {
+  max-width: 64rem;
+  font-size: $stacos-text-base;
+  line-height: $stacos-leading-normal;
+  margin-bottom: $stacos-space-3;
+}
+
+// Fourteen siblings of one kind, so a list for the reader's sake — with the
+// markers off, because each card is its own marker. Five across on a desktop.
+.learn-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: $stacos-space-3;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+// The whole card is the link — `stretched-link` on the name spreads its hit
+// area over the card, which Bootstrap's `.card` is already the containing
+// block for — so it answers hover and keyboard focus the way `.card--link` does.
+.learn-card {
+  gap: $stacos-space-2;
+  padding: $stacos-space-3;
+  transition: border-color var(--stacos-duration-fast) var(--stacos-ease),
+              box-shadow var(--stacos-duration-fast) var(--stacos-ease);
+
+  &:hover,
+  &:focus-within {
+    border-color: var(--stacos-accent);
+    box-shadow: var(--stacos-shadow-sm);
+  }
+
+  // The name is the link, set in the display face on one line; a name too long
+  // for the card ends in an ellipsis, with the whole of it in the link's title.
+  &__name {
+    font-family: $stacos-font-display;
+    font-size: $stacos-text-base;
+    font-weight: 500;
+    line-height: $stacos-leading-tight;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    a {
+      color: var(--stacos-accent);
+      text-decoration: none;
+    }
+  }
+
+  &__description {
+    font-size: $stacos-text-sm;
+    line-height: $stacos-leading-normal;
+    color: var(--stacos-text-muted);
+    margin: 0;
+  }
+
+  // Pushed to the foot, so the counts sit on one line across a row of cards
+  // whose descriptions run to different lengths.
+  &__count {
+    margin: auto 0 0;
+    padding-top: $stacos-space-2;
+    font-size: $stacos-text-xs;
+    font-weight: 600;
+    color: var(--stacos-text-muted);
+  }
+}
+
+// What the legal form is, then the caveat about what the list below is not.
+.learn-about {
+  max-width: 48rem;
+  margin-bottom: $stacos-space-5;
+
+  &__description {
+    font-size: $stacos-text-base;
+    line-height: $stacos-leading-loose;
+    margin-bottom: $stacos-space-3;
+  }
+}
+
+.learn-group {
+  margin-bottom: $stacos-space-5;
+
+  &__title {
+    font-family: $stacos-font-sans;
+    font-size: $stacos-text-md;
+    font-weight: 600;
+    margin-bottom: $stacos-space-2;
+  }
+}
+
+// One table per category, so the columns are fixed rather than sized to each
+// table's content — otherwise Frequency and Next due would sit at a different x
+// in every section. The minimum width hands a phone the data table's own
+// horizontal scroll instead of a title column two words wide.
+.learn-table {
+  table-layout: fixed;
+  min-width: 36rem;
+
+  &__frequency { width: 8rem; }
+  &__due { width: 10rem; }
+
+  td { vertical-align: top; }
+
+  &__summary {
+    font-size: $stacos-text-xs;
+    line-height: $stacos-leading-normal;
+    color: var(--stacos-text-muted);
+    margin: $stacos-space-1 0 0;
+  }
+}
+
+// The caveat a stale or provisional definition carries, as one line under its
+// row. It says what it is in words; the colour and the icon are a second channel.
+.definition-caveat {
+  display: flex;
+  align-items: flex-start;
+  gap: $stacos-space-1;
+  margin: $stacos-space-1 0 0;
+  font-size: $stacos-text-xs;
+  color: var(--stacos-status-due-soon);
+
+  svg { margin-top: 0.125rem; }
+}

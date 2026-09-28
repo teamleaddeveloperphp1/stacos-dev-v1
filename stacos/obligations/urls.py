@@ -1,11 +1,13 @@
 from django.urls import path
 
-from stacos.obligations import library_views, views
+from stacos.obligations import learn_views, library_views, views
 
 app_name = "compliance"
 
 urlpatterns = [
     path("", views.calendar_list, name="calendar"),
+    path("learn/", learn_views.learn_index, name="learn"),
+    path("learn/<slug:code>/", learn_views.learn_entity_type, name="learn_type"),
     path("library/", library_views.entity_picker, name="library_picker"),
     path("library/<uuid:entity_pk>/", library_views.library_detail, name="library"),
     path(

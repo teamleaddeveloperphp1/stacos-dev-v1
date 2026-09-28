@@ -1,0 +1,25 @@
+{% load i18n %}
+{% comment %}
+  Why a definition's plain-language summary cannot be taken as current: nobody
+  has checked it against the statute within twelve months, or it was published
+  as provisional (LOW confidence). Neither is decoration — the summary is
+  guidance a client acts on, so when it is not verified the page says so rather
+  than presenting it as settled.
+
+  One partial for every surface that shows a summary out of the register — the
+  definition page and each row of the Learn page — so the same rule can never be
+  described two different ways. `version` is a DefinitionVersion. `compact`
+  renders it as a single line under a table row instead of a full callout.
+{% endcomment %}
+{% if version.review_is_stale %}
+  <p class="{% if compact %}definition-caveat{% else %}callout callout--warning small{% endif %}">
+    {% if compact %}<c-icon name="alert" size="13" />{% endif %}
+    <span>{% translate "This summary has not been reviewed against the statute within the last twelve months. Treat it as a guide and check the reference." %}</span>
+  </p>
+{% endif %}
+{% if version.is_provisional %}
+  <p class="{% if compact %}definition-caveat{% else %}callout callout--warning small{% endif %}">
+    {% if compact %}<c-icon name="alert" size="13" />{% endif %}
+    <span>{% translate "This summary is provisional and has not yet been verified against the statute. Treat it as a guide and check the reference." %}</span>
+  </p>
+{% endif %}

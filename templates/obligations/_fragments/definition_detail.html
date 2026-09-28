@@ -38,9 +38,5 @@
     {% endif %}
   </dl>
 
-  {% if version.review_is_stale %}
-    <p class="callout callout--warning small">
-      {% translate "This summary has not been reviewed against the statute within the last twelve months. Treat it as a guide and check the reference." %}
-    </p>
-  {% endif %}
+  {% include "obligations/_fragments/definition_caveat.html" with version=version %}
 </section>

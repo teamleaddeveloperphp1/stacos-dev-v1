@@ -244,7 +244,11 @@ class DefinitionVersion(TimeStampedModel):
     #: Fingerprint of the entity-type vocabulary the index above was computed
     #: against. Adding a type without reloading the catalog would otherwise leave
     #: every row missing it, and the new type would appear to have no obligations
-    #: at all — the worst silent wrongness available here. A system check warns.
+    #: at all — the worst silent wrongness available here. Two things stop that:
+    #: the loader folds the signature into its checksum, so the next
+    #: ``loadcatalog`` after a vocabulary change re-derives every row; and the
+    #: index's reader (``stacos.catalog.learn``) re-probes any row whose signature
+    #: is not the current one instead of trusting it.
     probe_signature = models.CharField(max_length=16, blank=True)
 
     # -- What it is filed per -----------------------------------------------
@@ -374,6 +378,16 @@ class DefinitionVersion(TimeStampedModel):
         if self.reviewed_at is None:
             return True
         return (timezone.localdate() - self.reviewed_at).days > 365
+
+    @property
+    def is_provisional(self) -> bool:
+        """Published at LOW confidence: believed, not verified.
+
+        ``Confidence.LOW`` promises "shown with a caveat", so this is read
+        wherever the summary is shown, beside ``review_is_stale`` — see
+        ``obligations/_fragments/definition_caveat.html``.
+        """
+        return self.confidence == self.Confidence.LOW
 
     def clean(self) -> None:
         super().clean()

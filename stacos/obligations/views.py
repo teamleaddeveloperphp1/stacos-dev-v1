@@ -39,6 +39,7 @@ from stacos.engine.lifecycle import days_late as _days_late_calc
 from stacos.engine.penalty import compute_penalties
 from stacos.engine.types import occurrence_number
 from stacos.jurisdictions.events import EVENT_TYPES
+from stacos.jurisdictions.facts import ENTITY_TYPES
 from stacos.obligations.feed import (
     create_feed_token,
     feed_events_for_user,
@@ -2314,11 +2315,11 @@ def definition_detail(request: HttpRequest, code: str) -> HttpResponse:
     and a plain-language summary, not an assertion. Shown with the review date, and
     with a caveat when that review is stale.
 
-    Reached both from an obligation's "Full definition" link (which is also a
+    Reached from an obligation's "Full definition" link (which is also a
     direct, bookmarkable URL — the fragment must therefore carry its own page,
-    not rely on a shell it may not be swapped into) and, in principle, from
-    nowhere at all, so the back link degrades to the calendar rather than
-    demanding a caller.
+    not rely on a shell it may not be swapped into), from a row on the Learn
+    page, and, in principle, from nowhere at all, so the back link degrades to
+    the calendar rather than demanding a caller.
     """
     definition = ComplianceDefinition.objects.filter(code=code).first()
     if definition is None:
@@ -2334,7 +2335,13 @@ def definition_detail(request: HttpRequest, code: str) -> HttpResponse:
 
     back_url = reverse("compliance:calendar")
     from_pk = request.GET.get("from", "")
-    if from_pk:
+    learn_type = request.GET.get("learn", "")
+    if learn_type in ENTITY_TYPES:
+        # From the Learn page, which has no obligation to return to — only the
+        # legal form the reader was browsing. Checked against the vocabulary, so
+        # the parameter can only ever name one of this product's own pages.
+        back_url = reverse("compliance:learn_type", args=[learn_type])
+    elif from_pk:
         try:
             UUID(from_pk)
         except ValueError:

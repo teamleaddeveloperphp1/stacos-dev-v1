@@ -62,21 +62,96 @@ sub_jurisdictions:
   - { code: IN-UT, name: Uttarakhand }
   - { code: IN-WB, name: West Bengal }
 
+# `name` is spelled exactly as the Add/Edit Entity screen labels it
+# (`ENTITY_TYPE_LABELS` in stacos/tenancy/forms.py) — a test holds the two
+# together, so one legal form is never written two ways in the product.
+# `description` is what the legal form *is*, not what it owes: the Learn page
+# shows it before any entity exists, beside a count of what the catalog carries.
 entity_types:
-  - { code: PVT_LTD, name: Private limited company }
-  - { code: PUBLIC_LTD, name: Public limited company }
-  - { code: OPC, name: One person company }
-  - { code: LLP, name: Limited liability partnership }
-  - { code: PARTNERSHIP, name: Partnership firm }
-  - { code: PROPRIETORSHIP, name: Sole proprietorship }
-  - { code: TRUST, name: Trust }
-  - { code: SOCIETY, name: Society }
-  - { code: SECTION_8, name: Section 8 company }
-  - { code: BRANCH_OFFICE, name: Branch office of a foreign company }
-  - { code: LIAISON_OFFICE, name: Liaison office }
-  - { code: COOPERATIVE, name: Co-operative society }
-  - { code: HUF, name: Hindu undivided family }
-  - { code: GOVERNMENT, name: Government }
+  - code: PVT_LTD
+    name: Private Limited Company
+    description: >-
+      A company limited by shares, privately held. The most common structure for
+      a growing Indian business, and the one carrying the full Companies Act
+      governance and filing regime.
+  - code: PUBLIC_LTD
+    name: Public Limited Company
+    description: >-
+      A company limited by shares that may offer them to the public. The same
+      Companies Act regime as a private company, with extra disclosure and, if
+      listed, securities-law obligations on top.
+  - code: OPC
+    name: One Person Company
+    description: >-
+      A company with a single shareholder, who is usually also its sole director.
+      Companies Act obligations apply, with a few relaxations sized for one
+      person.
+  - code: LLP
+    name: Limited Liability Partnership
+    description: >-
+      A partnership where each partner's liability is limited to their
+      contribution. Registered with the Ministry of Corporate Affairs, but outside
+      the Companies Act — its filings follow the LLP Act instead.
+  - code: PARTNERSHIP
+    name: Partnership Firm
+    description: >-
+      Two or more people carrying on business together under the Indian
+      Partnership Act, with unlimited personal liability. A lighter filing load
+      than a company, but no legal identity separate from its partners.
+  - code: PROPRIETORSHIP
+    name: Sole Proprietorship
+    description: >-
+      A business with no legal identity apart from its owner. What looks like
+      'compliance' here is almost entirely the owner's own tax filings and
+      registrations.
+  - code: TRUST
+    name: Trust
+    description: >-
+      A person or institution holding property for a defined purpose or set of
+      beneficiaries. Obligations follow whether it is registered under the Indian
+      Trusts Act, a state Public Trusts Act, or claims income-tax exemption.
+  - code: SOCIETY
+    name: Society
+    description: >-
+      A group of people registered under the Societies Registration Act for a
+      literary, scientific or charitable purpose. Governed by its own bye-laws
+      rather than the Companies Act.
+  - code: SECTION_8
+    name: Section 8 Company
+    description: >-
+      A company formed for a charitable or non-profit purpose. Carries the
+      Companies Act's filing regime, plus the checks that come with claiming tax
+      exemption.
+  - code: BRANCH_OFFICE
+    name: Branch Office of a foreign company
+    description: >-
+      An Indian presence of a company incorporated abroad, permitted a defined set
+      of activities under FEMA. Filings run through the RBI and the Registrar of
+      Companies rather than a fresh incorporation.
+  - code: LIAISON_OFFICE
+    name: Liaison Office
+    description: >-
+      A foreign company's representative presence in India, permitted to liaise
+      but not to trade or invoice locally. The lightest of the foreign-entry
+      structures, with correspondingly narrow filings.
+  - code: COOPERATIVE
+    name: Co-operative Society
+    description: >-
+      A society registered under a state Co-operative Societies Act, owned and run
+      by its members. Filings and audit run through the Registrar of Co-operative
+      Societies rather than the MCA.
+  - code: HUF
+    name: Hindu Undivided Family
+    description: >-
+      A Hindu Undivided Family, recognised as its own taxpayer under Indian
+      income-tax law and run by its karta. Its obligations sit almost entirely on
+      the tax side, not among corporate filings.
+  - code: GOVERNMENT
+    name: Government
+    description: >-
+      A government department, public-sector undertaking or statutory body. What
+      applies here is whichever variant of the standard regime a specific
+      notification extends to that body.
 
 # `catalog` is the flat identifier vocabulary (unchanged in spirit from before);
 # `by_entity_type` is the Add/Edit Entity screen's mapping of "which identifiers
