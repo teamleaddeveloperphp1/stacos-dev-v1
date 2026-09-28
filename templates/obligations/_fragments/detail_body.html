@@ -64,43 +64,35 @@
   {% endif %}
 </div>
 
-{% if previous_obligation or next_obligation %}
+{% if sequence_obligations %}
   {% comment %}
     A recurring filing is a sequence, not two hundred unrelated rows — GSTR-3B
     for March is adjacent to GSTR-3B for February and April, at the same
     registration. Reviewing a run of periods is common enough (catching up a
     backlog, checking last quarter before this one) that it should not require
-    going back to the calendar and searching again each time.
+    going back to the calendar and searching again each time — and a dropdown
+    rather than previous/next arrows, so Q1 to Q4 is one step, not three.
+
+    `data-navigate-select` makes app.js swap the request path for the chosen
+    option's URL; the `hx-get` here is only what htmx needs to wire the trigger.
   {% endcomment %}
   <nav class="sequence-nav" aria-label="{% translate 'Other periods of this filing' %}">
-    {% if previous_obligation %}
-      <a class="sequence-nav__link sequence-nav__link--prev"
-         href="{% url 'compliance:detail' previous_obligation.pk %}"
-         hx-get="{% url 'compliance:detail' previous_obligation.pk %}"
-         hx-target="#main" hx-push-url="true">
-        <c-icon name="chevron-left" size="14" />
-        <span>
-          <span class="sequence-nav__hint">{% translate "Previous period" %}</span>
-          {{ previous_obligation.period_label|default:previous_obligation.period_key }}
-          <c-status-chip :status="previous_obligation.display_status" />
-        </span>
-      </a>
-    {% else %}
-      <span></span>
-    {% endif %}
-    {% if next_obligation %}
-      <a class="sequence-nav__link sequence-nav__link--next"
-         href="{% url 'compliance:detail' next_obligation.pk %}"
-         hx-get="{% url 'compliance:detail' next_obligation.pk %}"
-         hx-target="#main" hx-push-url="true">
-        <span>
-          <span class="sequence-nav__hint">{% translate "Next period" %}</span>
-          {{ next_obligation.period_label|default:next_obligation.period_key }}
-          <c-status-chip :status="next_obligation.display_status" />
-        </span>
-        <c-icon name="chevron-right" size="14" />
-      </a>
-    {% endif %}
+    <label class="sequence-nav__jump" for="sequence-jump">
+      <c-icon name="calendar" size="14" />
+      <span>{% translate "Period" %}</span>
+    </label>
+    <select id="sequence-jump"
+            class="form-select form-select-sm sequence-nav__select"
+            data-navigate-select
+            hx-get="{% url 'compliance:detail' obligation.pk %}"
+            hx-trigger="change"
+            hx-target="#main" hx-push-url="true">
+      {% for period in sequence_obligations %}
+        <option value="{% url 'compliance:detail' period.pk %}"{% if period.pk == obligation.pk %} selected{% endif %}>
+          {{ period.period_label|default:period.period_key }} · {{ period.display_status|display_status_label }}
+        </option>
+      {% endfor %}
+    </select>
   </nav>
 {% endif %}
 
@@ -190,7 +182,11 @@
     {% endcomment %}
     <section class="card">
       <h2 class="card__title"><c-icon name="shield" size="14" /> {% translate "Why this applies" %}</h2>
-      {% if obligation.reasons %}
+      {% if definition.is_custom %}
+        <p class="small mb-0">
+          {% blocktranslate with title=definition.obligation.title %}Your own obligation — <strong>{{ title }}</strong> was added to this entity's library by hand, not selected by the catalog rules.{% endblocktranslate %}
+        </p>
+      {% elif obligation.reasons %}
         <ul class="reason-list">
           {% for reason in obligation.reasons %}<li>{{ reason }}</li>{% endfor %}
         </ul>
@@ -205,7 +201,36 @@
       {% endif %}
     </section>
 
-    {% if definition %}
+    {% if definition.is_custom %}
+      {% comment %}
+        A rule this entity wrote for itself. Same place on the page as the
+        statute's summary, under a heading that does not claim it is law.
+      {% endcomment %}
+      <section class="card">
+        <h2 class="card__title"><c-icon name="document" size="14" /> {% translate "What you wrote" %}</h2>
+        {% if definition.plain_language_summary %}
+          <p class="card__lede">{{ definition.plain_language_summary }}</p>
+        {% endif %}
+        <dl class="key-values small">
+          {% if definition.statutory_reference %}
+            <dt>{% translate "Source" %}</dt><dd>{{ definition.statutory_reference }}</dd>
+          {% endif %}
+          <dt>{% translate "Frequency" %}</dt>
+          <dd>
+            {{ definition.periodicity|periodicity_label }}
+            {% if obligation.period_label %}&mdash; {{ obligation.period_label }}{% endif %}
+          </dd>
+        </dl>
+        {% if "compliance.library.view" in access_scope.permissions %}
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{% url 'compliance:custom_detail' obligation.entity_id definition.obligation_id %}"
+             hx-get="{% url 'compliance:custom_detail' obligation.entity_id definition.obligation_id %}"
+             hx-target="#main" hx-push-url="true">
+            {% translate "Schedule and history" %}
+          </a>
+        {% endif %}
+      </section>
+    {% elif definition %}
       <section class="card">
         <h2 class="card__title"><c-icon name="document" size="14" /> {% translate "What the law says" %}</h2>
         {% if definition.plain_language_summary %}

@@ -1,0 +1,44 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Withdraw one of the entity's own obligations, with a typed reason. Same shape
+  as `library_reason_modal.html`.
+{% endcomment %}
+<div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true"
+     aria-labelledby="custom-withdraw-modal-title">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form hx-post="{% url 'compliance:custom_withdraw' entity.pk obligation.pk %}"
+            hx-swap="none" hx-disabled-elt="find button[type=submit]">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="custom-withdraw-modal-title">{% translate "Withdraw this obligation" %}</h2>
+          <button type="button" class="btn-close" aria-label="{% translate 'Close' %}"
+                  @click="$dispatch('stacos:modal-close')"></button>
+        </div>
+
+        <div class="modal-body">
+          <p class="text-muted small">
+            {% blocktranslate with title=obligation.title %}Stops <strong>{{ title }}</strong> scheduling anything new. Completed occurrences stay exactly as they are, ones somebody has worked on are kept as history, and untouched future ones come off the calendar. This cannot be undone — add it again if it comes back.{% endblocktranslate %}
+          </p>
+
+          {% if form.non_field_errors %}
+            <div class="callout callout--warning small" role="alert">
+              {% for error in form.non_field_errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+            </div>
+          {% endif %}
+
+          {% crispy form %}
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary"
+                  @click="$dispatch('stacos:modal-close')">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">{% translate "Withdraw" %}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

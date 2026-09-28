@@ -16,12 +16,6 @@
       <span class="tenant-switcher__name d-block">
         {% if tenant %}{{ tenant.name }}{% else %}{% translate "No organisation" %}{% endif %}
       </span>
-      <span class="tenant-switcher__type">
-        {% if tenant.type == "PRACTICE" %}{% translate "Professional firm" %}
-        {% elif tenant.type == "DEALER" %}{% translate "Channel partner" %}
-        {% elif tenant.type %}{% translate "Business" %}
-        {% else %}{% translate "Setting up…" %}{% endif %}
-      </span>
     </span>
   </a>
 </div>

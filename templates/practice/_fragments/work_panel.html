@@ -18,7 +18,7 @@
     {% endif %}
   </div>
 
-  {% if can_manage %}
+  {% if can_move %}
     <form hx-post="{% url 'practice:work_move' item.pk %}"
           hx-target="#work-panel" hx-swap="outerHTML"
           class="d-flex gap-2 align-items-end mb-3">

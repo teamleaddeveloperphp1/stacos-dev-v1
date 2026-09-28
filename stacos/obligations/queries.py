@@ -61,6 +61,7 @@ __all__ = [
     "PenaltyExposure",
     "WeeklyWorkload",
     "annotate_status",
+    "apply_due_window",
     "apply_text_filters",
     "category_counts",
     "keyset_page",
@@ -69,7 +70,7 @@ __all__ = [
     "overdue_penalty_exposure",
     "related_scope_instances",
     "scaled_bars",
-    "sibling_instances",
+    "sequence_instances",
     "status_counts",
     "upcoming",
     "weekly_workload",
@@ -282,12 +283,40 @@ def apply_text_filters(
     return queryset
 
 
+def apply_due_window(
+    queryset: QuerySet[ObligationInstance], *, window_end: date | None
+) -> QuerySet[ObligationInstance]:
+    """The calendar's "Due within" narrowing, shared by the register and its tiles.
+
+    Hides only what nobody has touched and is not yet near: ``NOT_STARTED`` and
+    due after ``window_end``. Everything else stays, whatever its date — an
+    overdue row is before the window's end by definition, a row somebody has
+    started (or deferred, or disputed) is live work however far out it falls,
+    a closed row is history, and a row still waiting on a date cannot be
+    placed outside a window at all. ``None`` is "any due date".
+
+    A view concern only: the planner still materialises its full horizon, and
+    nothing here decides what exists — only what the list is showing.
+
+    ``due_date__isnull=False`` is pinned inside the negation for the same
+    reason as the "pending" filter in ``views._filtered``: a bare
+    ``due_date__gt`` is SQL-unknown for a NULL date, and negating unknown
+    would silently drop every undated row.
+    """
+    if window_end is None:
+        return queryset
+    return queryset.exclude(
+        Q(state=State.NOT_STARTED, due_date__isnull=False, due_date__gt=window_end)
+    )
+
+
 def status_counts(
     *,
     as_of: date,
     entity_ids: Sequence[UUID] | None = None,
     category: str = "",
     search: str = "",
+    window_end: date | None = None,
 ) -> dict[str, int]:
     """Counts behind the calendar's tiles, in one query rather than a dozen.
 
@@ -299,6 +328,9 @@ def status_counts(
     does — see :func:`apply_text_filters` — so that typing "gst" into the
     search box updates the tiles to match what is actually on screen, not the
     tenant's entire backlog. ``entity_ids`` behaves the same way it always has.
+    ``window_end`` is the calendar's "Due within" pick, applied through
+    :func:`apply_due_window` exactly as the register applies it; the dashboard
+    leaves it unset and counts the whole horizon.
     Deliberately *not* narrowed by the register's own ``status`` selection:
     these tiles are the other buckets a click could switch to, and a tile that
     only ever counted the bucket already showing would be pointless.
@@ -307,6 +339,7 @@ def status_counts(
     if entity_ids is not None:
         queryset = queryset.filter(entity_id__in=list(entity_ids))
     queryset = apply_text_filters(queryset, category=category, search=search)
+    queryset = apply_due_window(queryset, window_end=window_end)
 
     open_q = Q(state__in=_OPEN)
     row = queryset.aggregate(
@@ -561,10 +594,8 @@ def keyset_page(
 # ---------------------------------------------------------------------------
 
 
-def sibling_instances(
-    obligation: ObligationInstance, *, as_of: date
-) -> dict[str, ObligationInstance | None]:
-    """The occurrence immediately before and after this one, in its own sequence.
+def sequence_instances(obligation: ObligationInstance, *, as_of: date) -> list[ObligationInstance]:
+    """Every occurrence in this obligation's own sequence, oldest first, itself included.
 
     "Sequence" means the same entity, the same rule and the same registration or
     site — GSTR-3B for one GSTIN in March is adjacent to GSTR-3B for *that GSTIN*
@@ -572,29 +603,18 @@ def sibling_instances(
     month. ``period_key`` is the right ordering key rather than ``due_date``: it
     sorts chronologically as a string by construction
     (:class:`stacos.engine.types.Period`) and, unlike ``due_date``, is never null.
+
+    The whole run rather than just the neighbours, so the detail page can offer a
+    jump straight to any period — Q1 to Q4 in one step, not three.
     """
     if not obligation.period_key:
-        return {"previous": None, "next": None}
-    siblings = (
-        live()
-        .filter(
-            entity_id=obligation.entity_id,
-            definition_code=obligation.definition_code,
-            scope_ref=obligation.scope_ref,
-        )
-        .exclude(pk=obligation.pk)
+        return []
+    siblings = live().filter(
+        entity_id=obligation.entity_id,
+        definition_code=obligation.definition_code,
+        scope_ref=obligation.scope_ref,
     )
-    previous = (
-        annotate_status(siblings.filter(period_key__lt=obligation.period_key), as_of=as_of)
-        .order_by("-period_key")
-        .first()
-    )
-    upcoming_sibling = (
-        annotate_status(siblings.filter(period_key__gt=obligation.period_key), as_of=as_of)
-        .order_by("period_key")
-        .first()
-    )
-    return {"previous": previous, "next": upcoming_sibling}
+    return list(annotate_status(siblings, as_of=as_of).order_by("period_key"))
 
 
 def related_scope_instances(

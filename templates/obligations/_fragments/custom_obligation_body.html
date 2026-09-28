@@ -1,0 +1,157 @@
+{% load i18n %}
+{% comment %}
+  One obligation this entity wrote for itself: what it asks, every schedule it
+  has had, and what it has put on the calendar. A direct, bookmarkable URL,
+  and also what create, edit and withdraw land on — so it carries its own
+  header and a way back to the library.
+
+  The occurrences listed are ordinary register rows, linked to the ordinary
+  obligation page, where they are worked exactly like a catalog filing.
+  Superseded ones stay listed after a withdrawal or a schedule change: they
+  are the history this page exists to keep.
+{% endcomment %}
+<c-page-header title="{{ obligation.title }}"
+               subtitle="{% translate 'Your own obligation' %} · {{ obligation.category_label }} · {{ entity.name }}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:library' entity.pk %}"
+     hx-get="{% url 'compliance:library' entity.pk %}" hx-target="#main" hx-push-url="true">
+    {% translate "Back to library" %}
+  </a>
+  {% if can_manage and not obligation.is_withdrawn %}
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            hx-get="{% url 'compliance:custom_edit' entity.pk obligation.pk %}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+      {% translate "Edit" %}
+    </button>
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            hx-get="{% url 'compliance:custom_withdraw' entity.pk obligation.pk %}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+      {% translate "Withdraw" %}
+    </button>
+  {% endif %}
+</c-page-header>
+
+{% if obligation.is_withdrawn %}
+  <p class="callout callout--attention small" role="status">
+    {% blocktranslate with when=obligation.withdrawn_at|date:"j M Y" who=obligation.withdrawn_by|default:_("someone") %}Withdrawn on {{ when }} by {{ who }}. Nothing new is scheduled; completed occurrences are kept exactly as they were, and ones already worked on stay below as history.{% endblocktranslate %}
+    {% if obligation.withdraw_reason %}<br>{% translate "Reason" %}: {{ obligation.withdraw_reason }}{% endif %}
+  </p>
+{% endif %}
+
+<div class="detail-grid">
+  <div class="detail-grid__main">
+    <section class="card">
+      <h2 class="card__title"><c-icon name="calendar" size="14" /> {% translate "On the calendar" %}</h2>
+      <div class="data-table__scroll" aria-live="polite">
+        {% if instances %}
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>{% translate "Period" %}</th>
+                <th>{% translate "Due" %}</th>
+                <th>{% translate "Status" %}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for instance in instances %}
+                <tr>
+                  <td>
+                    <a class="link-strong" href="{% url 'compliance:detail' instance.pk %}"
+                       hx-get="{% url 'compliance:detail' instance.pk %}"
+                       hx-target="#main" hx-push-url="true">{{ instance.period_label|default:instance.period_key }}</a>
+                    {% if instance.superseded_at %}
+                      <div class="text-muted small">{{ instance.supersede_reason }}</div>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if instance.due_date %}
+                      <c-due-badge :date="instance.due_date" :days="instance.days_to_due"
+                                   :original="instance.original_due_date"
+                                   :notification="instance.applied_extension_reference" />
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td><c-status-chip :status="instance.display_status" /></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% if instance_total > instances|length %}
+            <p class="text-muted small mt-2 mb-0">
+              {% blocktranslate with shown=instances|length total=instance_total %}Showing the latest {{ shown }} of {{ total }}. The calendar lists every one.{% endblocktranslate %}
+            </p>
+          {% endif %}
+        {% else %}
+          <c-empty-state title="{% translate 'Nothing scheduled yet' %}"
+                         body="{% translate 'No period of this schedule falls due within the calendar window yet. It will appear here as soon as one does.' %}" />
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="card__title"><c-icon name="history" size="14" /> {% translate "Schedule history" %}</h2>
+      <p class="text-muted small">
+        {% translate "A schedule is never rewritten. A change starts a new version; periods that ended before it keep the version they were created under." %}
+      </p>
+      <div class="data-table__scroll">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>{% translate "Version" %}</th>
+              <th>{% translate "Schedule" %}</th>
+              <th>{% translate "Governs" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in versions %}
+              <tr>
+                <td>v{{ row.version.version }}</td>
+                <td>{{ row.summary }}</td>
+                <td class="small">
+                  {% if not row.version.governs_anything %}
+                    <span class="text-muted">{% translate "Replaced before it governed any period" %}</span>
+                  {% elif row.version.effective_to %}
+                    {% blocktranslate with start=row.version.effective_from|date:"j M Y" end=row.version.effective_to|date:"j M Y" %}Periods ending from {{ start }}, starting up to {{ end }}{% endblocktranslate %}
+                  {% else %}
+                    {% blocktranslate with start=row.version.effective_from|date:"j M Y" %}Periods ending from {{ start }} on{% endblocktranslate %}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <aside class="detail-grid__aside">
+    <section class="card">
+      <h2 class="card__title"><c-icon name="document" size="14" /> {% translate "What you wrote" %}</h2>
+      {% if obligation.description %}
+        <p class="card__lede">{{ obligation.description|linebreaksbr }}</p>
+      {% endif %}
+      <dl class="key-values small">
+        {% if obligation.source_reference %}
+          <dt>{% translate "Source" %}</dt><dd>{{ obligation.source_reference }}</dd>
+        {% endif %}
+        {% if obligation.consequence %}
+          <dt>{% translate "If missed" %}</dt><dd>{{ obligation.consequence }}</dd>
+        {% endif %}
+        <dt>{% translate "Added" %}</dt>
+        <dd>{{ obligation.created_at|date:"j M Y" }}{% if obligation.created_by %} · {{ obligation.created_by }}{% endif %}</dd>
+      </dl>
+    </section>
+
+    {% if obligation.evidence_labels %}
+      <section class="card">
+        <h2 class="card__title"><c-icon name="folder" size="14" /> {% translate "What you'll need" %}</h2>
+        <ul class="reason-list">
+          {% for label in obligation.evidence_labels %}<li>{{ label }}</li>{% endfor %}
+        </ul>
+        {% if obligation.evidence_mandatory %}
+          <p class="text-muted small mb-0">{% translate "Attached proof is required before an occurrence can be completed." %}</p>
+        {% endif %}
+      </section>
+    {% endif %}
+  </aside>
+</div>

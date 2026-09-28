@@ -208,6 +208,7 @@
     {% include "obligations/_fragments/off_path_status.html" %}
   {% elif obligation.progress_steps %}
     {% include "obligations/_fragments/status_questions.html" %}
+    {% include "obligations/_fragments/review_actions.html" %}
 
     {% if undo_start_action %}
       <form hx-post="{% url 'compliance:transition' obligation.pk %}"

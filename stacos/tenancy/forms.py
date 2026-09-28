@@ -8,27 +8,39 @@ product, and the seam is visible to users within a month.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, cast
+from uuid import UUID
 
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Column, Field, Layout, Row
+from crispy_forms.layout import Column, Div, Field, Layout, Row
 from django import forms
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from stacos.core.forms import ScopedModelMultipleChoiceField
 from stacos.jurisdictions import subdivisions
 from stacos.jurisdictions.facts import (
     ENTITY_TYPES,
     IN_STATE_CODES,
     PREMISES_TYPES,
-    REGISTRATION_TYPES,
     REGISTRY,
     FactType,
 )
 from stacos.jurisdictions.registration_requirements import RegistrationRequirement
 from stacos.jurisdictions.validators import get_validator, validate_registration_value
-from stacos.tenancy.models import Entity, EntityPremises, EntityProfile, EntityRegistration, Role
+from stacos.tenancy.access import AccessGrant, engaged_clients
+from stacos.tenancy.models import (
+    Entity,
+    EntityPremises,
+    EntityProfile,
+    EntityRegistration,
+    Membership,
+    Role,
+    Tenant,
+)
+from stacos.tenancy.registration_gaps import RegistrationGaps
 
 #: Human labels for the entity types the fact registry knows about. Kept here
 #: rather than on the model so the vocabulary stays data, not a hardcoded enum
@@ -228,7 +240,7 @@ REGISTRATION_FULL_NAME_LABELS: dict[str, str] = {
     "CIN": "Corporate Identity Number (CIN)",
     "LLPIN": "LLP Identification Number (LLPIN)",
     "ESIC": "Employees' State Insurance Corporation (ESIC)",
-    "PF": "Employees' Provident Fund (EPF)",
+    "PF": "Employees' Provident Fund (EPF) Number",
     "FCRN": "Foreign Company Registration Number (FCRN)",
 }
 
@@ -270,17 +282,36 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
             "valid_to": forms.DateInput(attrs={"type": "date"}),
         }
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, entity: Entity, gaps: RegistrationGaps, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
+        # Only what the entity does not already hold — see
+        # `stacos.tenancy.registration_gaps`. A forged post naming a held type
+        # fails as an invalid choice rather than on the unique constraint.
         type_choices: list[tuple[str, Any]] = [("", _("Select…"))]
         type_choices += [
-            (code, REGISTRATION_TYPE_LABELS.get(code, code)) for code in REGISTRATION_TYPES
+            (r.code, REGISTRATION_TYPE_LABELS.get(r.code, r.code)) for r in gaps.available
         ]
 
-        state_choices: list[tuple[str, Any]] = [("", _("Not state-specific"))]
+        # The State list narrows to the states still free for the chosen type,
+        # when that type is issued per state. Re-rendered on every change of
+        # type by the `hx-get` below, and re-derived here from the posted type,
+        # so the rule holds without the browser's co-operation.
+        chosen = self.data.get(self.add_prefix("type")) if self.is_bound else None
+        chosen = chosen or self.initial.get("type") or ""
+        requirement = gaps.requirement(chosen)
+        taken = (
+            gaps.taken_jurisdictions(chosen)
+            if requirement is not None and requirement.per_jurisdiction
+            else frozenset()
+        )
+        type_label = REGISTRATION_TYPE_LABELS.get(chosen, chosen)
+
+        state_choices: list[tuple[str, Any]] = []
+        if "" not in taken:
+            state_choices.append(("", _("Not state-specific")))
         state_choices += sorted(
-            ((code, STATE_LABELS.get(code, code)) for code in IN_STATE_CODES),
+            ((code, STATE_LABELS.get(code, code)) for code in IN_STATE_CODES if code not in taken),
             key=lambda pair: pair[1],
         )
 
@@ -288,12 +319,21 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
             label=_("Type"),
             choices=type_choices,
             help_text=_("Each registration generates its own filings."),
+            error_messages={"invalid_choice": _("That registration is already recorded.")},
         )
         self.fields["jurisdiction"] = forms.ChoiceField(
             label=_("State"),
             required=False,
             choices=state_choices,
-            help_text=_("Only for state-issued registrations, such as a GSTIN or a PT number."),
+            help_text=(
+                _("States that already have one are not listed.")
+                if taken
+                else _("Only for state-issued registrations, such as a GSTIN or a PT number.")
+            ),
+            error_messages={
+                "invalid_choice": _("%(type)s is already recorded for that state.")
+                % {"type": type_label}
+            },
         )
         self.fields["valid_from"].required = False
 
@@ -301,8 +341,21 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
         # The submit button lives in the modal footer, not in the form body.
         self.helper.form_tag = False
         self.helper.layout = Layout(
-            Row(Column("type"), Column("value")),
-            "jurisdiction",
+            Row(
+                Column(
+                    Field(
+                        "type",
+                        hx_get=reverse("app:registration_create", args=[entity.pk]),
+                        hx_target="#registration-jurisdiction",
+                        hx_select="#registration-jurisdiction",
+                        hx_swap="outerHTML",
+                        hx_include="closest form",
+                        hx_params="type,jurisdiction",
+                    )
+                ),
+                Column("value"),
+            ),
+            Div("jurisdiction", css_id="registration-jurisdiction", aria_live="polite"),
             Row(Column("valid_from"), Column("valid_to")),
             "is_primary",
         )
@@ -419,22 +472,55 @@ class EntityProfileForm(forms.ModelForm[EntityProfile]):
         model = EntityProfile
         fields = ["aggregate_turnover", "employee_count"]
         labels = {
-            "aggregate_turnover": _("Turnover"),
-            "employee_count": _("Employees"),
+            "employee_count": _("Number of Employees"),
         }
         help_texts = {
-            "aggregate_turnover": _("Annual aggregate turnover for the most recently closed year."),
             "employee_count": _("Employees on payroll."),
         }
 
+    #: Turnover is typed in crores — a ten-digit rupee figure is unreadable in
+    #: an input box and one slipped zero is a 10x error — but stored in rupees,
+    #: because every applicability threshold in the catalog is in rupees.
+    #: Seven decimal places so any rupee amount round-trips exactly: editing an
+    #: entity must never silently round a value already on file.
+    aggregate_turnover = forms.DecimalField(
+        label=_("Turnover (₹ crore)"),
+        help_text=_(
+            "Annual aggregate turnover for the most recently closed year, in crores — "
+            "e.g. 12.5 for ₹12.5 Cr, 0.4 for ₹40 lakh."
+        ),
+        required=False,
+        min_value=Decimal("0"),
+        max_digits=18,
+        decimal_places=7,
+        widget=forms.NumberInput(attrs={"step": "any", "inputmode": "decimal"}),
+    )
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.fields["aggregate_turnover"].required = False
         self.fields["employee_count"].required = False
+        if self.instance.aggregate_turnover is not None:
+            self.initial["aggregate_turnover"] = _rupees_to_crore(self.instance.aggregate_turnover)
 
         self.helper = FormHelper()
         self.helper.form_tag = False
         self.helper.layout = Layout(Row(Column("aggregate_turnover"), Column("employee_count")))
+
+    def clean_aggregate_turnover(self) -> Decimal | None:
+        crore: Decimal | None = self.cleaned_data.get("aggregate_turnover")
+        if crore is None:
+            return None
+        return (crore * RUPEES_PER_CRORE).quantize(Decimal("0.01"))
+
+
+RUPEES_PER_CRORE = Decimal(10_000_000)
+
+
+def _rupees_to_crore(rupees: Decimal) -> str:
+    """``Decimal("805000000.00")`` -> ``"80.5"`` — no trailing zeros, never
+    scientific notation, so the input box shows what a person would type."""
+    crore = (Decimal(rupees) / RUPEES_PER_CRORE).normalize()
+    return format(crore, "f")
 
 
 #: Human labels for the premises types the fact registry knows about. Same
@@ -600,42 +686,130 @@ class QuestionForm(forms.Form):
         return raw
 
 
-class InviteColleagueForm(forms.Form):
-    """Ask a colleague by email, and say what they will be able to do.
+class _AccessFieldsMixin:
+    """The reach half of an access form: which entities, clients and areas.
+
+    Kept apart from the role on purpose. The role says what somebody may do; these
+    say where. A business chooses entities, a firm chooses clients, both choose
+    compliance areas; a dealer has no compliance reach to choose at all.
+    """
+
+    tenant: Any
+    fields: dict[str, forms.Field]
+
+    def _add_access_fields(self) -> list[str]:
+        tenant_type = getattr(self.tenant, "type", None)
+        names: list[str] = []
+        if tenant_type == Tenant.Type.ORGANISATION:
+            self.fields["entities"] = ScopedModelMultipleChoiceField(
+                Entity,
+                filters={"archived_at__isnull": True},
+                required=False,
+                label=_("Entities"),
+                help_text=_("Leave all unticked for every entity, including ones added later."),
+                widget=forms.CheckboxSelectMultiple,
+            )
+            names.append("entities")
+        if tenant_type == Tenant.Type.PRACTICE:
+            self.fields["client_tenants"] = forms.MultipleChoiceField(
+                required=False,
+                label=_("Clients"),
+                help_text=_("Leave all unticked for the whole client book."),
+                choices=[(str(pk), name) for pk, name in engaged_clients(self.tenant)],
+                widget=forms.CheckboxSelectMultiple,
+            )
+            names.append("client_tenants")
+        return names
+
+    def grant(self, *, categories: tuple[str, ...] = ()) -> AccessGrant:
+        """The reach chosen on the form. Compliance areas are not chosen here: an
+        invitation takes the role's default, and an edit keeps what the member has."""
+        data = cast("dict[str, Any]", getattr(self, "cleaned_data", {}))
+        entities = data.get("entities") or []
+        return AccessGrant(
+            all_entities=not entities,
+            entity_ids=tuple(entity.pk for entity in entities),
+            categories=categories,
+            client_tenant_ids=tuple(UUID(pk) for pk in data.get("client_tenants") or ()),
+        )
+
+
+def _system_roles_for(tenant: Any) -> Any:
+    return Role.objects.filter(tenant__isnull=True, tenant_type=tenant.type).order_by(
+        "rank", "name"
+    )
+
+
+class InviteColleagueForm(_AccessFieldsMixin, forms.Form):
+    """Ask a colleague by email, and say what they will be able to do — and where.
 
     The role is chosen at the point of invitation rather than afterwards, so
     nobody lands in the workspace with whatever the default happened to be and
     has to be corrected. Only the system roles for this tenant's type are
     offered — inviting somebody into a practice role at an organisation would
     produce a membership whose permissions name features that are not there.
+
+    The reach is chosen here too, for the same reason: a department user invited
+    to "everything" and narrowed a day later has already seen the rest.
     """
 
     email = forms.EmailField(label=_("Their email"))
     role: forms.ModelChoiceField[Role] = forms.ModelChoiceField(
-        label=_("What can they do?"), queryset=Role.objects.none()
+        label=_("Role"),
+        queryset=Role.objects.none(),
+        help_text=_("You can add or remove individual permissions once they have joined."),
     )
-    message = forms.CharField(
-        required=False,
-        label=_("Add a note (optional)"),
-        widget=forms.Textarea(attrs={"rows": 2}),
-        help_text=_("Included in the invitation email."),
-    )
-
     def __init__(self, *args: Any, tenant: Any = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.tenant = tenant
         role_field = cast("forms.ModelChoiceField[Role]", self.fields["role"])
+        access_fields: list[str] = []
         if tenant is not None:
-            role_field.queryset = Role.objects.filter(
-                tenant__isnull=True, tenant_type=tenant.type
-            ).order_by("rank", "name")
+            role_field.queryset = _system_roles_for(tenant)
+            access_fields = self._add_access_fields()
 
         self.helper = FormHelper()
         self.helper.form_tag = False
-        self.helper.layout = Layout(Row(Column("email"), Column("role")), "message")
+        self.helper.layout = Layout(
+            Row(Column("email"), Column("role")),
+            *([Div(*access_fields, css_class="access-fields")] if access_fields else []),
+        )
 
     def clean_email(self) -> str:
         return str(self.cleaned_data["email"]).strip().lower()
+
+
+class MemberAccessForm(_AccessFieldsMixin, forms.Form):
+    """Change what an existing member may do, and where, in one step."""
+
+    role: forms.ModelChoiceField[Role] = forms.ModelChoiceField(
+        label=_("Role"),
+        queryset=Role.objects.none(),
+        help_text=_("Changing the role resets any individual permission changes below."),
+    )
+
+    def __init__(self, *args: Any, membership: Membership, **kwargs: Any) -> None:
+        self.tenant = membership.tenant
+        if not args and "initial" not in kwargs:
+            kwargs["initial"] = {
+                "role": membership.role_id,
+                "entities": (
+                    []
+                    if membership.all_entities
+                    else list(membership.entities.values_list("pk", flat=True))
+                ),
+                "client_tenants": [
+                    str(pk) for pk in membership.client_tenants.values_list("pk", flat=True)
+                ],
+            }
+        super().__init__(*args, **kwargs)
+        role_field = cast("forms.ModelChoiceField[Role]", self.fields["role"])
+        role_field.queryset = _system_roles_for(self.tenant)
+        access_fields = self._add_access_fields()
+
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout("role", *access_fields)
 
 
 class WorkspaceRenameForm(forms.Form):

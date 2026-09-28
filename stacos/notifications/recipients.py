@@ -26,7 +26,6 @@ from uuid import UUID
 
 from django.contrib.auth import get_user_model
 
-from stacos.core.permissions import permission_registry
 from stacos.tenancy.models import Membership
 
 __all__ = ["for_entity", "for_tenant", "with_permission"]
@@ -49,7 +48,7 @@ def with_permission(
     """
     memberships = (
         Membership.objects.filter(tenant_id=tenant_id, status=Membership.Status.ACTIVE)
-        .select_related("user", "role")
+        .select_related("user", "role", "tenant")
         .prefetch_related("entities")
     )
 
@@ -80,8 +79,7 @@ def _holds(membership: Membership, permission: str) -> bool:
     notification rule that tested the raw list would skip exactly the senior
     people most in need of telling.
     """
-    codes = list(membership.role.permissions or []) + list(membership.extra_permissions or [])
-    return permission in permission_registry.expand(codes)
+    return permission in membership.resolved_permissions()
 
 
 def _reaches(membership: Membership, entity: Any) -> bool:

@@ -126,6 +126,50 @@ make a rule produce something it otherwise would not. Adopting one writes
 `ObligationInclusion` rows; revoking it revokes them, and the next plan finds the
 rule FALSE again with no new machinery.
 
+---
+
+## 8c. Obligations an entity writes for itself
+
+A licence condition, a lender's covenant, an internal control. The catalog
+cannot know about them, and a free-text reminder is not good enough: they need
+the same states, evidence guard, checklist, assignment and audit trail as a
+statutory filing.
+
+**A custom obligation is a definition, not a reminder.** `CustomObligation`
+(what it is) and `CustomObligationVersion` (when it falls due) are
+tenant-scoped rows in `obligations`, under RLS and category-scoped like the
+register. `stacos/obligations/custom.py` turns them into `DefinitionSnapshot`s,
+and `services.preview` appends them to the cached catalog before planning,
+never into the cache itself, which every tenant shares. The planner is
+unchanged: it dates, diffs and retires their instances exactly as it does a
+catalog filing, and the idempotence property holds for them too. Codes are
+`CUSTOM-<hex>`. `validatecatalog` rejects a catalog code with that prefix, so
+the two can never collide on `definition_code`.
+
+**Details are edited in place; schedules are versioned.** Name, description,
+source, evidence and category live on the obligation. Editing the name renames
+open instances and leaves completed ones as they were recorded. Category is an
+access boundary, so every instance follows it. A schedule change never rewrites
+a row. It closes the current version and opens a new one from an "applies
+from" date, and follows the engine's own rule that a period is governed by the
+rule in force when it *closes*. The old window stops the day before its period
+in progress began, so with an unchanged frequency the two windows fit together
+exactly. When the frequency changes, the new frequency's period in progress
+follows the new rule in full. That can overlap the old rule's last period, but
+it never leaves a gap.
+
+**Withdrawn, never deleted.** A withdrawn obligation leaves the planner's input.
+Its instances are then retired like those of any definition that stopped
+applying: filed ones stay, worked-on ones are superseded with the reason as the
+timeline note (`plan(removal_reasons=...)`), and untouched future ones are
+archived. Building this exposed a planner bug, now fixed: an already-superseded
+row was superseded again on every rebuild, adding a fresh "no longer
+applicable" entry to its timeline every night (`ExistingInstance.superseded`).
+
+Not in this version: per-registration or per-premises fan-out (every custom
+obligation is entity-scoped), event-triggered and one-off schedules, and
+reinstating a withdrawn one. To bring one back, add it again.
+
 The product wins or loses on one thing: **does the compliance calendar for a given entity get generated correctly and automatically, with zero manual setup?** Everything else is supporting cast. This document is the design for that engine.
 
 ---

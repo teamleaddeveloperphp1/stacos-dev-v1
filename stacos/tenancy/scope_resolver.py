@@ -14,9 +14,14 @@ The resolution, in order:
 
 Two rules that are easy to get wrong and expensive to get wrong:
 
-* **Permissions for a client entity come from the engagement, not from the
-  practice's own role.** A firm cannot grant itself more access to a client than
-  the client agreed to. The engagement is the ceiling.
+* **On a client entity, a firm member may do what their role allows *and* the
+  engagement allows — never more than either.** A firm cannot grant itself more
+  access to a client than the client agreed to, and an article clerk does not
+  gain a partner's authority because the client trusts the partner. The
+  engagement is the ceiling, applied per entity, never a top-up.
+* **Category limits intersect, per entity.** A member limited to tax sees only
+  tax anywhere; an engagement limited to GST limits that client's entity and no
+  other.
 * **An expired engagement is dead the day it expires**, not whenever a job next
   runs. The date window is evaluated here, on every request.
 """
@@ -172,6 +177,8 @@ def resolve_scope_for_membership(membership: Membership, *, reason: str) -> Acce
     writable: set[UUID] = {tenant.id}
     entity_ids: set[UUID] | None = None
     categories: set[str] | None = set(membership.categories) or None
+    entity_permissions: dict[UUID, frozenset[str]] = {}
+    entity_categories: dict[UUID, frozenset[str]] = {}
 
     # -- Entities within the member's own tenant ----------------------------
     if not membership.all_entities:
@@ -179,17 +186,12 @@ def resolve_scope_for_membership(membership: Membership, *, reason: str) -> Acce
 
     # -- Client entities reached through engagements ------------------------
     if tenant.type == Tenant.Type.PRACTICE:
-        engaged_entities, engaged_tenants, engaged_permissions, engaged_categories = (
-            _resolve_engagements(membership)
-        )
+        engaged_tenants, entity_permissions, entity_categories = _resolve_engagements(membership)
         readable |= engaged_tenants
         # Engagements are read-and-work access to a client's records, but the
         # client tenant itself is never writable by the practice: the practice
         # cannot add users to it, change its plan, or create entities in it.
-        entity_ids = (entity_ids or set()) | engaged_entities
-        permissions |= engaged_permissions
-        if engaged_categories is not None:
-            categories = (categories or set()) | engaged_categories
+        entity_ids = (entity_ids or set()) | set(entity_permissions)
 
     if tenant.type == Tenant.Type.DEALER:
         # A dealer sells and provisions. It sees billing and subscription state,
@@ -206,28 +208,35 @@ def resolve_scope_for_membership(membership: Membership, *, reason: str) -> Acce
         member_tenant_ids=frozenset({tenant.id}),
         entity_ids=frozenset(entity_ids) if entity_ids is not None else None,
         categories=frozenset(categories) if categories is not None else None,
+        entity_categories=entity_categories,
         permissions=frozenset(permissions),
+        entity_permissions=entity_permissions,
         reason=reason,
     )
 
 
 def _resolve_engagements(
     membership: Membership,
-) -> tuple[set[UUID], set[UUID], set[str], set[str] | None]:
-    """Collect the entities, tenants, permissions and categories an engagement grants.
+) -> tuple[set[UUID], dict[UUID, frozenset[str]], dict[UUID, frozenset[str]]]:
+    """The client tenants live engagements reach, and per entity, the ceiling on
+    what may be done there and the categories it is limited to.
+
+    An entity whose engagement names no categories is absent from the category
+    map: it is limited by the member's own categories alone.
 
     Uses ``objects_unscoped`` because this *is* the query that establishes the
     scope — there is nothing bound yet to filter by. It is safe precisely because
     it is anchored on the practice tenant the user is already a member of. This
     call is allowlisted in ``tests/unscoped_allowlist.txt``.
     """
+    from stacos.core.permissions import permission_registry
+    from stacos.engagements.grants import engagement_ceiling
     from stacos.engagements.models import Engagement
 
-    entities: set[UUID] = set()
     tenants: set[UUID] = set()
-    permissions: set[str] = set()
-    categories: set[str] = set()
-    unrestricted_categories = False
+    granted: dict[UUID, set[str]] = {}
+    categories: dict[UUID, set[str]] = {}
+    unrestricted: set[UUID] = set()
 
     # Same bootstrap problem as memberships: engagements are RLS-protected and
     # nothing is bound yet. Anchored on the practice tenant the user is already
@@ -246,21 +255,20 @@ def _resolve_engagements(
         for engagement in queryset:
             if not engagement.is_live:
                 continue
-            entities.add(engagement.entity_id)
             tenants.add(engagement.tenant_id)
-            permissions.update(engagement.permissions)
+            granted.setdefault(engagement.entity_id, set()).update(engagement.permissions)
             if engagement.categories:
-                categories.update(engagement.categories)
+                categories.setdefault(engagement.entity_id, set()).update(engagement.categories)
             else:
-                # An unrestricted engagement means the practice is not category
-                # limited, so no category filter can be applied at all.
-                unrestricted_categories = True
+                unrestricted.add(engagement.entity_id)
 
-    from stacos.core.permissions import permission_registry
-
-    return (
-        entities,
-        tenants,
-        set(permission_registry.expand(permissions)),
-        None if unrestricted_categories else (categories or None),
-    )
+    ceilings = {
+        entity_id: permission_registry.expand(engagement_ceiling(codes))
+        for entity_id, codes in granted.items()
+    }
+    limits = {
+        entity_id: frozenset(codes)
+        for entity_id, codes in categories.items()
+        if entity_id not in unrestricted
+    }
+    return tenants, ceilings, limits

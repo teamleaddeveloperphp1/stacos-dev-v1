@@ -43,6 +43,7 @@ from stacos.core.permissions import require_permission
 from stacos.obligations.views import entity_preview_context
 from stacos.tenancy.models import Entity
 from stacos.tenancy.onboarding import SETUP_STEP_ORDER
+from stacos.tenancy.registration_gaps import registration_gaps
 
 #: One entry per step in the rail. The key is also the url name suffix
 #: (`app:entity_setup_<key>`) and the fragment's directory name. "packs" is
@@ -112,6 +113,7 @@ def registrations(request: HttpRequest, pk: str) -> HttpResponse:
     context = {
         **_step_context("registrations", entity, has_packs=has_packs),
         "registrations": entity.registrations.filter(archived_at__isnull=True),
+        "gaps": registration_gaps(entity),
     }
     return render(request, _template(request, "tenancy/setup/registrations.html"), context)
 

@@ -30,6 +30,7 @@ from django.utils import timezone
 
 from stacos.accounts.models import User
 from stacos.core.scope import platform_scope, tenant_context
+from stacos.engagements.grants import PREPARE_REVIEW_AND_FILE
 from stacos.engagements.models import Engagement
 from stacos.obligations.services import materialise
 from stacos.tenancy.models import (
@@ -192,12 +193,9 @@ class Command(BaseCommand):
                         ComplianceCategory.TAX_DIRECT,
                         ComplianceCategory.CORPORATE_SECRETARIAL,
                     ],
-                    "permissions": [
-                        "tenancy.entity.view",
-                        "tenancy.profile.view",
-                        "tenancy.registration.view",
-                        "core.search",
-                    ],
+                    # Prepare, review and file — not skip review, reopen or
+                    # rule obligations out. The engagement caps the firm's roles.
+                    "permissions": sorted(PREPARE_REVIEW_AND_FILE),
                     "starts_on": timezone.localdate(),
                     "engagement_letter_ref": "GD/2026/GEPL/01",
                 },

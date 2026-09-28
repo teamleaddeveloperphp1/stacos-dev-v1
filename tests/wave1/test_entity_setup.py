@@ -79,7 +79,7 @@ def test_creating_an_entity_lands_on_step_one(signed_in: Client) -> None:
             "incorporation_date": "2020-04-01",
             "registered_office_state": "IN-KA",
             "registered_office_address": "4 Residency Road, Bengaluru",
-            "aggregate_turnover": "1000000",
+            "aggregate_turnover": "0.1",
             "employee_count": "5",
         },
     )

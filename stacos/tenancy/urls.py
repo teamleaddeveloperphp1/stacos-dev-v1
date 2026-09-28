@@ -51,4 +51,6 @@ urlpatterns = [
     path("team/", team.team, name="team"),
     path("team/invite/", team.invite, name="team_invite"),
     path("team/invitations/<uuid:pk>/revoke/", team.invite_revoke, name="team_invite_revoke"),
+    path("team/<uuid:pk>/access/", team.member_access, name="team_member_access"),
+    path("team/<uuid:pk>/permissions/", team.member_permissions, name="team_member_permissions"),
 ]

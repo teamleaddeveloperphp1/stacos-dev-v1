@@ -158,6 +158,10 @@ class Transition:
     requires_mandatory_evidence: bool = False
     #: Shown to the user before they commit, when the move is hard to walk back.
     confirmation: str = ""
+    #: The move records a filing without it having been reviewed or signed off.
+    #: The one sanctioned exception to maker-checker; whoever records the
+    #: transition must say so on the row, not leave it to be inferred.
+    skips_review: bool = False
 
 
 _WORKFLOW_STATES: tuple[State, ...] = (
@@ -171,29 +175,45 @@ _WORKFLOW_STATES: tuple[State, ...] = (
 
 
 def _recordable() -> tuple[Transition, ...]:
-    """Recording the filing is reachable from every open state, not only from
-    ``READY_TO_FILE``.
+    """Recording a filing: the reviewed route, and the explicit exception.
 
-    The detail page asks one question — "is this done?" — and a "yes" has to be
-    recordable wherever the obligation happens to be sitting. Walking it through
-    prepare/review/approve first would write four timeline entries for work
-    nobody did, and inventing a separate "mark complete" path outside this table
-    would put a second, unguarded way to set ``filed_on`` into the product.
+    ``READY_TO_FILE → FILED`` is the ordinary end of maker-checker — prepared,
+    reviewed, signed off where the client has to, and now submitted. It needs
+    ``compliance.obligation.file``, which a compliance manager or a firm's
+    manager holds.
 
-    Every one of them carries the same guard as the original: an acknowledgement
-    number is the evidence the filing happened, and a register that cannot be
-    audited is not worth keeping.
+    From every *other* open state the same "yes, it is done" is still recordable,
+    because the detail page asks one question and a sole owner, or a filing made
+    outside STACOS, has to be able to answer it wherever the obligation sits.
+    But that answer skips review, so it is a different move with a different
+    permission — ``compliance.obligation.complete_unreviewed``, held only by the
+    person answerable for the business or the firm — and it is flagged
+    ``skips_review`` so the timeline and audit trail record it as exactly that.
+
+    Every one of them carries the same guard: an acknowledgement number is the
+    evidence the filing happened, and a register that cannot be audited is not
+    worth keeping.
     """
-    return tuple(
+    reviewed = Transition(
+        State.READY_TO_FILE,
+        State.FILED,
+        "Record filing",
+        "compliance.obligation.file",
+        requires_filing_reference=True,
+    )
+    unreviewed = tuple(
         Transition(
             source,
             State.FILED,
-            "Record filing",
-            "compliance.obligation.file",
+            "Mark done without review",
+            "compliance.obligation.complete_unreviewed",
             requires_filing_reference=True,
+            skips_review=True,
         )
         for source in _WORKFLOW_STATES
+        if source != State.READY_TO_FILE
     )
+    return (*unreviewed, reviewed)
 
 
 def _abandonable() -> tuple[Transition, ...]:
@@ -288,7 +308,7 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(
         State.PENDING_REVIEW,
         State.PENDING_CLIENT_APPROVAL,
-        "Approve and send to client",
+        "Approve and send for client sign-off",
         "compliance.obligation.review",
     ),
     # A review that needs no client sign-off goes straight to ready. Common for
@@ -302,13 +322,13 @@ TRANSITIONS: tuple[Transition, ...] = (
     Transition(
         State.PENDING_CLIENT_APPROVAL,
         State.READY_TO_FILE,
-        "Client approved",
+        "Sign off as the client",
         "compliance.obligation.approve",
     ),
     Transition(
         State.PENDING_CLIENT_APPROVAL,
         State.IN_PREPARATION,
-        "Client requested changes",
+        "Client asks for changes",
         "compliance.obligation.approve",
         requires_note=True,
     ),

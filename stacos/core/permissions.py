@@ -29,6 +29,7 @@ __all__ = [
     "RequirePermissionMixin",
     "permission_registry",
     "public_view",
+    "require_entity_permission",
     "require_permission",
 ]
 
@@ -217,6 +218,24 @@ def check_permissions(
         raise PermissionDenied(missing)
 
     _enforce_step_up(request, codes)
+
+
+def require_entity_permission(request: HttpRequest, code: str, entity_id: Any) -> None:
+    """Refuse unless ``code`` is allowed on this particular entity.
+
+    The view decorator checks what the user's *role* allows. On an entity a firm
+    reaches through an engagement that is not enough: the engagement caps it.
+    Call this once the view has the object in hand — after the scoped lookup has
+    already turned anything out of reach into a 404 — so an entity the user can
+    see but was not engaged to change is a 403 naming the missing permission.
+    """
+    scope = getattr(request, "access_scope", None)
+    if scope is None:
+        raise PermissionDenied(code, "No access scope is bound to this request.")
+    if scope.bypass:
+        return
+    if code not in scope.permissions_for(entity_id):
+        raise PermissionDenied(code)
 
 
 def _enforce_step_up(request: HttpRequest, codes: Iterable[str]) -> None:

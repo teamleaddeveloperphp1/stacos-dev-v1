@@ -5,6 +5,10 @@
 
   The response targets the whole table body, not the row list, so the empty state
   it replaces disappears with it.
+
+  The type picker offers only what the entity does not already hold, and the
+  State list re-renders on every change of type (`RegistrationForm`), so a
+  per-state registration lists only the states still free.
 {% endcomment %}
 <div class="modal fade" tabindex="-1" aria-labelledby="registration-form-title" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -16,6 +20,7 @@
             hx-disabled-elt="find button[type=submit]"
             hx-indicator="#registration-form-spinner">
         {% csrf_token %}
+        {% if in_setup %}<input type="hidden" name="setup" value="1">{% endif %}
 
         <div class="modal-header">
           <h2 class="modal-title h5" id="registration-form-title">

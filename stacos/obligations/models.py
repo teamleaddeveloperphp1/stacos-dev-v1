@@ -37,12 +37,15 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from stacos.catalog.taxonomy import CUSTOM_CODE_PREFIX
 from stacos.core.ids import uuid7
 from stacos.core.models import SoftDeleteModel, TenantScopedModel
 from stacos.engine.lifecycle import OPEN_STATES, State, state_label
 from stacos.engine.types import InstanceScope
 
 __all__ = [
+    "CustomObligation",
+    "CustomObligationVersion",
     "EntityEvent",
     "MaterialisationRun",
     "ObligationEvent",
@@ -198,6 +201,7 @@ class ObligationInstance(TenantScopedModel, SoftDeleteModel):
     """One filing, for one entity, for one period, at one registration or site."""
 
     ENTITY_FIELD: ClassVar[str | None] = "entity_id"
+    CATEGORY_FIELD: ClassVar[str | None] = "category"
 
     entity = models.ForeignKey(
         "tenancy.Entity", on_delete=models.CASCADE, related_name="obligations"
@@ -458,6 +462,7 @@ class ObligationEvent(TenantScopedModel):
     """
 
     ENTITY_FIELD: ClassVar[str | None] = "entity_id"
+    CATEGORY_FIELD: ClassVar[str | None] = "obligation__category"
     #: Written by the system on behalf of whoever acted, including from a
     #: read-only engagement where the actor could not otherwise write.
     ENFORCE_WRITE_SCOPE: ClassVar[bool] = False
@@ -528,6 +533,7 @@ class ObligationStep(TenantScopedModel):
     """
 
     ENTITY_FIELD: ClassVar[str | None] = "entity_id"
+    CATEGORY_FIELD: ClassVar[str | None] = "obligation__category"
 
     class Role(models.TextChoices):
         """Which of the four maker-checker permissions gates this step.
@@ -807,6 +813,237 @@ class ObligationInclusion(TenantScopedModel):
         return self.revoked_at is None
 
 
+def is_custom_code(code: str) -> bool:
+    """Whether ``definition_code`` names an entity's own obligation rather than
+    a catalog definition. ``validatecatalog`` keeps the two namespaces apart."""
+    return code.startswith(CUSTOM_CODE_PREFIX)
+
+
+class CustomObligation(TenantScopedModel):
+    """An obligation one entity owes that the platform catalog does not know about.
+
+    A licence condition, a lender's covenant, an internal control run every
+    month. It reaches the planner as a ``DefinitionSnapshot`` exactly like a
+    catalog definition (see ``stacos.obligations.custom.custom_snapshots``), so
+    every instance it produces is an ordinary :class:`ObligationInstance` — the
+    same states, evidence, checklist, assignment and audit trail as a GSTR-3B.
+    Nothing downstream of the planner knows the difference except where it has
+    to show *who wrote the rule*.
+
+    **Split like the catalog.** What the obligation *is* — its name, what it
+    asks for, where the requirement comes from — lives here and is edited in
+    place. *When* it falls due lives in :class:`CustomObligationVersion` and is
+    never edited: a schedule change is a new version with its own window, so an
+    instance keeps pointing at the rule that dated it.
+
+    **Withdrawn, never deleted.** ``code`` is denormalised onto every instance
+    it produced and onto their suppressions, and those rows are the history.
+    """
+
+    ENTITY_FIELD: ClassVar[str | None] = "entity_id"
+    CATEGORY_FIELD: ClassVar[str | None] = "category"
+
+    entity = models.ForeignKey(
+        "tenancy.Entity", on_delete=models.CASCADE, related_name="custom_obligations"
+    )
+    #: ``CUSTOM-<hex of the primary key>``. The handle ``ObligationInstance``,
+    #: ``ObligationSuppression`` and ``ObligationInclusion`` all key on.
+    code = models.SlugField(max_length=64, unique=True, editable=False)
+
+    title = models.CharField(max_length=200)
+    #: What has to be done, in the words of whoever owes it. Shown where a
+    #: catalog obligation shows its plain-language summary.
+    description = models.TextField(blank=True)
+    #: Where the requirement comes from — "Facility agreement cl. 14.2",
+    #: "Factory licence condition 7". The custom obligation's statutory reference.
+    source_reference = models.CharField(max_length=250, blank=True)
+    #: What a miss costs, in prose. Shown in the "If this is missed" card.
+    consequence = models.CharField(max_length=250, blank=True)
+    #: A ``tenancy.ComplianceCategory`` value, and an access boundary: a
+    #: department user limited to safety and fire sees a safety obligation and
+    #: nothing else, whoever wrote it.
+    category = models.CharField(max_length=32, db_index=True)
+
+    #: What closing an instance needs on file. Plain labels; see
+    #: :attr:`evidence_requirements` for the shape the register reads.
+    evidence_labels = ArrayField(models.CharField(max_length=200), default=list, blank=True)
+    #: Whether an instance may be completed without the proof attached.
+    evidence_mandatory = models.BooleanField(default=False)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    withdraw_reason = models.TextField(blank=True)
+    withdrawn_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["entity", "title"]
+        indexes = [
+            models.Index(fields=["entity", "withdrawn_at"], name="customobl_entity_live_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return self.title
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if not self.code:
+            self.code = f"{CUSTOM_CODE_PREFIX}{self.pk.hex.upper()}"
+        super().save(*args, **kwargs)
+
+    @property
+    def is_withdrawn(self) -> bool:
+        return self.withdrawn_at is not None
+
+    @property
+    def category_label(self) -> str:
+        from stacos.tenancy.models import ComplianceCategory
+
+        try:
+            return str(ComplianceCategory(self.category).label)
+        except ValueError:
+            return self.category
+
+    @property
+    def evidence_requirements(self) -> list[dict[str, Any]]:
+        """The labels, in the shape ``DefinitionVersion.evidence_requirements`` has.
+
+        So the evidence card, the completion modal and the guard in
+        ``transitions.outstanding_mandatory_evidence`` read one shape whoever
+        wrote the rule.
+        """
+        return [
+            {"key": f"item-{index}", "label": label, "mandatory_for_close": self.evidence_mandatory}
+            for index, label in enumerate(self.evidence_labels, start=1)
+            if label
+        ]
+
+
+class CustomObligationVersion(TenantScopedModel):
+    """When a custom obligation falls due, for one window of periods.
+
+    Append-only in the way ``DefinitionVersion`` is. A schedule change never
+    rewrites a row: it closes the current version's window and opens a new one,
+    so the periods that ended before the change keep the rule they were created
+    under and the ones after follow the new one. The planner receives every
+    version with a non-empty window, and ``DefinitionSnapshot.is_effective_for``
+    does the rest.
+
+    The schedule is stored as the answers to the form, not as a ``due_rule``,
+    because those answers are what an edit has to show back; :attr:`due_rule`
+    derives the engine's shape from them, so there is one source of truth.
+    """
+
+    ENTITY_FIELD: ClassVar[str | None] = "entity_id"
+    CATEGORY_FIELD: ClassVar[str | None] = "obligation__category"
+
+    #: Read by templates that render a catalog ``DefinitionVersion`` or one of
+    #: these interchangeably: "what the law says" versus "what you wrote".
+    is_custom: ClassVar[bool] = True
+
+    class DueMode(models.TextChoices):
+        DAYS_AFTER_PERIOD = "DAYS_AFTER_PERIOD", _("A number of days after the period ends")
+        DAY_OF_NEXT_MONTH = "DAY_OF_NEXT_MONTH", _("On a day of the month after the period ends")
+
+    class PeriodAnchor(models.TextChoices):
+        FY = "FY", _("Financial year")
+        CALENDAR = "CALENDAR", _("Calendar year")
+
+    obligation = models.ForeignKey(
+        CustomObligation, on_delete=models.CASCADE, related_name="versions"
+    )
+    entity = models.ForeignKey("tenancy.Entity", on_delete=models.CASCADE, related_name="+")
+    version = models.PositiveIntegerField()
+
+    periodicity = models.CharField(max_length=16)
+    period_anchor = models.CharField(
+        max_length=10, choices=PeriodAnchor.choices, default=PeriodAnchor.FY
+    )
+    due_mode = models.CharField(max_length=20, choices=DueMode.choices)
+    #: For DAYS_AFTER_PERIOD. Zero is "on the last day of the period".
+    due_days = models.PositiveSmallIntegerField(default=0)
+    #: For DAY_OF_NEXT_MONTH. Clamped to the month's length by the engine, so 31
+    #: reads as "the last day".
+    due_day_of_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    #: A private deadline is usually a working-day one, unlike a statutory
+    #: filing date — which is why this is a choice here and fixed at NONE there.
+    shift_to_working_day = models.BooleanField(default=False)
+
+    #: Periods ending on or after this date follow this version.
+    effective_from = models.DateField()
+    #: Periods *starting* after this date do not. Set when a later version takes
+    #: over, to the day before the period in progress on its first day began —
+    #: see ``stacos.obligations.custom.change_schedule``. May sit before
+    #: ``effective_from`` when the successor took over before this version ever
+    #: governed a period; such a version produces nothing and is kept as record.
+    effective_to = models.DateField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["obligation", "-version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["obligation", "version"], name="customoblversion_identity_uniq"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.obligation_id} v{self.version}"
+
+    @property
+    def due_rule(self) -> dict[str, Any]:
+        """The schedule in the engine's own ``due_rule`` vocabulary."""
+        if self.due_mode == self.DueMode.DAY_OF_NEXT_MONTH:
+            offset: dict[str, int] = {"months": 1, "day_of_month": int(self.due_day_of_month or 1)}
+        else:
+            offset = {"days": int(self.due_days)}
+        return {
+            "anchor": "PERIOD_END",
+            "offset": offset,
+            "shift_if_holiday": "NEXT_WORKING_DAY" if self.shift_to_working_day else "NONE",
+        }
+
+    @property
+    def governs_anything(self) -> bool:
+        return self.effective_to is None or self.effective_to >= self.effective_from
+
+    # -- The attributes templates read off a catalog ``DefinitionVersion`` ----
+
+    @property
+    def title(self) -> str:
+        return self.obligation.title
+
+    @property
+    def plain_language_summary(self) -> str:
+        return self.obligation.description
+
+    @property
+    def statutory_reference(self) -> str:
+        return self.obligation.source_reference
+
+    @property
+    def penalty_summary(self) -> str:
+        return self.obligation.consequence
+
+    @property
+    def evidence_requirements(self) -> list[dict[str, Any]]:
+        return self.obligation.evidence_requirements
+
+    #: A person wrote this rule for their own entity; there is no statute to
+    #: compute a penalty from, no editorial review to go stale, and no named
+    #: checklist beyond the generic one.
+    penalty_rules: ClassVar[list[dict[str, Any]]] = []
+    workflow_steps: ClassVar[list[dict[str, Any]]] = []
+    review_is_stale: ClassVar[bool] = False
+    is_provisional: ClassVar[bool] = False
+
+
 class MaterialisationRun(TenantScopedModel):
     """One application of a materialisation plan.
 
@@ -828,6 +1065,8 @@ class MaterialisationRun(TenantScopedModel):
         #: An event was recorded, corrected or withdrawn. Distinct from MANUAL so
         #: that "why did a DIR-12 appear on Tuesday" is answerable from the run log.
         EVENT_RECORDED = "EVENT_RECORDED", _("Entity event recorded")
+        #: A user-defined obligation was added, rescheduled or withdrawn.
+        CUSTOM_OBLIGATION = "CUSTOM_OBLIGATION", _("Own obligation changed")
 
     entity = models.ForeignKey(
         "tenancy.Entity", on_delete=models.CASCADE, related_name="materialisation_runs"

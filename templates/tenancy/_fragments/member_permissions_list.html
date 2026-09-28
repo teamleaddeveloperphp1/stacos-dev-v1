@@ -1,0 +1,53 @@
+{% load i18n %}
+{% comment %}
+  The permission checklist rows, shared by the editable form on another member's
+  page and the read-only view of your own. `only_fields` renders just the
+  fieldsets, for inclusion inside the editing form; otherwise this renders its
+  own card with every box disabled.
+{% endcomment %}
+{% if not only_fields %}
+<section class="card" aria-labelledby="my-permissions-heading">
+  <div class="card__header">
+    <h2 class="card__title" id="my-permissions-heading">{% translate "Permissions" %}</h2>
+    {% if customised %}
+      <span class="badge-soft badge-soft--attention">{% translate "Customised from the role" %}</span>
+    {% endif %}
+  </div>
+  <p class="text-muted small">
+    {% blocktranslate with role=membership.role.name %}Ticked boxes are what you can do, as {{ role }}.{% endblocktranslate %}
+  </p>
+{% endif %}
+        {% for group in permission_groups %}
+          <fieldset class="mb-3">
+            <legend class="card__title card__title--section">{{ group.category }}</legend>
+            {% for row in group.rows %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="permissions"
+                       value="{{ row.code }}" id="perm-{{ row.code|slugify }}"
+                       {% if row.held %}checked{% endif %}
+                       {% if row.locked or readonly %}disabled{% endif %}
+                       aria-describedby="perm-{{ row.code|slugify }}-hint">
+                <label class="form-check-label" for="perm-{{ row.code|slugify }}">
+                  {{ row.label }}
+                  {% if row.origin == "role" %}
+                    <span class="badge-soft">{% translate "From role" %}</span>
+                  {% elif row.origin == "added" %}
+                    <span class="badge-soft badge-soft--action">{% translate "Added" %}</span>
+                  {% elif row.origin == "removed" %}
+                    <span class="badge-soft badge-soft--danger">{% translate "Removed from role" %}</span>
+                  {% endif %}
+                  {% if row.sensitive %}
+                    <span class="badge-soft">{% translate "Asks to re-confirm identity" %}</span>
+                  {% endif %}
+                </label>
+                <div class="form-text" id="perm-{{ row.code|slugify }}-hint">
+                  {% if row.role_only %}{% translate "Comes only with the Owner or Partner role — it can't be given or taken one person at a time." %}{% elif row.locked %}{% translate "You don't hold this yourself, so you can't change it." %}{% endif %}
+                  {{ row.description }}
+                </div>
+              </div>
+            {% endfor %}
+          </fieldset>
+        {% endfor %}
+{% if not only_fields %}
+</section>
+{% endif %}

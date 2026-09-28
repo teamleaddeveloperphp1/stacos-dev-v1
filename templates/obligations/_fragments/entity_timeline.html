@@ -24,6 +24,9 @@
         <div>
           {% if event.kind == "TRANSITION" %}
             {{ event.context.label|default:event.get_kind_display }}
+            {% if event.context.completed_without_review %}
+              <span class="badge-soft badge-soft--attention">{% translate "Completed without review" %}</span>
+            {% endif %}
           {% else %}
             {{ event.get_kind_display }}
           {% endif %}

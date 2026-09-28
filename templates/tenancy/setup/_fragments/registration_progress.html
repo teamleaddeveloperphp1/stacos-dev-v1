@@ -1,0 +1,29 @@
+{% load i18n %}
+{% comment %}
+  What the pack expects this entity type to hold and it has not recorded yet,
+  or, once nothing is left, a plain "all recorded" — see
+  `stacos.tenancy.registration_gaps`. Renders nothing when the pack names no
+  list for this entity type, since there is then nothing to be finished with.
+
+  The inside of `#registration-progress` only: that element carries the
+  `aria-live`, and `registration_create` swaps this in with `innerHTML` so the
+  attribute survives the swap.
+{% endcomment %}
+{% if gaps.has_checklist %}
+  <div class="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom small">
+    {% if gaps.is_complete %}
+      <c-status-chip status="complete" label="{% translate 'All recorded' %}" />
+      <span class="text-muted">
+        {% translate "Every registration this type of entity holds is recorded." %}
+        {% if gaps.available %}
+          {% translate "State-issued ones can still be added for other states." %}
+        {% endif %}
+      </span>
+    {% else %}
+      <c-status-chip status="not-started" label="{% translate 'Still to record' %}" />
+      <span>
+        {% for requirement in gaps.outstanding %}{{ requirement.code }}{% if requirement.is_mandatory %} <span class="text-muted">({% translate "required" %})</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+      </span>
+    {% endif %}
+  </div>
+{% endif %}

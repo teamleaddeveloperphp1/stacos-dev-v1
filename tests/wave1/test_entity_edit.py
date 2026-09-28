@@ -66,7 +66,7 @@ def _payload(entity: Entity, **overrides: str) -> dict[str, str]:
         "incorporation_date": incorporated.isoformat() if incorporated else "",
         "registered_office_state": entity.registered_office_state or "",
         "registered_office_address": entity.registered_office_address or "",
-        "aggregate_turnover": "50000000.00",
+        "aggregate_turnover": "5",
         "employee_count": "25",
     }
     with platform_scope(reason="test-payload"):

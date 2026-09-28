@@ -161,7 +161,7 @@ def _base_payload(**overrides: str) -> dict[str, str]:
         "incorporation_date": "2018-07-02",
         "registered_office_state": "IN-GJ",
         "registered_office_address": "22 Ring Road, Surat",
-        "aggregate_turnover": "1000000.00",
+        "aggregate_turnover": "0.1",
         "employee_count": "5",
     }
     data.update(overrides)
@@ -214,7 +214,7 @@ def test_creating_an_entity_saves_registrations_and_profile(signed_in: Client) -
         _base_payload(
             entity_type="LLP",
             reg_LLPIN="AAB-1234",
-            aggregate_turnover="2500000.00",
+            aggregate_turnover="0.25",
             employee_count="12",
         ),
         headers=HTMX,

@@ -45,6 +45,7 @@ from stacos.catalog.snapshots import (
 )
 from stacos.core.audit import record_event
 from stacos.core.models import AuditAction
+from stacos.core.scope import across_all_categories
 from stacos.engine.planner import (
     EntityProfileView,
     ExistingInstance,
@@ -52,7 +53,7 @@ from stacos.engine.planner import (
     PlannedInstance,
 )
 from stacos.engine.planner import plan as run_planner
-from stacos.engine.types import Identity
+from stacos.engine.types import DefinitionSnapshot, Identity
 from stacos.jurisdictions.models import JurisdictionPack
 from stacos.obligations.models import (
     MaterialisationRun,
@@ -117,6 +118,11 @@ class MaterialisationPreview:
 # ---------------------------------------------------------------------------
 
 
+# The planner compares what should exist with what does. Run with a category-
+# limited user's scope it would see only their areas' obligations, conclude the
+# rest were missing, and plan them a second time — so both halves always see the
+# whole entity. Tenant and entity limits still apply.
+@across_all_categories
 def preview(
     entity: Entity,
     *,
@@ -130,6 +136,8 @@ def preview(
     which is what makes this affordable to run synchronously on a profile edit and
     show as a diff.
     """
+    from stacos.obligations.custom import custom_snapshots, removal_reasons
+
     return preview_for_profile(
         build_profile_view(entity, as_of=as_of),
         country=entity.country,
@@ -139,6 +147,8 @@ def preview(
         existing=_existing_instances(entity),
         suppressed=_suppressed_identities(entity),
         opted_in=_opted_in_codes(entity),
+        custom=custom_snapshots(entity),
+        removal_reasons=removal_reasons(entity),
     )
 
 
@@ -152,6 +162,8 @@ def preview_for_profile(
     existing: Sequence[ExistingInstance] = (),
     suppressed: frozenset[Identity] = frozenset(),
     opted_in: frozenset[str] = frozenset(),
+    custom: Sequence[DefinitionSnapshot] = (),
+    removal_reasons: dict[str, str] | None = None,
 ) -> MaterialisationPreview:
     """The same computation, against a profile rather than a saved entity.
 
@@ -162,15 +174,24 @@ def preview_for_profile(
 
     :func:`preview` is now a thin wrapper that assembles the entity's own inputs
     and calls this.
+
+    :param custom: the entity's own obligations (``stacos.obligations.custom``),
+        planned beside the catalog as the definitions they are. Added *after*
+        the cached catalog is fetched, never into it — the cache is shared by
+        every tenant in the country — and *before* the fingerprint, so an edit
+        to one between preview and apply is caught like a catalog publication.
     """
     started = time.perf_counter()
 
     horizon_start = horizon_start or (as_of - timedelta(days=HORIZON_LOOKBACK_DAYS))
     horizon_end = horizon_end or _add_months(as_of, HORIZON_MONTHS)
 
-    catalog = build_catalog(
-        country=country,
-        jurisdictions=profile_view.jurisdictions,
+    catalog = (
+        *build_catalog(
+            country=country,
+            jurisdictions=profile_view.jurisdictions,
+        ),
+        *custom,
     )
     fingerprint = catalog_fingerprint(catalog)
 
@@ -204,6 +225,7 @@ def preview_for_profile(
         existing=existing,
         suppressed=suppressed,
         opted_in=opted_in,
+        removal_reasons=removal_reasons,
         as_of=as_of,
     )
 
@@ -248,6 +270,7 @@ def _existing_instances(entity: Entity) -> list[ExistingInstance]:
             "confirmed",
             "missing_facts",
             "archived_at",
+            "superseded_at",
             "event_count",
         )
     )
@@ -272,6 +295,7 @@ def _existing_instances(entity: Entity) -> list[ExistingInstance]:
             has_evidence=False,
             has_history=row["event_count"] > 0,
             archived=row["archived_at"] is not None,
+            superseded=row["superseded_at"] is not None,
         )
         for row in rows
     ]
@@ -324,6 +348,7 @@ def _opted_in_codes(entity: Entity) -> frozenset[str]:
 # ---------------------------------------------------------------------------
 
 
+@across_all_categories
 @transaction.atomic
 def apply_plan(
     entity: Entity,

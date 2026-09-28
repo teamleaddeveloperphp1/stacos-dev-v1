@@ -6,12 +6,27 @@
 {% endcomment %}
 <tr id="library-row-{{ row.code }}">
   <td>
-    <div class="d-flex align-items-center flex-wrap gap-2">
-      <a class="link-strong" href="{% url 'compliance:definition' row.code %}"
-         hx-get="{% url 'compliance:definition' row.code %}"
-         hx-target="#main" hx-push-url="true">{{ row.title }}</a>
-    </div>
-    <div class="text-muted small">{{ row.code }}{% if row.family %} · {{ row.family }}{% endif %}</div>
+    {% if row.is_custom %}
+      {% comment %}
+        The entity's own obligation. Its code is an internal handle nobody
+        chose, so the line under the title says who wrote it, when it falls
+        due and where the requirement comes from instead.
+      {% endcomment %}
+      <div class="d-flex align-items-center flex-wrap gap-2">
+        <a class="link-strong" href="{% url 'compliance:custom_detail' entity.pk row.custom_pk %}"
+           hx-get="{% url 'compliance:custom_detail' entity.pk row.custom_pk %}"
+           hx-target="#main" hx-push-url="true">{{ row.title }}</a>
+        <span class="badge-soft">{% translate "Your own" %}</span>
+      </div>
+      <div class="text-muted small">{{ row.schedule }}{% if row.source_reference %} · {{ row.source_reference }}{% endif %}</div>
+    {% else %}
+      <div class="d-flex align-items-center flex-wrap gap-2">
+        <a class="link-strong" href="{% url 'compliance:definition' row.code %}"
+           hx-get="{% url 'compliance:definition' row.code %}"
+           hx-target="#main" hx-push-url="true">{{ row.title }}</a>
+      </div>
+      <div class="text-muted small">{{ row.code }}{% if row.family %} · {{ row.family }}{% endif %}</div>
+    {% endif %}
   </td>
   <td>
     {% if row.state == "added" and row.occurrence %}
@@ -23,6 +38,10 @@
                        :notification="row.occurrence.applied_extension_reference" />
         </div>
       {% endif %}
+    {% elif row.state == "removed" and row.is_custom %}
+      <c-status-chip status="na" label="{% translate 'Withdrawn' %}" />
+    {% elif row.state == "added" and row.is_custom %}
+      <c-status-chip status="na" label="{% translate 'Nothing due yet' %}" />
     {% elif row.state == "removed" %}
       <c-status-chip status="na" label="{% translate 'Removed' %}" />
     {% elif row.blocked_reason %}
@@ -35,7 +54,15 @@
   </td>
   <td class="text-end">
     {% if can_manage %}
-      {% if row.state == "added" %}
+      {% if row.is_custom %}
+        {% if row.state == "added" %}
+          <button type="button" class="btn btn-sm btn-outline-secondary library-action-btn"
+                  hx-get="{% url 'compliance:custom_edit' entity.pk row.custom_pk %}"
+                  hx-target="#modal-container" hx-swap="innerHTML">
+            {% translate "Edit" %}
+          </button>
+        {% endif %}
+      {% elif row.state == "added" %}
         <button type="button" class="btn btn-sm btn-outline-secondary library-action-btn"
                 hx-get="{% url 'compliance:library_remove' entity.pk row.code %}"
                 hx-target="#modal-container" hx-swap="innerHTML">

@@ -4,8 +4,11 @@
   updates. Counts come from one conditional aggregation rather than several
   `.count()` calls, so the tiles can never disagree with each other — and,
   since `status_counts` now takes the toolbar's own search/category/entity
-  filters, typing "gst" or picking an entity narrows every tile to match, not
-  just the table underneath them.
+  filters and "Due within" window, typing "gst" or picking an entity narrows
+  every tile to match, not just the table underneath them. Each tile's link
+  carries those same filters (`tile_query`) — a tile that counted under the
+  user's window but linked to the default one would promise a number its own
+  click does not deliver.
 
   `aria-live` matters here: an HTMX swap is invisible to a screen reader
   otherwise, and "three overdue became two" is exactly the change a user needs
@@ -24,8 +27,8 @@
     {% if scope_description %}<span class="stat-tile__sub">{{ scope_description }}</span>{% endif %}
   </div>
 
-  <a class="stat-tile stat-tile--overdue" href="?status=overdue"
-     hx-get="?status=overdue" hx-target="#main" hx-push-url="true">
+  <a class="stat-tile stat-tile--overdue" href="?status=overdue{{ tile_query }}"
+     hx-get="?status=overdue{{ tile_query }}" hx-target="#main" hx-push-url="true">
     <span class="stat-tile__value">{{ counts.overdue }}</span>
     <span class="stat-tile__label">{% translate "Overdue" %}</span>
   </a>
@@ -34,33 +37,33 @@
     a same-day emergency, not a heads-up — it reads closer to "about to be
     overdue" than to "due sometime this week".
   {% endcomment %}
-  <a class="stat-tile stat-tile--overdue" href="?status=due_soon#today"
-     hx-get="?status=due_soon" hx-target="#main" hx-push-url="true"
+  <a class="stat-tile stat-tile--overdue" href="?status=due_soon{{ tile_query }}#today"
+     hx-get="?status=due_soon{{ tile_query }}" hx-target="#main" hx-push-url="true"
      title="{% translate 'Due today, part of the 7-day window below' %}">
     <span class="stat-tile__value">{{ counts.due_today }}</span>
     <span class="stat-tile__label">{% translate "Due today" %}</span>
   </a>
-  <a class="stat-tile stat-tile--due-soon" href="?status=due_soon"
-     hx-get="?status=due_soon" hx-target="#main" hx-push-url="true">
+  <a class="stat-tile stat-tile--due-soon" href="?status=due_soon{{ tile_query }}"
+     hx-get="?status=due_soon{{ tile_query }}" hx-target="#main" hx-push-url="true">
     <span class="stat-tile__value">{{ counts.due_soon }}</span>
     <span class="stat-tile__label">{% translate "Due in 7 days" %}</span>
   </a>
-  <a class="stat-tile" href="?status="
-     hx-get="?status=" hx-target="#main" hx-push-url="true"
-     title="{% translate 'The full open register, regardless of due date' %}">
+  <a class="stat-tile" href="?status={{ tile_query }}"
+     hx-get="?status={{ tile_query }}" hx-target="#main" hx-push-url="true"
+     title="{% translate 'Every open obligation inside the Due within window' %}">
     <span class="stat-tile__value">{{ counts.open }}</span>
     <span class="stat-tile__label">{% translate "All open" %}</span>
   </a>
   {% if counts.unconfirmed %}
-    <a class="stat-tile stat-tile--attention" href="?status=unconfirmed"
-       hx-get="?status=unconfirmed" hx-target="#main" hx-push-url="true">
+    <a class="stat-tile stat-tile--attention" href="?status=unconfirmed{{ tile_query }}"
+       hx-get="?status=unconfirmed{{ tile_query }}" hx-target="#main" hx-push-url="true">
       <span class="stat-tile__value">{{ counts.unconfirmed }}</span>
       <span class="stat-tile__label">{% translate "Needs confirming" %}</span>
     </a>
   {% endif %}
   {% if counts.needs_input %}
-    <a class="stat-tile stat-tile--attention" href="?status=needs_input"
-       hx-get="?status=needs_input" hx-target="#main" hx-push-url="true">
+    <a class="stat-tile stat-tile--attention" href="?status=needs_input{{ tile_query }}"
+       hx-get="?status=needs_input{{ tile_query }}" hx-target="#main" hx-push-url="true">
       <span class="stat-tile__value">{{ counts.needs_input }}</span>
       <span class="stat-tile__label">{% translate "Waiting on a date" %}</span>
     </a>
@@ -70,8 +73,8 @@
     only — it says "this is the calm one", not "this one is inert" — and the
     completed filter has always been supported by the view.
   {% endcomment %}
-  <a class="stat-tile stat-tile--quiet" href="?status=completed"
-     hx-get="?status=completed" hx-target="#main" hx-push-url="true">
+  <a class="stat-tile stat-tile--quiet" href="?status=completed{{ tile_query }}"
+     hx-get="?status=completed{{ tile_query }}" hx-target="#main" hx-push-url="true">
     <span class="stat-tile__value">{{ counts.completed }}</span>
     <span class="stat-tile__label">{% translate "Completed" %}</span>
   </a>

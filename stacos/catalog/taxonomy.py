@@ -144,3 +144,11 @@ def unknown_tags(tags: list[str]) -> list[str]:
 
 def unknown_sector_tags(tags: list[str]) -> list[str]:
     return [tag for tag in tags if tag not in SECTOR_TAGS]
+
+
+#: Reserved for obligations an entity writes for itself
+#: (``stacos.obligations.models.CustomObligation``). They share
+#: ``ObligationInstance.definition_code`` with the catalog, so a catalog code
+#: beginning with this would be read as someone's private rule — and
+#: ``validatecatalog`` refuses one.
+CUSTOM_CODE_PREFIX = "CUSTOM-"

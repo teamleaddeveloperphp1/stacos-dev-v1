@@ -2,6 +2,13 @@
 
 <c-page-header title="{% translate 'Compliance library' %}"
                subtitle="{{ entity.name }}">
+  {% if can_manage %}
+    <button type="button" class="btn btn-sm btn-primary"
+            hx-get="{% url 'compliance:custom_create' entity.pk %}"
+            hx-target="#modal-container" hx-swap="innerHTML">
+      <c-icon name="plus" size="14" /> {% translate "Add your own" %}
+    </button>
+  {% endif %}
   <a class="btn btn-sm btn-outline-secondary" href="{% url 'compliance:library_picker' %}"
      hx-get="{% url 'compliance:library_picker' %}" hx-target="#main" hx-push-url="true">
     {% translate "Change entity" %}
@@ -25,9 +32,13 @@
     <span class="stat-tile__value">{{ totals.not_added }}</span>
     <span class="stat-tile__label">{% translate "Not added yet" %}</span>
   </a>
+  <a class="stat-tile stat-tile--quiet" href="?origin=custom" hx-get="?origin=custom" hx-target="#main" hx-push-url="true">
+    <span class="stat-tile__value">{{ totals.custom }}</span>
+    <span class="stat-tile__label">{% translate "Your own" %}</span>
+  </a>
   <a class="stat-tile stat-tile--quiet" href="?" hx-get="?" hx-target="#main" hx-push-url="true">
     <span class="stat-tile__value">{{ totals.total }}</span>
-    <span class="stat-tile__label">{% translate "In the catalog" %}</span>
+    <span class="stat-tile__label">{% translate "In the library" %}</span>
   </a>
 </div>
 
@@ -63,6 +74,13 @@
         <option value="">{% translate "Every category" %}</option>
         {% for value, label in categories %}
           <option value="{{ value }}" {% if category == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+
+      <select name="origin" class="form-select form-select-sm" style="max-width: 14rem"
+              aria-label="{% translate 'Filter by who wrote it' %}">
+        {% for value, label in origin_filters %}
+          <option value="{{ value }}" {% if origin == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
 

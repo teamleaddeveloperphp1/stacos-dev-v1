@@ -139,8 +139,26 @@ def _detail_context(request: HttpRequest, item: WorkItem) -> dict[str, Any]:
         "time_form": TimeEntryForm(),
         "states": WorkItemState.choices,
         "can_manage": "practice.work.manage" in permissions,
+        "can_move": _may_move(request, item, permissions),
         "can_log": "practice.time.log" in permissions,
     }
+
+
+def _may_move(request: HttpRequest, item: WorkItem, permissions: frozenset[str]) -> bool:
+    """Whether this user may move ``item`` between columns.
+
+    Anyone who manages the board may move any card. Somebody who only progresses
+    their own work may move the cards assigned to them — an article clerk
+    finishing a job is not the same authority as deciding who does it.
+    """
+    if "practice.work.manage" in permissions:
+        return True
+    user_id = getattr(current_user(request), "pk", None)
+    return (
+        "practice.work.progress" in permissions
+        and item.assigned_to_id is not None
+        and item.assigned_to_id == user_id
+    )
 
 
 @require_permission("practice.work.manage")
@@ -168,11 +186,18 @@ def work_create(request: HttpRequest) -> HttpResponse:
     )
 
 
-@require_permission("practice.work.manage")
+@require_permission("practice.work.progress")
 @require_http_methods(["POST"])
 def work_move(request: HttpRequest, pk: str) -> HttpResponse:
-    """Move a card between columns."""
+    """Move a card between columns — any card, or only your own; see :func:`_may_move`."""
     item = _get(pk)
+    if not _may_move(request, item, _permissions(request)):
+        return _panel(
+            request,
+            item,
+            error=_("Only the person this is assigned to, or a manager, can move it."),
+            status=403,
+        )
     target = request.POST.get("state", "")
     if target not in WorkItemState.values:
         return _panel(request, item, error=_("That is not a column."), status=422)

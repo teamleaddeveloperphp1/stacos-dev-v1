@@ -27,6 +27,7 @@ from django.db import transaction
 
 from stacos.accounts.models import User
 from stacos.core.scope import platform_scope, tenant_context
+from stacos.engagements.grants import PREPARE_REVIEW_AND_FILE
 from stacos.engagements.models import Engagement
 from stacos.jurisdictions.models import JurisdictionPack
 from stacos.tenancy.models import (
@@ -39,6 +40,7 @@ from stacos.tenancy.models import (
     Role,
     Tenant,
 )
+from stacos.tenancy.system_roles import system_role
 
 PASSWORD = "stacos-dev-password"  # noqa: S105 - development fixture only
 
@@ -79,7 +81,10 @@ class Command(BaseCommand):
   Sign in at http://localhost:8000/auth/login/
 
     priya@vaibhav-textiles.example    {PASSWORD}   Owner, Vaibhav Textiles
+    ramesh@vaibhav-textiles.example   {PASSWORD}   Compliance Manager
+    hitesh@vaibhav-textiles.example   {PASSWORD}   Department User (safety, labour, licences; no amounts)
     anand@sharma-associates.example   {PASSWORD}   Partner, Sharma & Associates
+    nikhil@sharma-associates.example  {PASSWORD}   Staff
 
   With WHATSAPP_PROVIDER=console the verification codes are printed to this terminal.
 """
@@ -144,11 +149,32 @@ class Command(BaseCommand):
         people = [
             (org, "org-owner", "priya@vaibhav-textiles.example", "Priya Vaibhav", "+919812340001"),
             (
+                org,
+                "org-compliance-manager",
+                "ramesh@vaibhav-textiles.example",
+                "Ramesh Patel",
+                "+919812340002",
+            ),
+            (
+                org,
+                "org-department-user",
+                "hitesh@vaibhav-textiles.example",
+                "Hitesh Shah",
+                "+919812340003",
+            ),
+            (
                 practice,
                 "practice-partner",
                 "anand@sharma-associates.example",
                 "Anand Sharma",
                 "+919812340011",
+            ),
+            (
+                practice,
+                "practice-staff",
+                "nikhil@sharma-associates.example",
+                "Nikhil Rao",
+                "+919812340012",
             ),
         ]
 
@@ -179,10 +205,17 @@ class Command(BaseCommand):
                 user.set_password(PASSWORD)
                 user.save()
 
+            spec = system_role(role_code)
             Membership.objects.get_or_create(
                 tenant=tenant,
                 user=user,
-                defaults={"role": role, "status": Membership.Status.ACTIVE},
+                defaults={
+                    "role": role,
+                    "status": Membership.Status.ACTIVE,
+                    # The role's starting reach, as an invitation would give it:
+                    # the department user sees their own areas and nothing else.
+                    "categories": list(spec.default_categories) if spec else [],
+                },
             )
             self.stdout.write(f"    {email:<36} {role.name}")
 
@@ -342,13 +375,9 @@ class Command(BaseCommand):
                         ComplianceCategory.TAX_DIRECT,
                         ComplianceCategory.CORPORATE_SECRETARIAL,
                     ],
-                    "permissions": [
-                        "tenancy.entity.view",
-                        "tenancy.profile.view",
-                        "tenancy.profile.edit",
-                        "tenancy.registration.view",
-                        "core.search",
-                    ],
+                    # Prepare, review and file — not skip review, reopen or
+                    # rule obligations out. The engagement caps the firm's roles.
+                    "permissions": sorted(PREPARE_REVIEW_AND_FILE),
                     "starts_on": date(2024, 4, 1),
                     "engagement_letter_ref": "SA/2024/VTPL/01",
                 },

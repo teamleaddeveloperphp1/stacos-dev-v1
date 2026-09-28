@@ -204,24 +204,29 @@ def test_practice_cannot_read_the_clients_user_list(
     assert not Membership.objects.filter(tenant=org).exists()
 
 
-def test_engagement_scope_is_limited_to_its_categories(in_practice: Any) -> None:
+def test_engagement_scope_is_limited_to_its_categories(
+    in_practice: Any, engagement: Engagement
+) -> None:
+    """The engagement's category limit applies to the entity it covers."""
     scope = in_practice
-    assert scope.categories is not None
-    assert "TAX_INDIRECT" in scope.categories
-    assert "LABOUR" not in scope.categories, "labour was never part of this engagement"
+    limited = scope.entity_categories.get(engagement.entity_id)
+    assert limited is not None
+    assert "TAX_INDIRECT" in limited
+    assert "LABOUR" not in limited, "labour was never part of this engagement"
 
 
 def test_practice_permissions_come_from_the_engagement_not_its_own_role(
-    in_practice: Any,
+    in_practice: Any, engagement: Engagement
 ) -> None:
     """A firm cannot grant itself more access to a client than the client agreed.
 
-    The engagement is the ceiling.
+    The engagement is the ceiling on the client's entity, whatever the role says.
     """
     scope = in_practice
-    assert scope.has_permission("tenancy.profile.view")
-    assert not scope.has_permission("tenancy.registration.manage")
-    assert not scope.has_permission("tenancy.entity.create")
+    on_client = scope.permissions_for(engagement.entity_id)
+    assert "tenancy.profile.view" in on_client
+    assert "tenancy.registration.manage" not in on_client
+    assert "tenancy.entity.create" not in on_client
 
 
 def test_ending_an_engagement_removes_access_immediately(

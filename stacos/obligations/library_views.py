@@ -16,20 +16,31 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import date
-from typing import Protocol
+from typing import Any, Protocol
 
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
 from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob
-from stacos.core.permissions import require_permission
+from stacos.core.permissions import require_entity_permission, require_permission
 from stacos.core.typing import current_user
+from stacos.obligations.custom import (
+    CustomObligationError,
+    create_custom_obligation,
+    current_version,
+    schedule_summary,
+    update_custom_obligation,
+    withdraw_custom_obligation,
+)
 from stacos.obligations.forms import (
+    LIBRARY_ORIGIN_FILTERS,
     LIBRARY_PROGRESS_FILTERS,
     LIBRARY_STATE_FILTERS,
+    CustomObligationForm,
     LibraryReasonForm,
 )
 from stacos.obligations.library import (
@@ -40,6 +51,8 @@ from stacos.obligations.library import (
     remove_definition,
     restore_definition,
 )
+from stacos.obligations.models import CustomObligation, ObligationInstance
+from stacos.obligations.queries import annotate_status
 from stacos.tenancy.models import ComplianceCategory, Entity
 
 VIEW = "compliance.library.view"
@@ -107,6 +120,7 @@ def _totals(rows: tuple[LibraryRow, ...]) -> dict[str, int]:
         "added": sum(1 for row in rows if row.state == "added"),
         "removed": sum(1 for row in rows if row.state == "removed"),
         "not_added": sum(1 for row in rows if row.state == "not_added"),
+        "custom": sum(1 for row in rows if row.is_custom),
     }
 
 
@@ -114,9 +128,12 @@ def _filtered(rows: tuple[LibraryRow, ...], *, request: HttpRequest) -> list[Lib
     state = request.GET.get("state", "").strip()
     progress = request.GET.get("progress", "").strip()
     category = request.GET.get("category", "").strip()
+    origin = request.GET.get("origin", "").strip()
     search = request.GET.get("q", "").strip().lower()
 
     filtered = list(rows)
+    if origin:
+        filtered = [row for row in filtered if row.origin == origin]
     if state:
         filtered = [row for row in filtered if row.state == state]
     if progress:
@@ -130,7 +147,11 @@ def _filtered(rows: tuple[LibraryRow, ...], *, request: HttpRequest) -> list[Lib
         filtered = [row for row in filtered if row.category == category]
     if search:
         filtered = [
-            row for row in filtered if search in row.title.lower() or search in row.code.lower()
+            row
+            for row in filtered
+            if search in row.title.lower()
+            or search in row.code.lower()
+            or search in row.source_reference.lower()
         ]
     return filtered
 
@@ -180,8 +201,10 @@ def library_detail(request: HttpRequest, entity_pk: str) -> HttpResponse:
         "state": request.GET.get("state", ""),
         "progress": request.GET.get("progress", ""),
         "category": request.GET.get("category", ""),
+        "origin": request.GET.get("origin", ""),
         "search": request.GET.get("q", ""),
         "state_filters": LIBRARY_STATE_FILTERS,
+        "origin_filters": LIBRARY_ORIGIN_FILTERS,
         "progress_filters": LIBRARY_PROGRESS_FILTERS,
         "categories": ComplianceCategory.choices,
         "can_manage": MANAGE in _permissions(request),
@@ -219,6 +242,7 @@ def _row_fragment(entity: Entity, code: str, *, request: HttpRequest, as_of: dat
 def library_remove(request: HttpRequest, entity_pk: str, code: str) -> HttpResponse:
     """Rule a definition out for this entity, with a typed reason."""
     entity = _entity_or_404(entity_pk)
+    require_entity_permission(request, "compliance.library.manage", entity.pk)
     as_of = _today()
     row = _row_or_404(entity, code, as_of=as_of)
 
@@ -265,6 +289,7 @@ def library_remove(request: HttpRequest, entity_pk: str, code: str) -> HttpRespo
 def library_force_add(request: HttpRequest, entity_pk: str, code: str) -> HttpResponse:
     """Add a definition the engine has not selected, with a typed reason."""
     entity = _entity_or_404(entity_pk)
+    require_entity_permission(request, "compliance.library.manage", entity.pk)
     as_of = _today()
     row = _row_or_404(entity, code, as_of=as_of)
 
@@ -316,6 +341,7 @@ def library_restore(request: HttpRequest, entity_pk: str, code: str) -> HttpResp
     """Undo an earlier removal. No reason needed — the removal was already
     justified, and this simply reverses it."""
     entity = _entity_or_404(entity_pk)
+    require_entity_permission(request, "compliance.library.manage", entity.pk)
     as_of = _today()
     row = _row_or_404(entity, code, as_of=as_of)
 
@@ -329,4 +355,222 @@ def library_restore(request: HttpRequest, entity_pk: str, code: str) -> HttpResp
         "",
         also=[_row_fragment(entity, code, request=request, as_of=as_of)],
         toast=Toast(_("Restored — %(title)s.") % {"title": row.title}),
+    )
+
+
+# ---------------------------------------------------------------------------
+# The entity's own obligations
+# ---------------------------------------------------------------------------
+
+CUSTOM_MODAL = "obligations/_fragments/custom_obligation_modal.html"
+CUSTOM_WITHDRAW_MODAL = "obligations/_fragments/custom_withdraw_modal.html"
+CUSTOM_DETAIL_BODY = "obligations/_fragments/custom_obligation_body.html"
+
+#: How much of what one custom obligation produced its page lists. The
+#: calendar is where the whole series is worked from; this is its history.
+CUSTOM_HISTORY_ROWS = 24
+
+
+def _custom_or_404(entity: Entity, pk: str) -> CustomObligation:
+    """Through the scoped manager, so another tenant's — or, for a
+    category-limited member, another department's — is a 404."""
+    obligation = CustomObligation.objects.filter(pk=pk, entity=entity).first()
+    if obligation is None:
+        raise Http404
+    return obligation
+
+
+def _allowed_categories(request: HttpRequest, entity: Entity) -> frozenset[str] | None:
+    """The categories this user may file their own obligation under here.
+
+    Both limits the scoped manager applies on read — the member's own, and the
+    engagement's for this entity — so nothing can be saved that its author
+    would not be able to see.
+    """
+    scope = getattr(request, "access_scope", None)
+    if scope is None or scope.bypass:
+        return None
+    allowed = scope.categories
+    per_entity = scope.entity_categories.get(entity.pk)
+    if per_entity is not None:
+        allowed = frozenset(per_entity) if allowed is None else allowed & per_entity
+    return allowed
+
+
+def _custom_detail_context(
+    request: HttpRequest, entity: Entity, obligation: CustomObligation, *, as_of: date
+) -> dict[str, Any]:
+    versions = list(obligation.versions.order_by("-version"))
+    produced = annotate_status(
+        ObligationInstance.objects.filter(
+            entity=entity, definition_code=obligation.code, archived_at__isnull=True
+        ),
+        as_of=as_of,
+    ).order_by("-period_end", "-due_date")
+    # The latest rows are the ones kept (the page promises "the latest N"),
+    # but they read soonest-due first, like the calendar: the next filing on
+    # top, not the one eighteen months out. Undated rows go last.
+    shown = sorted(
+        produced[:CUSTOM_HISTORY_ROWS],
+        key=lambda row: (
+            row.due_date is None,
+            row.due_date or date.min,
+            row.period_end or date.min,
+        ),
+    )
+    return {
+        "entity": entity,
+        "obligation": obligation,
+        "versions": [
+            {"version": version, "summary": schedule_summary(version)} for version in versions
+        ],
+        "instances": shown,
+        "instance_total": produced.count(),
+        "can_manage": MANAGE in _permissions(request),
+    }
+
+
+def _land_on_custom_detail(
+    request: HttpRequest, entity: Entity, obligation: CustomObligation, *, toast: str
+) -> HttpResponse:
+    """Close the modal and show the obligation's own page, wherever it was opened.
+
+    The page is the answer to "what did that just do": the schedule as it now
+    stands and the occurrences it put on the calendar. Swapped into ``#main``
+    and pushed to history, so the back button returns to the library.
+    """
+    as_of = _today()
+    response = oob(
+        request,
+        Fragment(
+            CUSTOM_DETAIL_BODY, _custom_detail_context(request, entity, obligation, as_of=as_of)
+        ),
+        toast=Toast(toast),
+        triggers={"stacos:modal-close": True},
+        retarget="#main",
+        reswap="innerHTML",
+    )
+    response["HX-Push-Url"] = reverse("compliance:custom_detail", args=[entity.pk, obligation.pk])
+    return response
+
+
+@require_permission(VIEW)
+def custom_detail(request: HttpRequest, entity_pk: str, pk: str) -> HttpResponse:
+    """One custom obligation: what it asks, every schedule it has had, and what
+    it has put on the calendar — including after it was withdrawn."""
+    entity = _entity_or_404(entity_pk)
+    obligation = _custom_or_404(entity, pk)
+    context = _custom_detail_context(request, entity, obligation, as_of=_today())
+    template = (
+        CUSTOM_DETAIL_BODY if is_fragment_request(request) else "obligations/custom_obligation.html"
+    )
+    return render(request, template, context)
+
+
+@require_permission(MANAGE)
+@require_http_methods(["GET", "POST"])
+def custom_create(request: HttpRequest, entity_pk: str) -> HttpResponse:
+    """Add an obligation of the entity's own, and schedule it straight away."""
+    entity = _entity_or_404(entity_pk)
+    require_entity_permission(request, MANAGE, entity.pk)
+    allowed = _allowed_categories(request, entity)
+
+    if request.method == "GET":
+        form = CustomObligationForm(allowed_categories=allowed)
+        return render(request, CUSTOM_MODAL, {"entity": entity, "form": form})
+
+    form = CustomObligationForm(request.POST, allowed_categories=allowed)
+    if not form.is_valid():
+        return render(request, CUSTOM_MODAL, {"entity": entity, "form": form}, status=422)
+
+    try:
+        obligation = create_custom_obligation(
+            entity,
+            actor=current_user(request),
+            details=form.details,
+            schedule=form.schedule,
+            starts_on=form.cleaned_data["starts_on"],
+            as_of=_today(),
+        )
+    except CustomObligationError as exc:
+        form.add_error(None, str(exc))
+        return render(request, CUSTOM_MODAL, {"entity": entity, "form": form}, status=422)
+
+    return _land_on_custom_detail(
+        request, entity, obligation, toast=_("Added — %(title)s.") % {"title": obligation.title}
+    )
+
+
+@require_permission(MANAGE)
+@require_http_methods(["GET", "POST"])
+def custom_edit(request: HttpRequest, entity_pk: str, pk: str) -> HttpResponse:
+    """Correct the details in place, or change the schedule from a date on."""
+    entity = _entity_or_404(entity_pk)
+    require_entity_permission(request, MANAGE, entity.pk)
+    obligation = _custom_or_404(entity, pk)
+    if obligation.is_withdrawn:
+        raise Http404
+    allowed = _allowed_categories(request, entity)
+    context: dict[str, Any] = {"entity": entity, "obligation": obligation}
+
+    if request.method == "GET":
+        form = CustomObligationForm(
+            initial=CustomObligationForm.initial_for(obligation, current_version(obligation)),
+            editing=True,
+            allowed_categories=allowed,
+        )
+        return render(request, CUSTOM_MODAL, {**context, "form": form})
+
+    form = CustomObligationForm(request.POST, editing=True, allowed_categories=allowed)
+    if not form.is_valid():
+        return render(request, CUSTOM_MODAL, {**context, "form": form}, status=422)
+
+    try:
+        update_custom_obligation(
+            obligation,
+            actor=current_user(request),
+            details=form.details,
+            schedule=form.schedule,
+            applies_from=form.cleaned_data.get("applies_from"),
+            as_of=_today(),
+        )
+    except CustomObligationError as exc:
+        form.add_error(None, str(exc))
+        return render(request, CUSTOM_MODAL, {**context, "form": form}, status=422)
+
+    obligation.refresh_from_db()
+    return _land_on_custom_detail(
+        request, entity, obligation, toast=_("Saved — %(title)s.") % {"title": obligation.title}
+    )
+
+
+@require_permission(MANAGE)
+@require_http_methods(["GET", "POST"])
+def custom_withdraw(request: HttpRequest, entity_pk: str, pk: str) -> HttpResponse:
+    """Stop tracking an obligation, keeping everything it already produced."""
+    entity = _entity_or_404(entity_pk)
+    require_entity_permission(request, MANAGE, entity.pk)
+    obligation = _custom_or_404(entity, pk)
+    context: dict[str, Any] = {"entity": entity, "obligation": obligation}
+
+    if request.method == "GET":
+        return render(request, CUSTOM_WITHDRAW_MODAL, {**context, "form": LibraryReasonForm()})
+
+    form = LibraryReasonForm(request.POST)
+    if not form.is_valid():
+        return render(request, CUSTOM_WITHDRAW_MODAL, {**context, "form": form}, status=422)
+
+    try:
+        withdraw_custom_obligation(
+            obligation,
+            actor=current_user(request),
+            reason=form.cleaned_data["reason"],
+            as_of=_today(),
+        )
+    except CustomObligationError as exc:
+        form.add_error(None, str(exc))
+        return render(request, CUSTOM_WITHDRAW_MODAL, {**context, "form": form}, status=422)
+
+    return _land_on_custom_detail(
+        request, entity, obligation, toast=_("Withdrawn — %(title)s.") % {"title": obligation.title}
     )

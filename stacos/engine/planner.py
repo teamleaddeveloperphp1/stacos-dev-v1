@@ -136,6 +136,11 @@ class ExistingInstance:
     #: answering one of two open questions narrows the prompt instead of leaving
     #: it asking for something already given.
     missing_facts: tuple[str, ...] = ()
+    #: Already retained out of the working calendar by an earlier plan (or by a
+    #: person removing it). Such a row has had its one supersession: planning it
+    #: away again would stamp a fresh ``superseded_at`` and append another "no
+    #: longer applicable" entry to its timeline on every nightly run, forever.
+    superseded: bool = False
 
     @property
     def is_protected(self) -> bool:
@@ -320,6 +325,7 @@ def plan(
     existing: Sequence[ExistingInstance] = (),
     suppressed: frozenset[Identity] = frozenset(),
     opted_in: frozenset[str] = frozenset(),
+    removal_reasons: Mapping[str, str] | None = None,
     as_of: date | None = None,
 ) -> MaterialisationPlan:
     """Work out what this entity's obligation register should contain.
@@ -334,6 +340,11 @@ def plan(
         would not, where a suppression removes something the rule already
         produced. Revoking one then needs no new machinery at all — the next plan
         simply finds the rule FALSE again.
+    :param removal_reasons: why a definition's instances stop being wanted when
+        the rule itself has nothing to say — keyed by definition code. A
+        user-defined obligation that was withdrawn, or whose schedule changed,
+        is not "no longer applicable after a profile change", and the timeline
+        entry a supersession writes should say what actually happened.
     :param as_of: required for determinism; the engine never reads the clock.
     """
     calendars = calendars or CalendarSnapshot()
@@ -500,7 +511,7 @@ def plan(
                     needs_input=resolution.blocking_input,
                 )
 
-    return _diff(desired, existing, diagnostics, not_applicable)
+    return _diff(desired, existing, diagnostics, not_applicable, removal_reasons or {})
 
 
 def _days(count: int) -> timedelta:
@@ -512,6 +523,7 @@ def _diff(
     existing: Sequence[ExistingInstance],
     diagnostics: list[Diagnostic],
     not_applicable: Mapping[str, tuple[str, ...]],
+    removal_reasons: Mapping[str, str],
 ) -> MaterialisationPlan:
     """Compare what should exist with what does."""
     live = {row.identity: row for row in existing if not row.archived}
@@ -574,9 +586,18 @@ def _diff(
     for identity, current in live.items():
         if identity in desired:
             continue
+        if current.superseded:
+            # Retained once already. See ``ExistingInstance.superseded``.
+            continue
 
         reasons = not_applicable.get(identity.definition_code, ())
-        reason = reasons[0] if reasons else "No longer applicable after a profile change."
+        reason = (
+            reasons[0]
+            if reasons
+            else removal_reasons.get(
+                identity.definition_code, "No longer applicable after a profile change."
+            )
+        )
 
         if current.state in TERMINAL_STATES:
             # Already filed. It stays exactly as it is — history, not a mistake.

@@ -7,6 +7,11 @@
   `app:registration_create`), so nothing here is a second implementation of
   either.
 
+  The note under the toolbar lists what the pack expects this entity type to
+  hold and it has not recorded yet, and says so plainly once nothing is left
+  (`stacos.tenancy.registration_gaps`). Adding a registration from here
+  updates it out of band (`?setup=1`).
+
   "Next" is always enabled. An entity with zero registrations is unusual but
   not invalid — some genuinely have none — and the step ahead says so honestly
   (`stacos.obligations.preview.for_preview`) rather than this step refusing to
@@ -30,14 +35,17 @@
       <span class="text-muted ms-auto" style="font-size:.75rem">
         {% translate "Each one generates its own filings" %}
       </span>
-      {% if "tenancy.registration.manage" in access_scope.permissions %}
+      {% if "tenancy.registration.manage" in access_scope.permissions and gaps.available %}
         <button class="btn btn-sm btn-outline-secondary"
-                hx-get="{% url 'app:registration_create' entity.pk %}"
+                hx-get="{% url 'app:registration_create' entity.pk %}?setup=1"
                 hx-target="#modal-container"
                 hx-swap="innerHTML">
           {% translate "Add" %}
         </button>
       {% endif %}
+    </div>
+    <div id="registration-progress" aria-live="polite">
+      {% include "tenancy/setup/_fragments/registration_progress.html" %}
     </div>
     <div class="data-table__scroll">
       <table class="table mb-0">
@@ -49,7 +57,7 @@
             <th>{% translate "Valid" %}</th>
           </tr>
         </thead>
-        {% include "tenancy/_fragments/registration_rows.html" %}
+        {% include "tenancy/_fragments/registration_rows.html" with in_setup=True %}
       </table>
     </div>
   </div>

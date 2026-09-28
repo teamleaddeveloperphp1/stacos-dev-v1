@@ -9,16 +9,24 @@ first month.
 
 ``approve`` and ``file`` are sensitive: they are the two points where somebody
 takes responsibility for a statutory filing, and a stolen session should not be
-able to reach them without fresh authentication.
+able to reach them without fresh authentication. So is ``complete_unreviewed``,
+which is both of them at once with nobody else looking.
+
+Two approvals that look alike and are not: ``review`` is the preparing side's
+own check — a firm's manager, or a business's compliance manager — and
+``approve`` is the *business* signing off as the client. Only an organisation
+can hold ``approve``; a firm cannot sign off on its own work on the client's
+behalf, whatever an engagement says.
 """
 
-from stacos.core.permissions import Permission, permission_registry
+from stacos.core.permissions import Permission, TenantType, permission_registry
 
 CATEGORY = "Compliance"
 
 VIEW = "compliance.obligation.view"
 LIBRARY_VIEW = "compliance.library.view"
 LIBRARY_MANAGE = "compliance.library.manage"
+COMPLETE_UNREVIEWED = "compliance.obligation.complete_unreviewed"
 
 permission_registry.register_many(
     [
@@ -48,9 +56,10 @@ permission_registry.register_many(
         ),
         Permission(
             code="compliance.obligation.approve",
-            label="Approve a filing as the client",
+            label="Sign off a filing as the client",
             category=CATEGORY,
             is_sensitive=True,
+            tenant_types=frozenset({TenantType.ORGANISATION, TenantType.PLATFORM}),
             description=(
                 "Client-side sign-off on a return before it is filed. The point at "
                 "which the business takes responsibility for what is submitted."
@@ -64,8 +73,21 @@ permission_registry.register_many(
             is_sensitive=True,
             description=(
                 "Records that a statutory return was submitted, with its "
-                "acknowledgement number. This is the row an assessment is defended "
-                "with."
+                "acknowledgement number, once it has been reviewed and approved. "
+                "This is the row an assessment is defended with."
+            ),
+            implies=frozenset({VIEW}),
+        ),
+        Permission(
+            code=COMPLETE_UNREVIEWED,
+            label="Mark done without review",
+            category=CATEGORY,
+            is_sensitive=True,
+            description=(
+                "Records a filing from wherever the obligation stands, skipping "
+                "review and sign-off. The one deliberate exception to maker-"
+                "checker — for a sole owner, or a filing made outside STACOS — "
+                "and the timeline and audit trail say so on the row."
             ),
             implies=frozenset({VIEW}),
         ),

@@ -7,6 +7,14 @@ or not anything has ever been materialised for it — and lets a person move one
 definition between three states: added, removed, or left for the engine to
 decide.
 
+The shelf holds two kinds of row. Most are catalog definitions. The rest are
+the entity's own obligations (``stacos.obligations.custom``) — listed in the
+same groups, with the same status chip read from the same register, because
+"everything this entity owes" is the question this screen answers and a
+covenant owed to a lender is owed just the same. Their actions differ: a
+custom row is edited or withdrawn rather than added and removed, since there is
+no rule to override.
+
 ``ObligationSuppression`` and ``ObligationInclusion`` already carry exactly
 this decision (see their docstrings in ``models.py``) and the planner already
 reads them on every rebuild. This module is the first place that writes them
@@ -18,20 +26,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from uuid import UUID
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from stacos.catalog.snapshots import build_catalog, definitions_for_codes
 from stacos.core.audit import record_event
 from stacos.core.models import AuditAction
 from stacos.engine.types import DefinitionSnapshot, InstanceScope
+from stacos.obligations.custom import schedule_summary
 from stacos.obligations.models import (
+    CustomObligation,
+    CustomObligationVersion,
     MaterialisationRun,
     ObligationEvent,
     ObligationInclusion,
     ObligationInstance,
     ObligationSuppression,
+    is_custom_code,
 )
 from stacos.obligations.profile import build_profile_view
 from stacos.obligations.queries import annotate_status, live
@@ -65,6 +79,18 @@ class LibraryRow:
     #: The one representative occurrence, "added" rows only. See
     #: ``_representative`` for how it is picked.
     occurrence: ObligationInstance | None = None
+    #: "catalog" | "custom" — who wrote the rule.
+    origin: str = "catalog"
+    #: The :class:`CustomObligation` behind a custom row.
+    custom_pk: UUID | None = None
+    #: A custom row's schedule in words, and where the requirement comes from.
+    #: A catalog row shows its code and family instead.
+    schedule: str = ""
+    source_reference: str = ""
+
+    @property
+    def is_custom(self) -> bool:
+        return self.origin == "custom"
 
 
 def build_library(entity: Entity, *, as_of: date) -> tuple[LibraryRow, ...]:
@@ -131,7 +157,39 @@ def build_library(entity: Entity, *, as_of: date) -> tuple[LibraryRow, ...]:
             )
         )
 
+    rows.extend(_custom_rows(entity, representative=representative))
     return tuple(rows)
+
+
+def _custom_rows(
+    entity: Entity, *, representative: dict[str, ObligationInstance]
+) -> list[LibraryRow]:
+    """The entity's own obligations, as library rows. Two queries, however many.
+
+    Withdrawn ones stay on the shelf, as "removed", so the history they
+    produced is one click away rather than orphaned in the register.
+    """
+    obligations = CustomObligation.objects.filter(entity=entity).prefetch_related(
+        Prefetch("versions", queryset=CustomObligationVersion.objects.order_by("-version"))
+    )
+    rows: list[LibraryRow] = []
+    for obligation in obligations:
+        versions = list(obligation.versions.all())
+        rows.append(
+            LibraryRow(
+                code=obligation.code,
+                title=obligation.title,
+                family="",
+                category=obligation.category,
+                state="removed" if obligation.is_withdrawn else "added",
+                occurrence=None if obligation.is_withdrawn else representative.get(obligation.code),
+                origin="custom",
+                custom_pk=obligation.pk,
+                schedule=schedule_summary(versions[0]) if versions else "",
+                source_reference=obligation.source_reference,
+            )
+        )
+    return rows
 
 
 def _removed_codes(entity: Entity) -> frozenset[str]:
@@ -222,6 +280,14 @@ def _blocked_reason(
 # ---------------------------------------------------------------------------
 
 
+def _refuse_custom(code: str) -> None:
+    """Remove, force-add and restore act on a catalog rule. A custom obligation
+    has no rule to override — it is withdrawn instead (see ``custom.py``), and
+    blanket-suppressing one would leave it producing rows nobody can see."""
+    if is_custom_code(code):
+        raise LibraryError("This is your own obligation — edit or withdraw it instead.")
+
+
 def _definition_title(code: str) -> str:
     lookup = definitions_for_codes([code])
     definition = lookup.get(code)
@@ -237,6 +303,8 @@ def remove_definition(entity: Entity, code: str, *, actor, reason: str) -> None:
     cannot quietly keep taking effect once this is later reversed, and
     dismisses every open instance so nothing lingers on the calendar.
     """
+    _refuse_custom(code)
+
     now = timezone.now()
 
     if _has_blanket_suppression(entity, code):
@@ -299,6 +367,8 @@ def force_add_definition(entity: Entity, code: str, *, actor, reason: str, as_of
     entity has none on file — nothing is created, and this refuses rather than
     leaving a silent, empty override behind.
     """
+    _refuse_custom(code)
+
     if _has_blanket_suppression(entity, code):
         raise LibraryError("This definition is removed for this entity — restore it first.")
     if live().filter(entity=entity, definition_code=code).exists():
@@ -347,6 +417,8 @@ def restore_definition(entity: Entity, code: str, *, actor, as_of: date) -> None
     """Undo an earlier removal. No fresh reason — the removal was already
     justified, and this simply reverses it and clears the block on a rebuild.
     """
+    _refuse_custom(code)
+
     now = timezone.now()
     updated = ObligationSuppression.objects.filter(
         entity=entity,

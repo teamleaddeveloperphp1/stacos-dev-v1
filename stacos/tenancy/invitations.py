@@ -34,6 +34,14 @@ from stacos.accounts.models import User
 from stacos.core.audit import AuditAction, record_event
 from stacos.core.rls import rls_bootstrap
 from stacos.core.scope import tenant_context
+from stacos.tenancy.access import (
+    AccessError,
+    AccessGrant,
+    apply_grant,
+    default_categories_for,
+    snapshot,
+    validate_grant,
+)
 from stacos.tenancy.models import Membership, Role, Tenant, TenantInvitation
 
 logger = structlog.get_logger(__name__)
@@ -70,6 +78,7 @@ def invite_colleague(
     role: Role,
     inviter: User,
     message: str = "",
+    grant: AccessGrant | None = None,
 ) -> tuple[TenantInvitation, str]:
     """Create an invitation, returning ``(row, raw_token)``.
 
@@ -83,6 +92,14 @@ def invite_colleague(
     address = email.strip().lower()
     if not address:
         raise InvitationError("An email address is required.")
+
+    # No grant means the role's own starting point: every entity, and the
+    # compliance areas the role is limited to by default (a department user's).
+    grant = grant or AccessGrant(categories=default_categories_for(role))
+    try:
+        validate_grant(tenant, role, grant)
+    except AccessError as exc:
+        raise InvitationError(str(exc)) from exc
 
     if Membership.objects.filter(
         tenant=tenant, user__email=address, status=Membership.Status.ACTIVE
@@ -102,13 +119,26 @@ def invite_colleague(
         token_hash=_hash(raw),
         expires_at=timezone.now() + timedelta(days=INVITATION_DAYS),
         invited_by=inviter,
+        all_entities=tenant.type != Tenant.Type.ORGANISATION or grant.all_entities,
+        categories=list(grant.categories),
     )
+    if tenant.type == Tenant.Type.ORGANISATION and not grant.all_entities:
+        invitation.entities.set(list(grant.entity_ids))
+    if tenant.type == Tenant.Type.PRACTICE:
+        invitation.client_tenants.set(list(grant.client_tenant_ids))
 
     record_event(
         action=AuditAction.CREATE,
         actor=inviter,
         obj=invitation,
-        after={"email": address, "role": role.code},
+        after={
+            "email": address,
+            "role": role.code,
+            "all_entities": invitation.all_entities,
+            "entities": sorted(str(pk) for pk in grant.entity_ids),
+            "categories": sorted(grant.categories),
+            "client_tenants": sorted(str(pk) for pk in grant.client_tenant_ids),
+        },
     )
     logger.info("tenancy.invited", tenant_id=str(tenant.id), email=address, role=role.code)
     return invitation, raw
@@ -171,6 +201,21 @@ def accept_invitation(invitation: TenantInvitation, *, user: User) -> Membership
             membership.role = invitation.role
             membership.joined_at = membership.joined_at or timezone.now()
             membership.save(update_fields=["status", "role", "joined_at", "updated_at"])
+            created = True  # the invitation's reach applies, as for a new member
+
+        if created:
+            # The reach the inviter chose — never "everything" by default for a
+            # role that is limited by default. An already-active member clicking
+            # a stale link keeps the access they have.
+            apply_grant(
+                membership,
+                AccessGrant(
+                    all_entities=invitation.all_entities,
+                    entity_ids=tuple(invitation.entities.values_list("pk", flat=True)),
+                    categories=tuple(invitation.categories),
+                    client_tenant_ids=tuple(invitation.client_tenants.values_list("pk", flat=True)),
+                ),
+            )
 
         TenantInvitation.objects.filter(pk=invitation.pk).update(
             status=TenantInvitation.Status.ACCEPTED,
@@ -181,7 +226,7 @@ def accept_invitation(invitation: TenantInvitation, *, user: User) -> Membership
             action=AuditAction.CREATE,
             actor=user,
             obj=membership,
-            after={"tenant": invitation.tenant.name, "role": invitation.role.code},
+            after={"tenant": invitation.tenant.name, **snapshot(membership)},
             context={"invitation_id": str(invitation.pk)},
         )
 

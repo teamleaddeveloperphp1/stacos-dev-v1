@@ -17,6 +17,7 @@ Read this before writing code. These are the conventions that, if broken, cost f
 python manage.py loadpack IN        # jurisdiction pack from catalog/packs/IN.yaml
 python manage.py loadcatalog        # compliance definitions from catalog/definitions/
 python manage.py validatecatalog    # semantic checks; CI runs it with --strict
+python manage.py roles_guide        # regenerate docs/roles-and-permissions.html after changing a role
 ```
 
 `start.sh` / `stop.sh` are the Linux and macOS equivalents, with long-form flags.

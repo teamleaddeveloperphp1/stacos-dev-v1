@@ -86,6 +86,35 @@ def test_detail_renders_both_ways(signed_in: Client, an_obligation: ObligationIn
     assert b"Why this applies" in fragment.content
 
 
+def test_detail_offers_a_jump_to_any_period_of_its_sequence(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """Q1 to Q4 in one step: every period of the same filing is one pick away."""
+    with platform_scope(reason="test"):
+        sequence = list(
+            ObligationInstance.objects.filter(
+                entity_id=an_obligation.entity_id,
+                definition_code=an_obligation.definition_code,
+                scope_ref=an_obligation.scope_ref,
+                archived_at__isnull=True,
+            ).order_by("period_key")
+        )
+    assert len(sequence) > 2, "fixture needs a run of periods to jump across"
+
+    body = signed_in.get(
+        reverse("compliance:detail", args=[an_obligation.pk]),
+        headers={"HX-Request": "true"},
+    ).content.decode()
+
+    assert "data-navigate-select" in body
+    jump = body.split("data-navigate-select")[1].split("</select>")[0]
+    urls = [reverse("compliance:detail", args=[o.pk]) for o in sequence]
+    positions = [jump.index(f'value="{url}"') for url in urls]
+    assert positions == sorted(positions), "periods are listed oldest first"
+    current = reverse("compliance:detail", args=[an_obligation.pk])
+    assert f'value="{current}" selected' in jump
+
+
 def test_swapped_regions_announce_themselves(signed_in: Client, materialised: Entity) -> None:
     """``aria-live`` on every HTMX swap target.
 
@@ -209,7 +238,7 @@ def test_pending_and_completed_filters_agree_with_status_counts(
     from stacos.obligations.queries import status_counts
 
     with platform_scope(reason="test"):
-        expected = status_counts(as_of=timezone.localdate())
+        expected = status_counts(as_of=timezone.localdate(), window_end=_default_window_end())
     expected_pending = expected["open"] - expected["overdue"] - expected["due_soon"]
 
     for status, expected_count, disallowed_states in (
@@ -224,6 +253,14 @@ def test_pending_and_completed_filters_agree_with_status_counts(
                 ObligationInstance.objects.filter(pk__in=shown).values_list("state", flat=True)
             )
         assert states.isdisjoint(disallowed_states), f"status={status!r} leaked {states}"
+
+
+def _default_window_end() -> date:
+    """Where the calendar's default "Due within" window ends today."""
+    from stacos.obligations.forms import DEFAULT_DUE_WINDOW
+    from stacos.obligations.services import _add_months
+
+    return _add_months(timezone.localdate(), int(DEFAULT_DUE_WINDOW))
 
 
 def _collect_all_rows(client: Client, status: str) -> list[str]:
@@ -313,7 +350,8 @@ def test_no_status_param_defaults_to_latest(signed_in: Client, materialised: Ent
     as_of = timezone.localdate()
     with platform_scope(reason="test"):
         expected_latest = status_counts(as_of=as_of)["latest"]
-        expected_open = status_counts(as_of=as_of)["open"]
+        # "Everything open" is still inside the default "Due within" window.
+        expected_open = status_counts(as_of=as_of, window_end=_default_window_end())["open"]
     assert expected_open > expected_latest, "fixture must have open rows outside the 90-day window"
 
     first_page = signed_in.get(reverse("compliance:calendar"), headers={"HX-Request": "true"})
@@ -358,22 +396,203 @@ def test_latest_status_filter_includes_the_backlog(
     assert str(an_obligation.pk) not in shown_due_90, "due_90 must stay upcoming-only"
 
 
+# ===========================================================================
+# "Due within" window
+# ===========================================================================
+
+
+def _far_out(obligation: ObligationInstance, *, state: str = State.NOT_STARTED) -> None:
+    """Park one obligation past the default window, still inside the horizon."""
+    with platform_scope(reason="test"):
+        obligation.due_date = _default_window_end() + timedelta(days=30)
+        obligation.state = state
+        obligation.save(update_fields=["due_date", "state"])
+
+
+def test_the_default_window_hides_untouched_filings_a_year_out(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """A fresh "Everything open" opens on the next twelve months; "Any due
+    date" brings the rest back without a rebuild — a view, not the horizon."""
+    _far_out(an_obligation)
+
+    default = signed_in.get(
+        reverse("compliance:calendar"), {"status": ""}, headers={"HX-Request": "true"}
+    )
+    assert default.context["within"] == "12"
+    assert b'<option value="12" selected>' in default.content
+    assert str(an_obligation.pk) not in _collect_all_rows(signed_in, "")
+
+    shown = _collect_all_rows_with(signed_in, {"status": "", "within": "all"})
+    assert str(an_obligation.pk) in shown
+
+    with platform_scope(reason="test"):
+        rows = ObligationInstance.objects.filter(pk__in=_collect_all_rows(signed_in, ""))
+        assert all(
+            row.due_date is None
+            or row.due_date <= _default_window_end()
+            or row.state != State.NOT_STARTED
+            for row in rows
+        )
+
+
+def test_the_window_never_hides_overdue_or_started_work(
+    signed_in: Client, materialised: Entity
+) -> None:
+    """The narrowest window still shows every overdue row and every row
+    somebody has touched, however far out it falls due."""
+    with platform_scope(reason="test"):
+        rows = list(
+            ObligationInstance.objects.filter(
+                entity=materialised, state=State.NOT_STARTED
+            ).order_by("due_date")[:2]
+        )
+        overdue, started = rows
+        overdue.due_date = timezone.localdate() - timedelta(days=400)
+        overdue.save(update_fields=["due_date"])
+    _far_out(started, state=State.IN_PREPARATION)
+
+    shown = _collect_all_rows_with(signed_in, {"status": "", "within": "6"})
+    assert str(overdue.pk) in shown
+    assert str(started.pk) in shown
+
+
+def test_every_tile_agrees_with_the_list_it_links_to_under_each_window(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """The tiles and the list are counted under one window, and each tile's
+    link carries that window — so a click lands on exactly its number."""
+    _far_out(an_obligation)
+
+    for within in ("6", "12", "all"):
+        page = signed_in.get(
+            reverse("compliance:calendar"), {"within": within}, headers={"HX-Request": "true"}
+        )
+        counts = page.context["counts"]
+        body = page.content.decode()
+        for status, key in (
+            ("", "open"),
+            ("overdue", "overdue"),
+            ("due_soon", "due_soon"),
+            ("completed", "completed"),
+        ):
+            assert f"?status={status}&amp;within={within}" in body, (within, status)
+            shown = _collect_all_rows_with(signed_in, {"status": status, "within": within})
+            assert len(shown) == counts[key], (within, status)
+
+    narrow = signed_in.get(reverse("compliance:calendar"), {"status": "", "within": "12"})
+    wide = signed_in.get(reverse("compliance:calendar"), {"status": "", "within": "all"})
+    assert wide.context["counts"]["open"] > narrow.context["counts"]["open"]
+    assert wide.context["total"] == wide.context["counts"]["open"]
+    assert narrow.context["total"] == narrow.context["counts"]["open"]
+
+
+def test_the_window_is_named_on_the_page(signed_in: Client, materialised: Entity) -> None:
+    """Wherever the window is what ends the list, the page says where it ends."""
+    end = _default_window_end()
+    page = signed_in.get(reverse("compliance:calendar"), {"status": ""})
+    description = page.context["scope_description"]
+    assert f"{end.day} {end.strftime('%b %Y')}" in description
+    assert "regardless of due date" not in description
+
+    wide = signed_in.get(reverse("compliance:calendar"), {"status": "", "within": "all"})
+    assert wide.context["scope_description"] == "Every open obligation, regardless of due date."
+
+    chip = signed_in.get(reverse("compliance:calendar"), {"within": "all"})
+    assert "Any due date" in [f["label"] for f in chip.context["active_filters"]]
+
+
+def test_an_unknown_window_falls_back_to_the_default(
+    signed_in: Client, materialised: Entity
+) -> None:
+    response = signed_in.get(reverse("compliance:calendar"), {"within": "999"})
+    assert response.status_code == 200
+    assert response.context["within"] == "12"
+
+
+def test_an_empty_window_explains_what_it_left_out(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """Nothing through the window's end, but something after it, is a
+    different answer from "nothing here" — and says how to find it."""
+    _far_out(an_obligation)
+    with platform_scope(reason="test"):
+        others = ObligationInstance.objects.filter(
+            entity=an_obligation.entity, definition_code=an_obligation.definition_code
+        ).exclude(pk=an_obligation.pk)
+        others.update(state=State.NOT_STARTED, due_date=an_obligation.due_date)
+
+    response = signed_in.get(
+        reverse("compliance:calendar"),
+        {"status": "", "q": an_obligation.definition_code},
+        headers={"HX-Request": "true"},
+    )
+    body = response.content.decode()
+
+    assert not response.context["obligations"]
+    assert response.context["beyond_window"] > 0
+    end = _default_window_end()
+    assert f"Nothing due through {end.day} {end.strftime('%b %Y')}" in body
+    assert "outside the “Due within” window" in body
+    assert "No matches for these filters" not in body
+    widen = response.context["widen_query"]
+    assert "within=all" in widen and "q=" in widen
+
+    widened = _collect_all_rows_with(
+        signed_in, {"status": "", "q": an_obligation.definition_code, "within": "all"}
+    )
+    assert str(an_obligation.pk) in widened
+
+
+def test_counters_refreshed_by_an_action_keep_the_pages_window(
+    signed_in: Client, an_obligation: ObligationInstance
+) -> None:
+    """A bulk action re-renders the tiles out-of-band. Counted with no filters
+    they would snap back to the whole horizon while the list stayed windowed;
+    they are counted under the page's own filters instead."""
+    _far_out(an_obligation)
+    listing = signed_in.get(reverse("compliance:calendar"), {"status": ""})
+    expected_total = listing.context["total"]
+
+    response = signed_in.post(
+        reverse("compliance:bulk_assign"),
+        {"ids": [str(an_obligation.pk)], "assigned_to": ""},
+        headers={
+            "HX-Request": "true",
+            "HX-Current-URL": "http://testserver" + reverse("compliance:calendar") + "?status=",
+        },
+    )
+    assert response.status_code == 200
+    counters = response.content.decode().split('id="calendar-counts"', 1)[1]
+    total = counters.split('class="stat-tile__value">', 1)[1].split("<", 1)[0]
+    assert int(total) == expected_total
+
+
 def test_the_defaulted_filter_stays_visibly_marked_without_focus(
     signed_in: Client, materialised: Entity
 ) -> None:
     """The default is silent otherwise: nothing in the URL says a filter is
     doing the narrowing, so a short list on arrival reads as "nothing is
     due" rather than "due in 30 days" — see `form-select--filtered` in
-    `assets/scss/components/_forms.scss`. "Everything open" — a filter that
-    narrows nothing — must not carry the same marker.
+    `assets/scss/components/_forms.scss`. "Everything open" over "Any due
+    date" — filters that narrow nothing — must not carry the same marker; the
+    default "Due within" window does narrow, so it keeps its own.
     """
     defaulted = signed_in.get(reverse("compliance:calendar"), headers={"HX-Request": "true"})
     assert b"form-select--filtered" in defaulted.content
 
     everything_open = signed_in.get(
-        reverse("compliance:calendar"), {"status": ""}, headers={"HX-Request": "true"}
+        reverse("compliance:calendar"),
+        {"status": "", "within": "all"},
+        headers={"HX-Request": "true"},
     )
     assert b"form-select--filtered" not in everything_open.content
+
+    windowed = signed_in.get(
+        reverse("compliance:calendar"), {"status": ""}, headers={"HX-Request": "true"}
+    ).content.decode()
+    within_select = windowed.split('name="within"', 1)[1].split(">", 1)[0]
+    assert "form-select--filtered" in within_select
 
 
 def test_the_entity_filter_narrows_the_list(
@@ -699,6 +918,7 @@ def _status(obligation: ObligationInstance) -> str:
     return reverse("compliance:status", args=[obligation.pk])
 
 
+@pytest.mark.usefixtures("stepped_up")
 def test_answering_yes_records_the_date_the_number_and_the_document(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
@@ -738,6 +958,7 @@ def test_answering_yes_records_the_date_the_number_and_the_document(
         assert an_obligation.acknowledgement.name.startswith("acknowledgements/")
 
 
+@pytest.mark.usefixtures("stepped_up")
 def test_the_acknowledgement_is_optional_but_the_number_is_not(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
@@ -916,6 +1137,7 @@ def test_answering_no_needs_an_actual_reason(
         assert an_obligation.pending_reason == ""
 
 
+@pytest.mark.usefixtures("stepped_up")
 def test_answering_yes_clears_a_stale_pending_answer(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
@@ -1020,6 +1242,7 @@ def test_attaching_the_document_later_applies_the_same_rules(
         assert an_obligation.acknowledgement_name == "ack.pdf"
 
 
+@pytest.mark.usefixtures("stepped_up")
 def test_the_acknowledgement_downloads_only_through_a_scoped_view(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
@@ -1153,6 +1376,7 @@ def test_start_compliance_moves_to_in_progress_and_is_reflected_on_reload(
     assert "Move back to not started" in reloaded.content.decode()
 
 
+@pytest.mark.usefixtures("stepped_up")
 def test_complete_modal_shows_the_submission_summary_and_evidence(
     signed_in: Client, an_obligation: ObligationInstance
 ) -> None:
@@ -1208,6 +1432,7 @@ def test_completing_is_refused_without_the_required_evidence(
     assert "Mark as completed" not in detail.content.decode()
 
 
+@pytest.mark.usefixtures("stepped_up")
 def test_reopen_requires_a_reason(signed_in: Client, an_obligation: ObligationInstance) -> None:
     """ "Reopen" is the one transition that has always needed a note — the
     modal cannot be bypassed into skipping it."""
@@ -1483,15 +1708,15 @@ def test_default_owner_role_resolves_to_the_earliest_active_member(
 
 
 def test_an_unresolvable_default_owner_role_leaves_the_step_unassigned(
-    materialised: Entity,
+    an_obligation: ObligationInstance,
 ) -> None:
     """A role nobody holds — or none named at all — degrades to "unassigned",
     never an error."""
     from stacos.obligations.transitions import _resolve_default_assignee
 
     with platform_scope(reason="test"):
-        assert _resolve_default_assignee(materialised, "org-does-not-exist") is None
-        assert _resolve_default_assignee(materialised, "") is None
+        assert _resolve_default_assignee(an_obligation, "org-does-not-exist", "PREPARE") is None
+        assert _resolve_default_assignee(an_obligation, "", "PREPARE") is None
 
 
 def test_completing_a_step_that_requires_evidence_needs_a_note(

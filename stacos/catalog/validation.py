@@ -46,6 +46,7 @@ from typing import Any
 
 from stacos.catalog.loader import DefinitionDocument
 from stacos.catalog.personas import PERSONAS
+from stacos.catalog.taxonomy import CUSTOM_CODE_PREFIX
 from stacos.engine.dates import generate_periods, resolve_due_date
 from stacos.engine.rules import V, evaluate
 from stacos.engine.types import (
@@ -223,6 +224,18 @@ def _check_effective_windows(documents: Sequence[DefinitionDocument]) -> list[Fi
 
 def _check_structure(document: DefinitionDocument) -> list[Finding]:
     findings: list[Finding] = []
+
+    if document.code.upper().startswith(CUSTOM_CODE_PREFIX):
+        findings.append(
+            Finding(
+                Level.ERROR,
+                document.code,
+                "reserved-code",
+                f"Codes beginning {CUSTOM_CODE_PREFIX!r} belong to obligations an entity "
+                f"writes for itself. A catalog definition using one would be read as "
+                f"somebody's private rule.",
+            )
+        )
 
     if document.category not in VALID_CATEGORIES:
         findings.append(

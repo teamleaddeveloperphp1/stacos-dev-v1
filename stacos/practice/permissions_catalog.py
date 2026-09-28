@@ -22,11 +22,22 @@ permission_registry.register_many(
             tenant_types=PRACTICE_ONLY,
         ),
         Permission(
+            code="practice.work.progress",
+            label="Move your own work along",
+            category=CATEGORY,
+            tenant_types=PRACTICE_ONLY,
+            description=(
+                "Move a card you are assigned to between columns. Creating work "
+                "and deciding who does it is `practice.work.manage`."
+            ),
+            implies=frozenset({VIEW}),
+        ),
+        Permission(
             code="practice.work.manage",
             label="Create and assign work",
             category=CATEGORY,
             tenant_types=PRACTICE_ONLY,
-            implies=frozenset({VIEW}),
+            implies=frozenset({"practice.work.progress"}),
         ),
         Permission(
             code="practice.time.log",

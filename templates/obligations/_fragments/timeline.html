@@ -29,6 +29,14 @@
           {% blocktranslate with from=event.from_state|state_label to=event.to_state|state_label %}
             Changed status: {{ from }} → {{ to }}
           {% endblocktranslate %}
+          {% if event.context.completed_without_review %}
+            {% comment %}
+              The maker-checker exception, on the row it happened on. In words,
+              not a colour: whoever reads this history in an assessment has to
+              see that nobody checked this filing before it was recorded.
+            {% endcomment %}
+            <span class="badge-soft badge-soft--attention">{% translate "Completed without review" %}</span>
+          {% endif %}
         {% else %}
           {{ event.get_kind_display|lower }}
         {% endif %}

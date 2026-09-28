@@ -254,11 +254,39 @@ def test_layout_loads_the_expected_bundle(layout: str, bundle: str) -> None:
     assert f"css/{bundle}" in SOURCES[layout]
 
 
+_INLINE_STYLE = re.compile(r"<style[^>]*>(.*?)</style>", re.DOTALL)
+
+
+def _standalone_classes(source: str) -> frozenset[str] | None:
+    """The classes a self-contained document defines for itself, or ``None``.
+
+    A generated document — the Roles & Permissions guide — renders outside every
+    layout and ships its own ``<style>``, so it opens from a file and prints
+    without the app's bundles. Its classes are held to that stylesheet instead.
+    """
+    if _EXTENDS.search(source) or not source.lstrip().lower().startswith(("<!doctype", "{%", "{#")):
+        return None
+    blocks = _INLINE_STYLE.findall(source)
+    if not blocks or "<html" not in source.lower():
+        return None
+    names: set[str] = set()
+    for css in blocks:
+        for selector in _SELECTOR.findall(css):
+            names.update(_CLASS.findall(selector))
+    return frozenset(names)
+
+
 @pytest.mark.parametrize("path", sorted(SOURCES))
 def test_every_class_used_is_defined_in_a_reachable_bundle(path: str) -> None:
     used = _classes_used(SOURCES[path])
     if not used:
         pytest.skip("no class attributes")
+
+    own = _standalone_classes(SOURCES[path])
+    if own is not None:
+        undefined = sorted(name for name in used if name not in own)
+        assert not undefined, f"{path} uses classes its own <style> does not define: {undefined}"
+        return
 
     bundles = REACHABLE[path]
     missing = sorted(name for name in used if not any(_defined(name, bundle) for bundle in bundles))

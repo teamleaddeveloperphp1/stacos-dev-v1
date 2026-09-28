@@ -62,6 +62,7 @@ class Command(BaseCommand):
             textile = next(iter(entities.values()))
             people = {u.email: u for u in User.objects.filter(email__endswith=".example")}
 
+        self._own_obligations(org, textile, people, as_of)
         self._calendar(org, textile, as_of)
         self._practice(practice, org, people, as_of)
         self._billing(org, as_of)
@@ -70,6 +71,81 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("\nDemo work ready."))
 
     # -- Compliance calendar -------------------------------------------------
+
+    def _own_obligations(
+        self, org: Tenant, entity: Entity, people: dict[str, User], as_of: date
+    ) -> None:
+        """Two obligations the catalog cannot know about, written the way a user would.
+
+        A lender's covenant under internal governance — which the tax-only
+        engagement therefore does not reach — and a boiler log under safety,
+        which the department user does. Created through the same service the
+        library uses, so each lands on the calendar exactly as it would from
+        the "Add your own" button. Skipped when already there.
+        """
+        from stacos.obligations.custom import create_custom_obligation
+        from stacos.obligations.models import CustomObligation, CustomObligationVersion
+
+        owner = people.get("priya@vaibhav-textiles.example")
+        seeds: list[tuple[dict[str, Any], dict[str, Any]]] = [
+            (
+                {
+                    "title": "DSCR covenant certificate to HDFC Bank",
+                    "description": (
+                        "Certify the debt service coverage ratio for the quarter, signed "
+                        "by the CFO, and send it to the relationship manager."
+                    ),
+                    "source_reference": "Term loan agreement dated 12 Jan 2024, cl. 14.2",
+                    "consequence": "Event of default if not cured within 30 days of notice.",
+                    "category": "INTERNAL_GOVERNANCE",
+                    "evidence_labels": ["Signed DSCR certificate", "Lender's acknowledgement"],
+                    "evidence_mandatory": True,
+                },
+                {
+                    "periodicity": "QUARTERLY",
+                    "period_anchor": CustomObligationVersion.PeriodAnchor.FY,
+                    "due_mode": CustomObligationVersion.DueMode.DAYS_AFTER_PERIOD,
+                    "due_days": 45,
+                    "due_day_of_month": None,
+                    "shift_to_working_day": True,
+                },
+            ),
+            (
+                {
+                    "title": "Boiler operation log review",
+                    "description": "Plant head reviews and signs the month's boiler log.",
+                    "source_reference": "Boiler registration condition 9 (Surat plant)",
+                    "consequence": "",
+                    "category": "SAFETY_FIRE",
+                    "evidence_labels": ["Signed log extract"],
+                    "evidence_mandatory": False,
+                },
+                {
+                    "periodicity": "MONTHLY",
+                    "period_anchor": CustomObligationVersion.PeriodAnchor.FY,
+                    "due_mode": CustomObligationVersion.DueMode.DAY_OF_NEXT_MONTH,
+                    "due_days": 0,
+                    "due_day_of_month": 5,
+                    "shift_to_working_day": True,
+                },
+            ),
+        ]
+
+        added = 0
+        with tenant_context(tenant_ids=org.pk, reason="seed_work:own-obligations"):
+            for details, schedule in seeds:
+                if CustomObligation.objects.filter(entity=entity, title=details["title"]).exists():
+                    continue
+                create_custom_obligation(
+                    entity,
+                    actor=owner,
+                    details=details,
+                    schedule=schedule,
+                    starts_on=date(as_of.year - 1, 4, 1),
+                    as_of=as_of,
+                )
+                added += 1
+        self.stdout.write(f"  Own obligations: {added} added (a lender covenant, a boiler log)")
 
     def _calendar(self, org: Tenant, entity: Entity, as_of: date) -> None:
         """Materialise the register, then move some of it on.

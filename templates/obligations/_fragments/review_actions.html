@@ -1,0 +1,86 @@
+{% load i18n %}
+{% comment %}
+  Prepare → review → client sign-off → file, for whoever works that way.
+
+  The solo tracker never sees this: someone who may mark work done without
+  review keeps the single "is it done?" question above, and the chain stays out
+  of their way until somebody else puts an obligation into it. Everybody else —
+  a compliance manager, a department user, a firm's staff and managers — has no
+  other route to a filing, so these are their next steps.
+
+  Two approvals that must not be confused, and are labelled so they cannot be:
+  the reviewer's (the preparing side checking its own work — "Approve for
+  filing", "Approve and send for client sign-off") and the client's ("Sign off
+  as the client"), which only the business can give.
+
+  Filtered by permission and by the checker rule on the server. That is a
+  courtesy for rendering; `apply_transition` refuses the same moves on the POST.
+{% endcomment %}
+{% if review_actions or awaiting_other_reviewer %}
+  <section class="mt-3" aria-labelledby="review-heading-{{ obligation.pk }}">
+    <h3 class="card__title card__title--section" id="review-heading-{{ obligation.pk }}">
+      {% if obligation.state == "PENDING_REVIEW" %}
+        {% translate "Waiting for review" %}
+      {% elif obligation.state == "PENDING_CLIENT_APPROVAL" %}
+        {% translate "Waiting for the client's sign-off" %}
+      {% elif obligation.state == "READY_TO_FILE" %}
+        {% translate "Reviewed — ready to file" %}
+      {% elif obligation.state == "INFO_REQUESTED" %}
+        {% translate "Waiting for information" %}
+      {% else %}
+        {% translate "Review" %}
+      {% endif %}
+    </h3>
+
+    {% if awaiting_other_reviewer %}
+      <p class="callout callout--info small" role="note">
+        <c-icon name="info" size="14" />
+        {% translate "You submitted this for review, so a colleague has to review and approve it." %}
+      </p>
+    {% endif %}
+
+    {% if obligation.state == "READY_TO_FILE" %}
+      <p class="text-muted small">
+        {% translate "Record the submission above once it is on the portal." %}
+      </p>
+    {% endif %}
+
+    {% if review_actions %}
+      <div class="action-tiles">
+        {% for action in review_actions %}
+          {% if action.requires_note %}
+            <details class="action-tile">
+              <summary>
+                <span class="action-tile__label">{{ action.label }}</span>
+                <span class="action-tile__hint">{% translate "Say what needs to change" %}</span>
+              </summary>
+              <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+                    hx-target="#obligation-panel" hx-swap="outerHTML"
+                    class="action-tile__form">
+                {% csrf_token %}
+                <input type="hidden" name="target" value="{{ action.target }}">
+                <label class="form-label" for="review-note-{{ forloop.counter }}">
+                  {% translate "Reason" %}<span class="asteriskField">*</span>
+                </label>
+                <textarea class="form-control form-control-sm" id="review-note-{{ forloop.counter }}"
+                          name="note" required rows="2"
+                          placeholder="{% translate 'What needs to change? (recorded)' %}"></textarea>
+                <button class="btn btn-sm btn-outline-secondary mt-2" type="submit">{{ action.label }}</button>
+              </form>
+            </details>
+          {% else %}
+            <form hx-post="{% url 'compliance:transition' obligation.pk %}"
+                  hx-target="#obligation-panel" hx-swap="outerHTML"
+                  class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="target" value="{{ action.target }}">
+              <button class="btn btn-sm {% if forloop.first %}btn-primary{% else %}btn-outline-secondary{% endif %}" type="submit">
+                {{ action.label }}
+              </button>
+            </form>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+{% endif %}

@@ -201,6 +201,20 @@ document.body.addEventListener("htmx:sendError", connectionToast);
 document.body.addEventListener("htmx:timeout", connectionToast);
 
 // ---------------------------------------------------------------------------
+// Select-to-navigate
+//
+// A `<select data-navigate-select>` whose options carry URLs as values: picking
+// one navigates there through HTMX, exactly as a link with the same hx-target
+// and hx-push-url would. The path is swapped in before the request is built, so
+// the pushed history entry is the chosen page, not the element's hx-get.
+// ---------------------------------------------------------------------------
+document.body.addEventListener("htmx:configRequest", (event) => {
+  const select = event.detail.elt;
+  if (!select?.hasAttribute?.("data-navigate-select") || !select.value) return;
+  event.detail.path = select.value;
+});
+
+// ---------------------------------------------------------------------------
 // Route progress
 //
 // Only shown once a request has been in flight past ~180ms. Showing it

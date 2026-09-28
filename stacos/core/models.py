@@ -105,6 +105,11 @@ class TenantScopedModel(UUIDModel, TimeStampedModel):
     #: Column the entity filter is applied to, or ``None`` for tenant-level rows.
     ENTITY_FIELD: ClassVar[str | None] = None
 
+    #: Column holding the compliance category, for rows a category-limited
+    #: member or engagement must not see outside their areas. ``None`` means the
+    #: row is not about a category and is filtered by tenant and entity only.
+    CATEGORY_FIELD: ClassVar[str | None] = None
+
     #: Set ``False`` for system-written, append-only rows (audit entries) that
     #: must be recordable even when the actor's engagement is read-only.
     ENFORCE_WRITE_SCOPE: ClassVar[bool] = True

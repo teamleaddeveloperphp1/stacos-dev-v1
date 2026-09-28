@@ -19,7 +19,8 @@ interleaves many requests.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Iterable, Iterator
+import functools
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field, replace
 from uuid import UUID
@@ -28,7 +29,10 @@ from stacos.core.exceptions import UnscopedQueryError
 
 __all__ = [
     "AccessScope",
+    "across_all_categories",
+    "all_categories",
     "current_scope",
+    "effective_permissions",
     "platform_scope",
     "require_scope",
     "scope_bound",
@@ -53,8 +57,20 @@ class AccessScope:
         user on one factory, or a practice engaged for two of a group's eight
         subsidiaries.
     :param categories: compliance categories the actor may touch, or ``None``
-        for all. A department user sees ``SAFETY_FIRE`` and nothing financial.
+        for all — the *member's* limit, applying to every entity they reach. A
+        department user sees ``SAFETY_FIRE`` and nothing financial.
+    :param entity_categories: a further category limit for particular entities,
+        from the engagement that reaches them. An entity absent here is limited
+        only by ``categories``. Kept per entity because a firm engaged for GST on
+        one client and for everything on another must not have the first
+        engagement's limit applied to the second, nor the second's reach to the
+        first.
     :param permissions: resolved permission codes, so views do not re-query.
+        What the *role* allows; see ``entity_permissions`` for the ceiling on a
+        particular entity.
+    :param entity_permissions: the most that may be done on a particular entity,
+        from the engagement that reaches it. An entity absent here has no
+        ceiling beyond ``permissions``. Read through :meth:`permissions_for`.
     :param reason: why this scope exists — ``"request"``, ``"celery:<task>"``,
         ``"platform:<reason>"``. Appears in audit rows and logs.
     :param bypass: disables tenant filtering entirely. Platform administration
@@ -71,7 +87,9 @@ class AccessScope:
     member_tenant_ids: frozenset[UUID] = field(default_factory=frozenset)
     entity_ids: frozenset[UUID] | None = None
     categories: frozenset[str] | None = None
+    entity_categories: Mapping[UUID, frozenset[str]] = field(default_factory=dict)
     permissions: frozenset[str] = field(default_factory=frozenset)
+    entity_permissions: Mapping[UUID, frozenset[str]] = field(default_factory=dict)
     reason: str = "unknown"
     bypass: bool = False
 
@@ -83,6 +101,18 @@ class AccessScope:
 
     def has_permission(self, code: str) -> bool:
         return self.bypass or code in self.permissions
+
+    def permissions_for(self, entity_id: UUID | None) -> frozenset[str]:
+        """What may be done on one entity: the role, capped by its engagement.
+
+        A firm's partner holds ``compliance.obligation.file`` in their role, but
+        if the client engaged the firm to prepare and not to file, they may not
+        file *for that client*. The engagement is the ceiling, never a top-up.
+        """
+        if self.bypass or entity_id is None:
+            return self.permissions
+        ceiling = self.entity_permissions.get(entity_id)
+        return self.permissions if ceiling is None else self.permissions & ceiling
 
     def narrowed_to(self, *, entity_ids: Iterable[UUID]) -> AccessScope:
         """Return a copy restricted to a subset of the current entities.
@@ -130,6 +160,55 @@ def require_scope() -> AccessScope:
     return scope
 
 
+def effective_permissions(permissions: frozenset[str], entity_id: UUID | None) -> frozenset[str]:
+    """Cap ``permissions`` by the bound scope's ceiling for ``entity_id``.
+
+    For service functions that are handed a permission set by their caller — the
+    obligation transitions, most of all. Applied inside the service rather than
+    left to each view, so the web app, the API and a bulk action cannot differ
+    on whether a firm may file for a client that did not engage it to.
+    """
+    scope = _current.get()
+    if scope is None or scope.bypass or entity_id is None:
+        return permissions
+    ceiling = scope.entity_permissions.get(entity_id)
+    return permissions if ceiling is None else permissions & ceiling
+
+
+@contextlib.contextmanager
+def all_categories() -> Iterator[AccessScope | None]:
+    """Rebind the current scope with its compliance-category limits lifted.
+
+    For system work done *on behalf of* a category-limited user that has to see
+    the whole entity to be correct. The calendar planner is the case: it
+    compares what should exist with what does, and a planner that could only see
+    the tax obligations would conclude every other one was missing and plan it
+    again. Tenant and entity limits are untouched — this widens nothing but the
+    category filter, and only for the block.
+    """
+    scope = _current.get()
+    if scope is None or scope.bypass or (scope.categories is None and not scope.entity_categories):
+        yield scope
+        return
+    widened = replace(scope, categories=None, entity_categories={})
+    token: Token[AccessScope | None] = _current.set(widened)
+    try:
+        yield widened
+    finally:
+        _current.reset(token)
+
+
+def across_all_categories[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
+    """Decorator form of :func:`all_categories`, for a whole service function."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        with all_categories():
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
 @contextlib.contextmanager
 def tenant_context(
     *,
@@ -139,7 +218,9 @@ def tenant_context(
     writable_tenant_ids: Iterable[UUID] | None = None,
     entity_ids: Iterable[UUID] | None = None,
     categories: Iterable[str] | None = None,
+    entity_categories: Mapping[UUID, frozenset[str]] | None = None,
     permissions: Iterable[str] = (),
+    entity_permissions: Mapping[UUID, frozenset[str]] | None = None,
 ) -> Iterator[AccessScope]:
     """Bind an access scope for the duration of the block.
 
@@ -161,7 +242,9 @@ def tenant_context(
         member_tenant_ids=readable,
         entity_ids=frozenset(entity_ids) if entity_ids is not None else None,
         categories=frozenset(categories) if categories is not None else None,
+        entity_categories=dict(entity_categories or {}),
         permissions=frozenset(permissions),
+        entity_permissions=dict(entity_permissions or {}),
         reason=reason,
     )
     previous = _current.get()

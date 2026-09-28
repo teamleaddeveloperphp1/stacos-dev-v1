@@ -6,6 +6,9 @@
   and swapped whole rather than prepended: this table carries an empty state, and
   a prepended row would leave "No registrations recorded" sitting underneath the
   registration just recorded.
+
+  `in_setup` marks the guided setup's first step, so the modal it opens knows
+  to update that step's "still to record" note as well.
 {% endcomment %}
 <tbody id="registration-rows">
   {% for registration in registrations %}
@@ -28,7 +31,7 @@
                        body="{% translate 'Add the PAN, GSTIN and other identifiers so we can work out which filings apply.' %}">
           {% if "tenancy.registration.manage" in access_scope.permissions %}
             <button class="btn btn-sm btn-primary"
-                    hx-get="{% url 'app:registration_create' entity.pk %}"
+                    hx-get="{% url 'app:registration_create' entity.pk %}{% if in_setup %}?setup=1{% endif %}"
                     hx-target="#modal-container"
                     hx-swap="innerHTML">
               {% translate "Add a registration" %}

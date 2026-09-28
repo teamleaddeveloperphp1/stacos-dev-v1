@@ -33,7 +33,12 @@ from stacos.core.htmx import (
     page_url,
 )
 from stacos.core.models import AuditAction
-from stacos.core.permissions import RequirePermissionMixin, check_permissions, require_permission
+from stacos.core.permissions import (
+    RequirePermissionMixin,
+    check_permissions,
+    require_entity_permission,
+    require_permission,
+)
 from stacos.core.typing import current_user
 from stacos.jurisdictions.registration_requirements import get_registration_requirements
 from stacos.obligations.models import MaterialisationRun
@@ -53,6 +58,7 @@ from stacos.tenancy.forms import (
     registration_field_name,
 )
 from stacos.tenancy.models import Entity, EntityProfile, EntityRegistration
+from stacos.tenancy.registration_gaps import registration_gaps
 
 #: The one modal that both creates and edits an entity.
 ENTITY_FORM_TEMPLATE = "tenancy/_fragments/entity_form_modal.html"
@@ -236,8 +242,12 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     # Appended verbatim after `?status=...` on every stat tile's (and now the
     # donut legend's) link to the calendar, so a tile clicked while the
     # dashboard is narrowed to one entity lands on that entity's rows, not
-    # every entity's.
-    dashboard_entity_qs = f"&entity={selected_entity.id}" if selected_entity else ""
+    # every entity's. `within=all` for the same reason: these counts cover the
+    # planner's whole horizon, and the calendar otherwise opens on its default
+    # "Due within" window — a click on "Pending: 212" would land on fewer.
+    dashboard_calendar_qs = "&within=all" + (
+        f"&entity={selected_entity.id}" if selected_entity else ""
+    )
     calendar_url = reverse("compliance:calendar")
 
     context = {
@@ -245,7 +255,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
         "entities": entities_display,
         "entity_options": entity_options,
         "selected_entity": selected_entity,
-        "dashboard_entity_qs": dashboard_entity_qs,
+        "dashboard_calendar_qs": dashboard_calendar_qs,
         "tenant": getattr(request, "tenant", None),
         # A one-line nudge on the ordinary dashboard, not a blocking screen —
         # the workspace is fully usable under its derived name, and asking for
@@ -263,25 +273,25 @@ def dashboard(request: HttpRequest) -> HttpResponse:
                     "status": "overdue",
                     "label": _("Overdue"),
                     "value": counts["overdue"],
-                    "href": f"{calendar_url}?status=overdue{dashboard_entity_qs}",
+                    "href": f"{calendar_url}?status=overdue{dashboard_calendar_qs}",
                 },
                 {
                     "status": "due-soon",
                     "label": _("Due soon"),
                     "value": counts["due_soon"],
-                    "href": f"{calendar_url}?status=due_soon{dashboard_entity_qs}",
+                    "href": f"{calendar_url}?status=due_soon{dashboard_calendar_qs}",
                 },
                 {
                     "status": "pending",
                     "label": _("Pending"),
                     "value": pending,
-                    "href": f"{calendar_url}?status=pending{dashboard_entity_qs}",
+                    "href": f"{calendar_url}?status=pending{dashboard_calendar_qs}",
                 },
                 {
                     "status": "on-track",
                     "label": _("Completed"),
                     "value": counts["completed"],
-                    "href": f"{calendar_url}?status=completed{dashboard_entity_qs}",
+                    "href": f"{calendar_url}?status=completed{dashboard_calendar_qs}",
                 },
             ]
         ),
@@ -699,6 +709,7 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
     entity = Entity.objects.filter(pk=pk, archived_at__isnull=True).first()
     if entity is None:
         raise Http404
+    require_entity_permission(request, "tenancy.entity.edit", entity.pk)
 
     scope = request.access_scope  # type: ignore[attr-defined]
     can_manage_registrations = scope.has_permission("tenancy.registration.manage")
@@ -931,8 +942,18 @@ def registration_create(request: HttpRequest, pk: str) -> HttpResponse:
     if entity is None:
         # 404 rather than 403, for the same reason as `entity_detail`.
         raise Http404
+    require_entity_permission(request, "tenancy.registration.manage", entity.pk)
 
-    form = RegistrationForm(request.POST or None)
+    # `setup=1` when the modal was opened from the guided setup's first step,
+    # whose "still to record" note is then updated out of band as well — a
+    # region the ordinary entity detail page does not have.
+    in_setup = (request.POST if request.method == "POST" else request.GET).get("setup") == "1"
+    # A GET carrying `type` is the modal re-rendering its own State list after
+    # the type changed; see `RegistrationForm`.
+    initial = {key: request.GET[key] for key in ("type", "jurisdiction") if key in request.GET}
+    form = RegistrationForm(
+        request.POST or None, initial=initial, entity=entity, gaps=registration_gaps(entity)
+    )
 
     if request.method == "POST" and form.is_valid():
         registration = form.save(commit=False)
@@ -943,6 +964,17 @@ def registration_create(request: HttpRequest, pk: str) -> HttpResponse:
 
         record_event(action=AuditAction.CREATE, actor=current_user(request), obj=registration)
 
+        also: list[Fragment] = []
+        if in_setup:
+            also.append(
+                Fragment(
+                    "tenancy/setup/_fragments/registration_progress.html",
+                    {"entity": entity, "gaps": registration_gaps(entity)},
+                    oob_target="registration-progress",
+                    swap="innerHTML",
+                )
+            )
+
         return oob(
             request,
             Fragment(
@@ -950,8 +982,10 @@ def registration_create(request: HttpRequest, pk: str) -> HttpResponse:
                 {
                     "entity": entity,
                     "registrations": entity.registrations.filter(archived_at__isnull=True),
+                    "in_setup": in_setup,
                 },
             ),
+            also=also,
             toast=Toast(
                 _("%(type)s recorded.") % {"type": registration.type},
             ),
@@ -962,7 +996,7 @@ def registration_create(request: HttpRequest, pk: str) -> HttpResponse:
     return render(
         request,
         "tenancy/_fragments/registration_form_modal.html",
-        {"form": form, "entity": entity},
+        {"form": form, "entity": entity, "in_setup": in_setup},
         status=status,
     )
 
@@ -983,6 +1017,7 @@ def premises_create(request: HttpRequest, pk: str) -> HttpResponse:
     if entity is None:
         # 404 rather than 403, for the same reason as `entity_detail`.
         raise Http404
+    require_entity_permission(request, "tenancy.premises.manage", entity.pk)
 
     form = PremisesForm(request.POST or None)
 
@@ -1030,6 +1065,7 @@ def archive_entity(request: HttpRequest, pk: str) -> HttpResponse:
         from django.http import Http404
 
         raise Http404
+    require_entity_permission(request, "tenancy.entity.archive", entity.pk)
 
     entity.archive(reason=request.POST.get("reason", ""))
 

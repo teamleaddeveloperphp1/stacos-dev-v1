@@ -11,6 +11,7 @@ reads them off two devices.
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -325,7 +326,7 @@ def test_entity_can_be_created_through_the_modal(
             "incorporation_date": "2020-04-01",
             "registered_office_state": "IN-KA",
             "registered_office_address": "Bengaluru",
-            "aggregate_turnover": "50000000.00",
+            "aggregate_turnover": "5",
             "employee_count": "25",
         },
         headers={"HX-Request": "true"},
@@ -335,6 +336,8 @@ def test_entity_can_be_created_through_the_modal(
     entity = Entity.objects_unscoped.get(name="New Ventures Pvt Ltd")
     assert entity.tenant_id == org.id
     assert hasattr(entity, "profile"), "an entity with no profile has nothing to evaluate"
+    # Typed in crores, stored in rupees — the catalog's thresholds are in rupees.
+    assert entity.profile.aggregate_turnover == Decimal("50000000")
 
     # One request, three regions: the row, the sidebar counter, and a toast.
     assert b"New Ventures Pvt Ltd" in response.content
@@ -366,7 +369,7 @@ def test_duplicate_entity_name_is_rejected(signed_in: Client, entity_a: Entity) 
             "incorporation_date": "2020-04-01",
             "registered_office_state": "IN-KA",
             "registered_office_address": "4 Residency Road, Bengaluru",
-            "aggregate_turnover": "50000000.00",
+            "aggregate_turnover": "5",
             "employee_count": "25",
         },
         headers={"HX-Request": "true"},
@@ -410,7 +413,7 @@ def test_audit_entries_are_written_for_entity_creation(
             "incorporation_date": "2020-04-01",
             "registered_office_state": "IN-KA",
             "registered_office_address": "4 Residency Road, Bengaluru",
-            "aggregate_turnover": "50000000.00",
+            "aggregate_turnover": "5",
             "employee_count": "25",
         },
         headers={"HX-Request": "true"},

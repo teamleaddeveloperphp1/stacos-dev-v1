@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Self, cast
 
 from django.db import models
+from django.db.models import Q
 
 from stacos.core.exceptions import UnscopedQueryError
 from stacos.core.scope import AccessScope, current_scope
@@ -115,7 +116,7 @@ def _apply_scope(
         queryset = queryset.filter(**{f"{tenant_field}__in": scope.readable_tenant_ids})
         if scope.entity_ids is not None:
             queryset = queryset.filter(**{f"{entity_field}__in": scope.entity_ids})
-        return queryset
+        return _apply_categories(queryset, model, scope, entity_field)
 
     # Tenant-level: memberships, settings, billing. An engagement grants a
     # practice access to a client's *compliance records*, never to the client's
@@ -125,3 +126,31 @@ def _apply_scope(
     if not scope.member_tenant_ids:
         return queryset.none()
     return queryset.filter(**{f"{tenant_field}__in": scope.member_tenant_ids})
+
+
+def _apply_categories(
+    queryset: models.QuerySet[Any],
+    model: type[models.Model],
+    scope: AccessScope,
+    entity_field: str,
+) -> Any:
+    """Filter to the compliance categories the scope reaches.
+
+    Only for models that say which category a row belongs to
+    (``CATEGORY_FIELD``) — an obligation, and the rows hanging off one. Two
+    limits, and a row has to pass both: the member's own (a department user on
+    safety and labour), and, per entity, the engagement's (a firm engaged for
+    GST on this client).
+    """
+    category_field = getattr(model, "CATEGORY_FIELD", None)
+    if not category_field:
+        return queryset
+    if scope.categories is not None:
+        queryset = queryset.filter(**{f"{category_field}__in": scope.categories})
+    if scope.entity_categories:
+        limited = Q(**{f"{entity_field}__in": list(scope.entity_categories)})
+        reachable = ~limited
+        for entity_id, categories in scope.entity_categories.items():
+            reachable |= Q(**{entity_field: entity_id, f"{category_field}__in": categories})
+        queryset = queryset.filter(reachable)
+    return queryset

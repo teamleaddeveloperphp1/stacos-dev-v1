@@ -11,6 +11,26 @@ urlpatterns = [
     path("library/", library_views.entity_picker, name="library_picker"),
     path("library/<uuid:entity_pk>/", library_views.library_detail, name="library"),
     path(
+        "library/<uuid:entity_pk>/own/new/",
+        library_views.custom_create,
+        name="custom_create",
+    ),
+    path(
+        "library/<uuid:entity_pk>/own/<uuid:pk>/",
+        library_views.custom_detail,
+        name="custom_detail",
+    ),
+    path(
+        "library/<uuid:entity_pk>/own/<uuid:pk>/edit/",
+        library_views.custom_edit,
+        name="custom_edit",
+    ),
+    path(
+        "library/<uuid:entity_pk>/own/<uuid:pk>/withdraw/",
+        library_views.custom_withdraw,
+        name="custom_withdraw",
+    ),
+    path(
         "library/<uuid:entity_pk>/<slug:code>/remove/",
         library_views.library_remove,
         name="library_remove",

@@ -1,0 +1,2176 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STACOS Roles &amp; Permissions</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;600;700&display=swap">
+<style>
+  /* The product's tokens (assets/scss/_tokens.scss), so a printed guide reads as STACOS. */
+  :root {
+    --ink: #0f172a;
+    --muted: #475569;
+    --line: #e2e8f0;
+    --soft: #f8fafc;
+    --accent: #1d4ed8;
+    --accent-soft: #eff5ff;
+    --warn: #b54708;
+    --warn-soft: #fffaeb;
+    --yes: #067647;
+    --paper: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.55 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  h1, h2 { font-family: Fraunces, Georgia, "Times New Roman", serif; font-weight: 600; }
+  code { font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+  main { max-width: 1040px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 21px; margin: 44px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 20px 0 6px; }
+  p { margin: 0 0 10px; }
+  .lede { font-size: 17px; color: var(--muted); max-width: 70ch; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 18px 0 0; padding: 0; list-style: none; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+
+  .two-questions { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 22px 0 0; }
+  .question { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; background: var(--soft); }
+  .question strong { display: block; font-size: 15px; margin-bottom: 2px; }
+
+  .groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+  .group { border: 1px solid var(--line); border-radius: 8px; padding: 16px; break-inside: avoid; }
+  .group h3 { margin-top: 0; }
+  .group > p { font-size: 13px; color: var(--muted); }
+  .role { border-top: 1px solid var(--line); padding: 10px 0 0; margin-top: 10px; }
+  .role__name { font-weight: 600; }
+  .role__holder { font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+  .role__desc { font-size: 14px; margin: 0; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-top: 6px; }
+  .tag--later { background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 14px 0 12px; padding: 0; list-style: none; counter-reset: step; }
+  .flow li { position: relative; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-right: 22px; background: var(--paper); break-inside: avoid; }
+  .flow li:last-child { margin-right: 0; }
+  .flow li:not(:last-child)::after { content: "→"; position: absolute; right: -19px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
+  .flow__step { font-weight: 600; }
+  .flow__step::before { counter-increment: step; content: counter(step) ". "; color: var(--accent); }
+  .flow__what { font-size: 13px; margin: 4px 0 8px; }
+  .flow__who { font-size: 12px; color: var(--muted); margin: 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 14px; }
+  .callout--warn { border-color: var(--warn); background: var(--warn-soft); }
+  .rules { margin: 8px 0 0; padding-left: 20px; }
+  .rules li { margin: 4px 0; }
+
+  .matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table.matrix { border-collapse: collapse; width: 100%; min-width: 820px; table-layout: fixed; font-size: 13px; }
+  .matrix th, .matrix td { border-bottom: 1px solid var(--line); padding: 7px 8px; vertical-align: top; }
+  .matrix thead th { background: var(--soft); font-weight: 600; text-align: center; overflow-wrap: break-word; hyphens: auto; }
+  .matrix thead tr:first-child th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .matrix thead th.capability { text-align: left; width: 31%; }
+  .matrix .section th { background: var(--paper); text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); padding-top: 14px; }
+  .matrix td.cell { text-align: center; }
+  .matrix .group-start { border-left: 1px solid var(--line); }
+  .yes { color: var(--yes); font-weight: 700; }
+  .no { color: #a5adb8; }
+  .row-note { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .row--later td, .row--later th { color: var(--muted); }
+
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .box { border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; break-inside: avoid; }
+  .box h3 { margin-top: 0; }
+  ul.plain { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+  ul.plain li { margin: 2px 0; }
+
+  dl.glossary { display: grid; grid-template-columns: minmax(140px, 200px) 1fr; gap: 6px 16px; margin: 0; }
+  dl.glossary dt { font-weight: 600; }
+  dl.glossary dd { margin: 0; }
+
+  table.appendix { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 12.5px; margin-bottom: 14px; }
+  .appendix th, .appendix td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+  .appendix th { background: var(--soft); font-weight: 600; }
+  .appendix code { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .appendix td { overflow-wrap: anywhere; }
+  .appendix .sensitive { font-size: 11px; color: var(--warn); white-space: nowrap; }
+
+  footer { margin-top: 48px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 760px) {
+    h1 { font-size: 25px; }
+    .flow { grid-template-columns: 1fr; }
+    .flow li { margin: 0 0 22px; }
+    .flow li:not(:last-child)::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -21px; transform: translateX(-50%); }
+    dl.glossary { grid-template-columns: 1fr; }
+  }
+
+  @page { size: A4; margin: 14mm 12mm 16mm; }
+  @media print {
+    body { font-size: 11pt; }
+    main { max-width: none; padding: 0; }
+    .toc { display: none; }
+    h2 { break-after: avoid; }
+    .matrix-wrap { overflow: visible; border: none; }
+    table.matrix { min-width: 0; font-size: 9pt; }
+    .matrix thead { display: table-header-group; }
+    .matrix tr { break-inside: avoid; }
+    .page-break { break-before: page; }
+    .groups { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .group { break-inside: auto; padding: 12px; }
+    .role { break-inside: avoid; }
+    .role__desc, .question { font-size: 9.5pt; }
+    .flow li { padding: 10px; }
+    .matrix th, .matrix td { padding: 4px 5px; }
+    .matrix thead th.capability { width: 29%; }
+    .matrix thead tr:nth-child(2) th { font-size: 6.8pt; line-height: 1.25; overflow-wrap: normal; word-break: keep-all; hyphens: manual; padding: 4px 1px; }
+    .matrix thead tr:first-child th { font-size: 7.5pt; }
+    h2 { margin-top: 28px; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>STACOS Roles &amp; Permissions</h1>
+  <p class="lede">Who can do what in STACOS, and where. Written for the person deciding whom to invite, and as what.</p>
+  <div class="two-questions">
+    <div class="question">
+      <strong>The role: what can they do?</strong>
+      Nine built-in roles, three for each kind of workspace. A role is a named set of permissions and nothing more.
+    </div>
+    <div class="question">
+      <strong>The reach: where can they do it?</strong>
+      Which entities, or which clients. Set per person, separately from the role, and it never widens because of the role.
+    </div>
+  </div>
+  <ul class="toc" aria-label="Contents">
+    <li><a href="#roles">The roles</a></li>
+    <li><a href="#workflow">How a filing moves</a></li>
+    <li><a href="#compare">Compare roles</a></li>
+    <li><a href="#reach">Reach</a></li>
+    <li><a href="#firms">What a firm may do for a client</a></li>
+    <li><a href="#dealers">Dealers</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#appendix">Every permission</a></li>
+  </ul>
+</header>
+
+<section id="roles" aria-labelledby="roles-title">
+  <h2 id="roles-title">The roles</h2>
+  <div class="groups">
+    
+      <article class="group">
+        <h3>Business</h3>
+        <p>The organisation that owes the compliance. Its people prepare, check and sign off; it decides which firm may work on which of its entities.</p>
+        
+          <div class="role">
+            <div class="role__name">Owner / Director</div>
+            <p class="role__holder">A director, proprietor or partner of the business.</p>
+            <p class="role__desc">Answerable for the business: signs off filings as the client and manages people, access and billing. May mark work done without review, which is recorded as such.</p>
+            
+          </div>
+        
+          <div class="role">
+            <div class="role__name">Compliance Manager</div>
+            <p class="role__holder">The in-house accountant, company secretary or compliance lead.</p>
+            <p class="role__desc">Runs the compliance calendar day to day: prepares, reviews colleagues&#x27; work, and records filings once approved. Cannot sign off as the client, skip review, or change who has access.</p>
+            
+          </div>
+        
+          <div class="role">
+            <div class="role__name">Department User</div>
+            <p class="role__holder">A plant, HR or admin colleague who owns a few specific compliances.</p>
+            <p class="role__desc">Prepares and evidences the compliances in their own areas — fire, safety, labour, licences — and submits them for review. Sees no amounts, and nothing outside their areas.</p>
+            
+              <span class="tag">Starts limited to: Safety and fire, Labour and employment, Environment, Licensing</span>
+            
+          </div>
+        
+          <div class="role">
+            <div class="role__name">Viewer</div>
+            <p class="role__holder">A statutory auditor, investor, or board observer.</p>
+            <p class="role__desc">Read-only access to the calendar and the compliance profile, for auditors and observers. Cannot comment or change anything, and sees no amounts.</p>
+            
+          </div>
+        
+      </article>
+    
+      <article class="group">
+        <h3>Professional firm</h3>
+        <p>A CA or CS firm working for clients. On a client&#x27;s entity a firm member may do what their role allows and the client&#x27;s engagement allows — never more than either.</p>
+        
+          <div class="role">
+            <div class="role__name">Partner</div>
+            <p class="role__holder">A partner or proprietor of the CA / CS firm.</p>
+            <p class="role__desc">Answerable for the firm: the whole client book, reviews, utilisation, work in progress and billing. May mark work done without review where the client allows it, recorded as such.</p>
+            
+          </div>
+        
+          <div class="role">
+            <div class="role__name">Manager</div>
+            <p class="role__holder">A senior or manager who owns a set of clients.</p>
+            <p class="role__desc">Owns a set of clients: assigns work, reviews staff&#x27;s work, sends it for the client&#x27;s sign-off and records filings. Cannot skip review or reopen a closed filing.</p>
+            
+          </div>
+        
+          <div class="role">
+            <div class="role__name">Staff / Article</div>
+            <p class="role__holder">An article clerk, assistant or junior accountant.</p>
+            <p class="role__desc">Prepares the work assigned to them and submits it for review, asks clients for information, and logs their own time. Sees no amounts.</p>
+            
+          </div>
+        
+      </article>
+    
+      <article class="group">
+        <h3>Dealer</h3>
+        <p>A channel partner that sells and supports subscriptions. It never sees a client&#x27;s compliance, financial or document data.</p>
+        
+          <div class="role">
+            <div class="role__name">Dealer Principal</div>
+            <p class="role__holder">The owner of the reseller business.</p>
+            <p class="role__desc">Manages the client accounts the dealer has sold, its own team, and its commission ledger. Sees no client compliance data.</p>
+            
+          </div>
+        
+          <div class="role">
+            <div class="role__name">Dealer Staff</div>
+            <p class="role__holder">A sales or support person at the reseller.</p>
+            <p class="role__desc">Onboards and supports the dealer&#x27;s client accounts. Sees no client compliance data and no commission.</p>
+            
+          </div>
+        
+      </article>
+    
+  </div>
+  <p class="small muted" style="margin-top:12px">Everyone who can sign in can also: Change your notification preferences; Manage your own devices and sessions; See your own notifications; Use search and the command palette; View and edit your own profile; View entities; View organisation settings; View the compliance catalog; View the compliance profile.</p>
+</section>
+
+<section id="workflow" aria-labelledby="workflow-title">
+  <h2 id="workflow-title">How a filing moves</h2>
+  <p>Preparing, checking and signing off are separate steps held by separate permissions, so the person answerable for a filing is not the person who prepared it.</p>
+  <ol class="flow">
+    
+      <li>
+        <div class="flow__step">Prepare</div>
+        <p class="flow__what">Do the work and submit it for review.</p>
+        <p class="flow__who">Owner / Director, Compliance Manager, Department User, Partner, Manager, Staff / Article</p>
+      </li>
+    
+      <li>
+        <div class="flow__step">Review</div>
+        <p class="flow__what">A colleague — never the preparer — checks it and approves it for filing, or sends it for the client&#x27;s sign-off.</p>
+        <p class="flow__who">Owner / Director, Compliance Manager, Partner, Manager</p>
+      </li>
+    
+      <li>
+        <div class="flow__step">Client sign-off</div>
+        <p class="flow__what">When the firm asks for it, the business signs off in its own name.</p>
+        <p class="flow__who">Owner / Director</p>
+      </li>
+    
+      <li>
+        <div class="flow__step">Record filing</div>
+        <p class="flow__what">Enter the submission date and acknowledgement number, then close.</p>
+        <p class="flow__who">Owner / Director, Compliance Manager, Partner, Manager</p>
+      </li>
+    
+  </ol>
+  <ul class="rules">
+    <li><strong>The checker is never the maker.</strong> Whoever submitted work for review cannot approve it or sign it off as the client. They can still take it back for changes.</li>
+    <li><strong>A firm's review and the client's sign-off are different acts.</strong> A firm reviews its own work; only the business signs off in its own name. No firm role and no engagement can grant the client's sign-off.</li>
+    <li><strong>Sensitive steps ask you to re-confirm who you are.</strong> These are: signing off, recording a filing, marking one done without review, reopening one, and changing someone's access.</li>
+  </ul>
+  <div class="callout callout--warn">
+    <strong>The one exception: mark done without review.</strong>
+    For a sole owner, or a filing made outside STACOS, Owner / Director and Partner can record a filing from wherever it stands without a review. It is a deliberate exception. The timeline and the audit trail both label it <em>completed without review</em>.
+  </div>
+</section>
+
+<section id="compare" aria-labelledby="compare-title">
+  <h2 id="compare-title">Compare roles</h2>
+  <p class="small muted">✓ means the role can do it wherever the person's reach allows. On a client's entity, a firm role is also capped by that client's engagement. Rows marked <span class="tag tag--later">Not in this version</span> are permissions that exist but have no screen yet.</p>
+  <div class="matrix-wrap">
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th scope="col" class="capability" rowspan="2">Capability</th>
+          <th scope="colgroup" colspan="4" class="group-start">Business</th><th scope="colgroup" colspan="3" class="group-start">Professional firm</th><th scope="colgroup" colspan="2" class="group-start">Dealer</th>
+        </tr>
+        <tr>
+          <th scope="col" class="group-start">Owner / Director</th><th scope="col">Compliance Manager</th><th scope="col">Department User</th><th scope="col">Viewer</th><th scope="col" class="group-start">Partner</th><th scope="col">Manager</th><th scope="col">Staff / Article</th><th scope="col" class="group-start">Dealer Principal</th><th scope="col">Dealer Staff</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Seeing</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See the compliance calendar and library
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Department User: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Viewer: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See amounts, tax values and fees
+                
+                <span class="row-note">Without it, titles and due dates show and every amount is masked.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Comment on an obligation
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Department User: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See registrations and tax IDs
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                See the audit trail
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Viewer: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Preparing</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Prepare a filing and submit it for review
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Department User: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Ask for information
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Department User: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Record event dates (AGM, licence issue)
+                
+                <span class="row-note">Dates that unblock a due date the calendar cannot compute alone.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Department User: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Assign obligations to people
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Checking</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Review a colleague&#x27;s work
+                
+                <span class="row-note">Never your own: whoever submitted it for review cannot pass it.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Record a filing once it is approved
+                
+                <span class="row-note">With the acknowledgement number. Asks you to re-confirm who you are.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Close a completed obligation
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Client sign-off</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Sign off a filing as the client
+                
+                <span class="row-note">The business taking responsibility for what is filed in its name. A firm can never hold it.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Partner: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Exceptions — each needs a reason, and is recorded</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Defer, dispute, or mark not applicable
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Withdraw a recorded event date
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Reopen a closed filing
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Mark done without review
+                
+                <span class="row-note">The one exception to maker-checker. The timeline and audit trail record it as completed without review.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Entities and the calendar</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Edit an entity, its premises and its compliance profile
+                
+                <span class="row-note">The profile decides what the entity owes.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Rebuild the calendar; add or remove library items
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Add an entity
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Partner: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Archive an entity
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Partner: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Manage registrations and tax IDs
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Partner: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Change organisation settings
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">People and access</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Invite people, choosing their role and reach
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Dealer Principal: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Change someone&#x27;s role, reach and individual permissions
+                
+                <span class="row-note">Add or remove single permissions on top of the role — only ones you hold yourself. Never your own, and never the last person who can.</span>
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Deactivate a user
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Build custom roles
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Firms and clients</th></tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                See engagements
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Department User: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Viewer: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Invite a firm, or a client
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Compliance Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Change what an engagement covers
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Grant or end a firm&#x27;s access
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Partner: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">The firm&#x27;s own work</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See the work board
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Move your own work along; log your time
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Staff / Article: yes">✓</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Create and assign work
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See everybody&#x27;s time
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See work-in-progress value and profitability
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Manager: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Set charge-out rates
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Billing and data</th></tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See the subscription and invoices
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Dealer Principal: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                Record a payment
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Change the plan
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Export the audit trail or all data
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Owner / Director: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Partner: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Dealer Principal: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+          <tr class="section"><th scope="rowgroup" colspan="10">Dealer</th></tr>
+          
+            <tr class="row--later">
+              <th scope="row" style="font-weight:400;text-align:left">
+                Manage the client accounts the dealer sold
+                <span class="tag tag--later">Not in this version</span>
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Partner: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Dealer Principal: yes">✓</span></td>
+              
+                <td class="cell"><span class="yes" aria-label="Dealer Staff: yes">✓</span></td>
+              
+            </tr>
+          
+            <tr>
+              <th scope="row" style="font-weight:400;text-align:left">
+                See the commission ledger
+                
+                
+              </th>
+              
+                <td class="cell group-start"><span class="no" aria-label="Owner / Director: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Compliance Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Department User: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Viewer: no">—</span></td>
+              
+                <td class="cell group-start"><span class="no" aria-label="Partner: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Manager: no">—</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Staff / Article: no">—</span></td>
+              
+                <td class="cell group-start"><span class="yes" aria-label="Dealer Principal: yes">✓</span></td>
+              
+                <td class="cell"><span class="no" aria-label="Dealer Staff: no">—</span></td>
+              
+            </tr>
+          
+        
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="reach" aria-labelledby="reach-title">
+  <h2 id="reach-title">Reach: where a role applies</h2>
+  <p>Reach is chosen when someone is invited and can be changed later by anyone who can change access. Both changes go in the audit trail with the before and after.</p>
+  <div class="cols">
+    <div class="box">
+      <h3>In a business</h3>
+      <ul class="plain">
+        <li><strong>Entities</strong>: all of them, including ones added later, or a named few (e.g. one factory).</li>
+      </ul>
+      <p class="small muted" style="margin-top:8px">A Department User is limited to Safety and fire, Labour and employment, Environment, Licensing by their role.</p>
+    </div>
+    <div class="box">
+      <h3>In a firm</h3>
+      <ul class="plain">
+        <li><strong>Clients</strong>: the whole client book, or a named few.</li>
+        <li><strong>Each client's engagement</strong>: the entities, the areas and the most that may be done for that client. It caps the role and never adds to it.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>In a dealer</h3>
+      <p class="small" style="margin:0">No compliance reach at all. A dealer manages the accounts it sold and its commission.</p>
+    </div>
+  </div>
+  <div class="callout">Limits add up, and the narrowest one wins. A firm member limited to two clients, working for a client that engaged the firm for GST only, sees that client's GST only, and only on its engaged entities.</div>
+</section>
+
+<section id="firms" aria-labelledby="firms-title">
+  <h2 id="firms-title">What a firm may do for a client</h2>
+  <p>A client engages a firm for named entities, named compliance areas, a start date and an end date. Access stops the day an engagement ends, not whenever a job next runs.</p>
+  <div class="cols">
+    <div class="box">
+      <h3>Always, on the engaged entities</h3>
+      <ul class="plain"><li>Browse the compliance library</li><li>Use search and the command palette</li><li>View entities</li><li>View the compliance calendar</li><li>View the compliance catalog</li><li>View the compliance profile</li></ul>
+    </div>
+    <div class="box">
+      <h3>If the client allows it</h3>
+      <ul class="plain"><li>Add or remove a compliance definition for an entity</li><li>Assign an obligation</li><li>Close an obligation</li><li>Comment on an obligation</li><li>Defer an obligation</li><li>Edit an entity</li><li>Edit the compliance profile</li><li>Manage premises</li><li>Mark an obligation disputed</li><li>Mark an obligation not applicable</li><li>Mark done without review</li><li>Prepare a filing</li><li>Rebuild the compliance calendar</li><li>Record a filing</li><li>Record an entity event</li><li>Reopen a closed obligation</li><li>Request information from the client</li><li>Review a prepared filing</li><li>View financial figures</li><li>View registrations and tax identifiers</li><li>Withdraw a recorded event</li></ul>
+    </div>
+    <div class="box">
+      <h3>Never, whatever the engagement says</h3>
+      <ul class="plain">
+        <li>Sign off a filing as the client</li>
+        <li>The client's people, roles and access</li>
+        <li>The client's billing and subscription</li>
+        <li>The client's registrations, organisation settings and entity list</li>
+        <li>The client's other engagements, and exporting its data</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="dealers" aria-labelledby="dealers-title">
+  <h2 id="dealers-title">Dealers never see client compliance data</h2>
+  <p>A dealer sells and supports subscriptions. Neither dealer role holds any compliance, financial or document permission. Naming a client on a commission row is not access to that client. If a client ever wants its dealer to see its compliance, that is a separate, time-limited engagement the client approves, like any firm's.</p>
+</section>
+
+<section id="glossary" aria-labelledby="glossary-title">
+  <h2 id="glossary-title">Glossary</h2>
+  <dl class="glossary">
+    <dt>Workspace</dt><dd>A business, a professional firm or a dealer. Everyone belongs to one or more.</dd>
+    <dt>Entity</dt><dd>A company, LLP, partnership or branch that owes compliance. A business can have several.</dd>
+    <dt>Client</dt><dd>A business, as seen by the firm working for it.</dd>
+    <dt>Engagement</dt><dd>A client's permission for a firm to work on named entities and compliance areas, for a period.</dd>
+    <dt>Role</dt><dd>What someone can do: a named set of permissions.</dd>
+    <dt>Reach</dt><dd>Where they can do it: entities, or clients.</dd>
+    <dt>Review</dt><dd>The preparing side checking its own work before filing. Never done by the preparer.</dd>
+    <dt>Client sign-off</dt><dd>The business approving a filing in its own name. Only a business can give it.</dd>
+    <dt>Completed without review</dt><dd>A filing recorded without anyone checking it. Only an Owner or a Partner can do this, and it is labelled on the record.</dd>
+    <dt>Audit trail</dt><dd>An append-only record of every change: who, when, from where, before and after.</dd>
+  </dl>
+</section>
+
+<section id="appendix" aria-labelledby="appendix-title" class="page-break">
+  <h2 id="appendix-title">Appendix: every permission</h2>
+  <p class="small muted">Each is individually grantable. Permissions that ask for a fresh identity check are marked.</p>
+  
+    <h3>Billing</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Change the plan <span class="sensitive">· re-confirm identity</span><br>
+              <code>billing.subscription.manage</code>
+            </td>
+            <td>Owner / Director, Partner</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Record a payment <span class="sensitive">· re-confirm identity</span><br>
+              <code>billing.payment.record</code>
+            </td>
+            <td>Partner<br><span class="muted">Offline collection — cheque and transfer — is reconciled by hand, and that is somebody asserting money arrived.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              View subscription and invoices<br>
+              <code>billing.view</code>
+            </td>
+            <td>Owner / Director, Partner, Dealer Principal<br><span class="muted">A customer seeing their own billing. Granted to owners, not to staff.</span></td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Channel partners</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Create and manage client accounts<br>
+              <code>dealers.account.manage</code>
+            </td>
+            <td>Dealer Principal, Dealer Staff<br><span class="muted">Onboarding and subscription management only. Grants no sight of the client&#x27;s compliance data — that needs an engagement.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              View the commission ledger<br>
+              <code>dealers.commission.view</code>
+            </td>
+            <td>Dealer Principal<br><span class="muted">A dealer&#x27;s own accruals, line by line. Never another dealer&#x27;s.</span></td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Compliance</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Add or remove a compliance definition for an entity<br>
+              <code>compliance.library.manage</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager<br><span class="muted">Overrides the engine for one definition. Recorded as a suppression or inclusion so a future rebuild respects it.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Assign an obligation<br>
+              <code>compliance.obligation.assign</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Browse the compliance library<br>
+              <code>compliance.library.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article<br><span class="muted">The full compliance catalog against one entity — every published definition, not just what the calendar has already computed.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Close an obligation<br>
+              <code>compliance.obligation.close</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Comment on an obligation<br>
+              <code>compliance.obligation.comment</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Partner, Manager, Staff / Article<br><span class="muted">Posts a remark to the obligation&#x27;s timeline. Granted to anyone who can see the obligation — discussion is not a workflow step.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Defer an obligation<br>
+              <code>compliance.obligation.defer</code>
+            </td>
+            <td>Owner / Director, Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Mark an obligation disputed<br>
+              <code>compliance.obligation.dispute</code>
+            </td>
+            <td>Owner / Director, Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Mark an obligation not applicable<br>
+              <code>compliance.obligation.dismiss</code>
+            </td>
+            <td>Owner / Director, Partner, Manager<br><span class="muted">Overrides the engine. Recorded as a suppression so the nightly rebuild does not bring it back — which is why it needs a reason.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Mark done without review <span class="sensitive">· re-confirm identity</span><br>
+              <code>compliance.obligation.complete_unreviewed</code>
+            </td>
+            <td>Owner / Director, Partner<br><span class="muted">Records a filing from wherever the obligation stands, skipping review and sign-off. The one deliberate exception to maker-checker — for a sole owner, or a filing made outside STACOS — and the timeline and audit trail say so on the row.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Prepare a filing<br>
+              <code>compliance.obligation.prepare</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Partner, Manager, Staff / Article</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Rebuild the compliance calendar<br>
+              <code>compliance.calendar.rebuild</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager<br><span class="muted">Re-runs materialisation for an entity. Safe by construction — the planner never destroys an obligation with history — but it can add a lot of rows at once, so it is not granted to everyone.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Record a filing <span class="sensitive">· re-confirm identity</span><br>
+              <code>compliance.obligation.file</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager<br><span class="muted">Records that a statutory return was submitted, with its acknowledgement number, once it has been reviewed and approved. This is the row an assessment is defended with.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Record an entity event<br>
+              <code>compliance.event.record</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Partner, Manager, Staff / Article<br><span class="muted">AGM dates, board meeting dates, licence issue dates. These unblock due dates that cannot otherwise be computed.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Reopen a closed obligation <span class="sensitive">· re-confirm identity</span><br>
+              <code>compliance.obligation.reopen</code>
+            </td>
+            <td>Owner / Director, Partner</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Request information from the client<br>
+              <code>compliance.obligation.request_info</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Partner, Manager, Staff / Article</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Review a prepared filing<br>
+              <code>compliance.obligation.review</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager<br><span class="muted">Send back for changes, or approve for client sign-off.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Sign off a filing as the client <span class="sensitive">· re-confirm identity</span><br>
+              <code>compliance.obligation.approve</code>
+            </td>
+            <td>Owner / Director<br><span class="muted">Client-side sign-off on a return before it is filed. The point at which the business takes responsibility for what is submitted.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              View the compliance calendar<br>
+              <code>compliance.obligation.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Withdraw a recorded event<br>
+              <code>compliance.event.withdraw</code>
+            </td>
+            <td>Owner / Director, Partner, Manager<br><span class="muted">Takes filings back off a client&#x27;s calendar. Recording an event is routine data entry a junior does; withdrawing one removes obligations somebody may already have started work on, which is a different decision.</span></td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Compliance catalog</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              View the compliance catalog<br>
+              <code>catalog.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article<br><span class="muted">Read the statutory reference, plain-language summary and due-date rule behind an obligation. Granted broadly: a client asking &#x27;why do I have to file this&#x27; deserves an answer.</span></td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Engagements</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Approve an engagement and grant access <span class="sensitive">· re-confirm identity</span><br>
+              <code>engagements.grant</code>
+            </td>
+            <td>Owner / Director<br><span class="muted">Granting access hands another organisation sight of this entity&#x27;s records, so it requires step-up authentication.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Change what an engagement covers <span class="sensitive">· re-confirm identity</span><br>
+              <code>engagements.scope.edit</code>
+            </td>
+            <td>Owner / Director, Partner</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Invite a professional firm or a client<br>
+              <code>engagements.invite</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Suspend or end an engagement <span class="sensitive">· re-confirm identity</span><br>
+              <code>engagements.revoke</code>
+            </td>
+            <td>Owner / Director</td>
+          </tr>
+        
+          <tr>
+            <td>
+              View engagements<br>
+              <code>engagements.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article</td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Entities and organisation</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Add an entity<br>
+              <code>tenancy.entity.create</code>
+            </td>
+            <td>Owner / Director, Compliance Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Archive an entity <span class="sensitive">· re-confirm identity</span><br>
+              <code>tenancy.entity.archive</code>
+            </td>
+            <td>Owner / Director</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Edit an entity<br>
+              <code>tenancy.entity.edit</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Edit the compliance profile<br>
+              <code>tenancy.profile.edit</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager<br><span class="muted">Changing the profile changes which obligations apply, so an edit produces a reviewable plan rather than taking effect silently.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Manage organisation settings <span class="sensitive">· re-confirm identity</span><br>
+              <code>tenancy.tenant.manage</code>
+            </td>
+            <td>Owner / Director, Partner</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Manage premises<br>
+              <code>tenancy.premises.manage</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Manage registrations and tax identifiers <span class="sensitive">· re-confirm identity</span><br>
+              <code>tenancy.registration.manage</code>
+            </td>
+            <td>Owner / Director</td>
+          </tr>
+        
+          <tr>
+            <td>
+              View entities<br>
+              <code>tenancy.entity.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article</td>
+          </tr>
+        
+          <tr>
+            <td>
+              View organisation settings<br>
+              <code>tenancy.tenant.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article, Dealer Principal, Dealer Staff</td>
+          </tr>
+        
+          <tr>
+            <td>
+              View registrations and tax identifiers<br>
+              <code>tenancy.registration.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager, Staff / Article</td>
+          </tr>
+        
+          <tr>
+            <td>
+              View the compliance profile<br>
+              <code>tenancy.profile.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article</td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Notifications</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Change your notification preferences<br>
+              <code>notifications.preferences.manage</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article, Dealer Principal, Dealer Staff</td>
+          </tr>
+        
+          <tr>
+            <td>
+              See your own notifications<br>
+              <code>notifications.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article, Dealer Principal, Dealer Staff<br><span class="muted">Everyone who can sign in has this. It grants nothing about other people.</span></td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Platform</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Export audit trail <span class="sensitive">· re-confirm identity</span><br>
+              <code>core.audit.export</code>
+            </td>
+            <td>Owner / Director, Partner<br><span class="muted">Download the full audit log. Sensitive because a complete export is the single most valuable artefact an attacker could take.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Export tenant data <span class="sensitive">· re-confirm identity</span><br>
+              <code>core.data.export</code>
+            </td>
+            <td>Owner / Director, Partner<br><span class="muted">Bulk export of tenant records. Requires step-up authentication.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Use search and the command palette<br>
+              <code>core.search</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article, Dealer Principal, Dealer Staff</td>
+          </tr>
+        
+          <tr>
+            <td>
+              View audit trail<br>
+              <code>core.audit.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Viewer, Partner, Manager<br><span class="muted">Read the immutable activity log for the tenant.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              View financial figures<br>
+              <code>finance.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager<br><span class="muted">Without this, obligation titles and due dates are visible but amounts, tax values and bank details are masked.</span></td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Practice management</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Create and assign work<br>
+              <code>practice.work.manage</code>
+            </td>
+            <td>Partner, Manager</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Log time<br>
+              <code>practice.time.log</code>
+            </td>
+            <td>Partner, Manager, Staff / Article</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Move your own work along<br>
+              <code>practice.work.progress</code>
+            </td>
+            <td>Partner, Manager, Staff / Article<br><span class="muted">Move a card you are assigned to between columns. Creating work and deciding who does it is `practice.work.manage`.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              See everybody&#x27;s time<br>
+              <code>practice.time.view_all</code>
+            </td>
+            <td>Partner, Manager<br><span class="muted">Without this a user sees only their own entries. Utilisation is a management view, not a peer-comparison tool.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              See work in progress and profitability<br>
+              <code>practice.wip.view</code>
+            </td>
+            <td>Partner, Manager<br><span class="muted">What the work was worth, and what it cost. Partner-level.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Set charge-out rates <span class="sensitive">· re-confirm identity</span><br>
+              <code>practice.rates.manage</code>
+            </td>
+            <td>Partner</td>
+          </tr>
+        
+          <tr>
+            <td>
+              View the work board<br>
+              <code>practice.work.view</code>
+            </td>
+            <td>Partner, Manager, Staff / Article</td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+    <h3>Users and access</h3>
+    <table class="appendix">
+      <thead><tr><th scope="col" style="width:34%">Permission</th><th scope="col">Held by</th></tr></thead>
+      <tbody>
+        
+          <tr>
+            <td>
+              Change a user&#x27;s role <span class="sensitive">· re-confirm identity</span><br>
+              <code>accounts.user.role.change</code>
+            </td>
+            <td>Owner / Director, Partner<br><span class="muted">Requires step-up authentication, and signs the affected user out of every device immediately.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              Create and edit custom roles <span class="sensitive">· re-confirm identity</span><br>
+              <code>accounts.role.manage</code>
+            </td>
+            <td>Owner / Director, Partner</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Deactivate a user <span class="sensitive">· re-confirm identity</span><br>
+              <code>accounts.user.deactivate</code>
+            </td>
+            <td>Owner / Director, Partner</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Invite users<br>
+              <code>accounts.user.invite</code>
+            </td>
+            <td>Owner / Director, Partner, Dealer Principal</td>
+          </tr>
+        
+          <tr>
+            <td>
+              Manage your own devices and sessions<br>
+              <code>accounts.security.manage</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article, Dealer Principal, Dealer Staff<br><span class="muted">Held by every signed-in user. Governs the security settings screen, which lists trusted devices and active sessions and can end them.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              View and edit your own profile<br>
+              <code>accounts.profile.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Department User, Viewer, Partner, Manager, Staff / Article, Dealer Principal, Dealer Staff<br><span class="muted">Held by every signed-in user. Governs the profile screen, which shows the signed-in person&#x27;s name, email and phone.</span></td>
+          </tr>
+        
+          <tr>
+            <td>
+              View users<br>
+              <code>accounts.user.view</code>
+            </td>
+            <td>Owner / Director, Compliance Manager, Partner, Manager, Dealer Principal</td>
+          </tr>
+        
+      </tbody>
+    </table>
+  
+</section>
+
+<footer>
+  Generated from the STACOS role definitions by <code>manage.py roles_guide</code>. The permission lists above are the ones the product enforces.
+</footer>
+
+</main>
+</body>
+</html>

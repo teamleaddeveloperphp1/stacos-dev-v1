@@ -78,7 +78,7 @@
       </details>
     {% endif %}
 
-  {% elif can_record_filing or can_record_pending %}
+  {% elif filing_action or can_record_pending %}
     <fieldset class="ask__choices">
       <legend class="ask__question">{% translate "Has this been submitted?" %}</legend>
 
@@ -87,11 +87,17 @@
         navigation, the grouped announcement and the "one of these" semantics all
         come free from the element, and none of them survive being rebuilt.
       {% endcomment %}
-      {% if can_record_filing %}
+      {% if filing_action %}
         <label class="ask__choice">
           <input type="radio" name="answer-{{ obligation.pk }}" value="yes" x-model="answer">
           <span class="ask__choice-label">{% translate "Yes, submitted" %}</span>
-          <span class="ask__choice-hint">{% translate "Record the date and acknowledgement" %}</span>
+          <span class="ask__choice-hint">
+            {% if filing_skips_review %}
+              {% translate "Record it as done without review" %}
+            {% else %}
+              {% translate "Record the date and acknowledgement" %}
+            {% endif %}
+          </span>
         </label>
       {% endif %}
       {% if can_record_pending %}
@@ -103,13 +109,23 @@
       {% endif %}
     </fieldset>
 
-    {% if can_record_filing %}
+    {% if filing_action %}
       <form class="ask__form" x-show="answer === 'yes'" x-cloak
             hx-post="{% url 'compliance:status' obligation.pk %}"
             hx-encoding="multipart/form-data"
             hx-target="#obligation-panel" hx-swap="outerHTML">
         {% csrf_token %}
         <input type="hidden" name="answer" value="yes">
+        {% if filing_skips_review %}
+          {% comment %}
+            The one exception to maker-checker, named before the click rather
+            than discovered on the timeline afterwards.
+          {% endcomment %}
+          <p class="callout callout--warning small" role="note">
+            <c-icon name="alert" size="14" />
+            {% translate "Nobody has reviewed this. It will be recorded — on the timeline and in the audit trail — as completed without review." %}
+          </p>
+        {% endif %}
         {{ completed_form|crispy }}
         <button class="btn btn-sm btn-primary" type="submit">
           <c-icon name="check" size="14" /> {% translate "Record submission" %}

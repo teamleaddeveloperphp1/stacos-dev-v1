@@ -23,7 +23,11 @@ from dataclasses import dataclass
 from stacos.jurisdictions.models import JurisdictionPack
 from stacos.jurisdictions.validators import get_validator
 
-__all__ = ["RegistrationRequirement", "get_registration_requirements"]
+__all__ = [
+    "RegistrationRequirement",
+    "get_per_jurisdiction_codes",
+    "get_registration_requirements",
+]
 
 #: The one identifier that jumps to the front of the list wherever it applies,
 #: with PAN pinned immediately after it. See the module docstring.
@@ -105,3 +109,19 @@ def get_registration_requirements(country: str, entity_type: str) -> list[Regist
         )
 
     return _reorder_cin_first(requirements)
+
+
+def get_per_jurisdiction_codes(country: str) -> frozenset[str]:
+    """The identifiers the pack marks ``per_jurisdiction`` — issued once per
+    state rather than once per entity, so an entity may hold several.
+
+    Empty, never raising, under the same conditions as
+    :func:`get_registration_requirements`.
+    """
+    pack = JurisdictionPack.objects.filter(country=country).first()
+    data = pack.registration_types if pack is not None else None
+    if not isinstance(data, dict):
+        return frozenset()
+    return frozenset(
+        entry["code"] for entry in data.get("catalog", []) if entry.get("per_jurisdiction")
+    )

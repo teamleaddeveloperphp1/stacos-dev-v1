@@ -569,6 +569,12 @@ class Membership(TenantScopedModel):
     #: Extra permissions on top of the role, for one-off grants that do not
     #: justify a custom role.
     extra_permissions = models.JSONField(default=list, blank=True)
+    #: Permissions the role carries that this one member does not get — the
+    #: other half of tailoring a person without inventing a role for them. Both
+    #: lists are written by ``stacos.tenancy.access.set_member_permissions``,
+    #: never by hand, so they never overlap and never name what the role
+    #: already says.
+    revoked_permissions = models.JSONField(default=list, blank=True)
 
     invited_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -597,10 +603,25 @@ class Membership(TenantScopedModel):
         return self.status == self.Status.ACTIVE
 
     def resolved_permissions(self) -> frozenset[str]:
-        """Role permissions plus any one-off grants, closed over ``implies``."""
+        """Role permissions plus any one-off grants, closed over ``implies``.
+
+        Filtered to the permissions that exist for this tenant's type, so a
+        custom role or a one-off grant cannot hand a firm member the client's
+        sign-off, or a dealer anything from a practice. The role bundles are
+        written to respect this already; the filter is what makes it a rule.
+        """
         from stacos.core.permissions import permission_registry
 
-        return permission_registry.expand([*self.role.permissions, *self.extra_permissions])
+        expanded = permission_registry.expand([*self.role.permissions, *self.extra_permissions])
+        revoked = set(self.revoked_permissions or ())
+        tenant_type = self.tenant.type
+        return frozenset(
+            code
+            for code in expanded
+            if code not in revoked
+            and code in permission_registry
+            and tenant_type in permission_registry.get(code).tenant_types
+        )
 
 
 class TenantInvitation(TenantScopedModel):
@@ -636,6 +657,19 @@ class TenantInvitation(TenantScopedModel):
     email = models.EmailField()
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="invitations")
     message = models.TextField(blank=True)
+
+    # -- The reach the membership will start with ---------------------------
+    #: Chosen with the role, before anyone accepts, so nobody lands in the
+    #: workspace seeing more than they were meant to and has to be narrowed
+    #: afterwards. Same meaning as the fields of the same names on Membership.
+    all_entities = models.BooleanField(default=True)
+    entities = models.ManyToManyField(Entity, blank=True, related_name="+")
+    categories = ArrayField(
+        models.CharField(max_length=32, choices=ComplianceCategory.choices),
+        default=list,
+        blank=True,
+    )
+    client_tenants = models.ManyToManyField(Tenant, blank=True, related_name="+")
 
     token_hash = models.CharField(max_length=64, unique=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.SENT)

@@ -23,6 +23,7 @@ from django.utils.translation import gettext as _
 
 from stacos.core.audit import record_event
 from stacos.core.models import AuditAction
+from stacos.core.scope import effective_permissions
 from stacos.engine.lifecycle import State, Transition, allowed_transitions, transition_for
 from stacos.notifications.models import NotificationKind, Severity, SubjectType
 from stacos.notifications.services import raise_notification
@@ -45,6 +46,7 @@ __all__ = [
     "attach_acknowledgement",
     "available_actions",
     "block_step",
+    "blocked_by_four_eyes",
     "complete_step",
     "ensure_steps",
     "nudge",
@@ -52,6 +54,7 @@ __all__ = [
     "record_completion",
     "record_pending",
     "reopen_step",
+    "submitted_for_review_by",
     "unblock_step",
 ]
 
@@ -88,15 +91,10 @@ def outstanding_mandatory_evidence(obligation: ObligationInstance) -> list[str]:
     """
     if obligation.acknowledgement:
         return []
-    from stacos.catalog.models import DefinitionVersion
+    from stacos.obligations.custom import evidence_requirements_for
 
-    requirements = (
-        DefinitionVersion.objects.filter(
-            definition__code=obligation.definition_code,
-            version=obligation.definition_version,
-        )
-        .values_list("evidence_requirements", flat=True)
-        .first()
+    requirements = evidence_requirements_for(
+        obligation.definition_code, obligation.definition_version
     )
     if not requirements:
         return []
@@ -107,10 +105,59 @@ def outstanding_mandatory_evidence(obligation: ObligationInstance) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Maker-checker
+# ---------------------------------------------------------------------------
+
+#: Moves that are somebody vouching for somebody else's work: the reviewer
+#: passing it, and the client signing it off. Neither may be made by the person
+#: who submitted it for review. "Send back for changes" is not here — returning
+#: your own draft is harmless, and blocking it would strand work with nobody.
+_INDEPENDENT_MOVES: frozenset[tuple[State, State]] = frozenset(
+    {
+        (State.PENDING_REVIEW, State.PENDING_CLIENT_APPROVAL),
+        (State.PENDING_REVIEW, State.READY_TO_FILE),
+        (State.PENDING_CLIENT_APPROVAL, State.READY_TO_FILE),
+    }
+)
+
+
+def submitted_for_review_by(obligation: ObligationInstance) -> Any | None:
+    """Who last sent this obligation for review — the maker, for the checker rule.
+
+    Read from the timeline rather than stored on the row: the timeline is the
+    record a reviewer is answerable to, and a second copy on the obligation would
+    be one more thing that could disagree with it.
+    """
+    event = (
+        ObligationEvent.objects.filter(
+            obligation=obligation,
+            kind=ObligationEvent.Kind.TRANSITION,
+            to_state=State.PENDING_REVIEW,
+        )
+        .select_related("actor")
+        .order_by("-created_at")
+        .first()
+    )
+    return event.actor if event is not None else None
+
+
+def blocked_by_four_eyes(obligation: ObligationInstance, move: Transition, actor: Any) -> bool:
+    """Whether ``actor`` would be checking their own work by making ``move``."""
+    if (move.source, move.target) not in _INDEPENDENT_MOVES:
+        return False
+    actor_id = getattr(actor, "pk", None)
+    if actor_id is None:
+        return False
+    maker = submitted_for_review_by(obligation)
+    return maker is not None and maker.pk == actor_id
+
+
 def available_actions(
     obligation: ObligationInstance,
     *,
     permissions: frozenset[str],
+    actor: Any = None,
 ) -> tuple[Transition, ...]:
     """Moves this user could make on this obligation, right now.
 
@@ -125,7 +172,10 @@ def available_actions(
     """
     if obligation.is_superseded or obligation.is_archived:
         return ()
+    permissions = effective_permissions(permissions, obligation.entity_id)
     moves = allowed_transitions(obligation.state, permissions=permissions)
+    if actor is not None and any((m.source, m.target) in _INDEPENDENT_MOVES for m in moves):
+        moves = tuple(m for m in moves if not blocked_by_four_eyes(obligation, m, actor))
     if any(move.requires_mandatory_evidence for move in moves) and outstanding_mandatory_evidence(
         obligation
     ):
@@ -172,8 +222,15 @@ def apply_transition(
             code="stale",
         )
 
+    permissions = effective_permissions(permissions, obligation.entity_id)
     if move.permission not in permissions:
         raise TransitionError(_("You do not have permission to do that."), code="forbidden")
+
+    if blocked_by_four_eyes(obligation, move, actor):
+        raise TransitionError(
+            _("You submitted this for review, so somebody else has to review and approve it."),
+            code="four_eyes",
+        )
 
     note = note.strip()
     if move.requires_note and not note:
@@ -249,6 +306,10 @@ def apply_transition(
         context={
             "filing_reference": obligation.filing_reference,
             "label": move.label,
+            # Said on the row, not left to be inferred from the path it took: a
+            # reader of this timeline in an assessment has to be able to see at
+            # a glance that nobody checked this filing before it was recorded.
+            "completed_without_review": move.skips_review,
         },
     )
 
@@ -258,7 +319,11 @@ def apply_transition(
         obj=obligation,
         before={"state": previous_state},
         after={"state": target, "filing_reference": obligation.filing_reference},
-        context={"note": note, "transition": move.label},
+        context={
+            "note": note,
+            "transition": move.label,
+            "completed_without_review": move.skips_review,
+        },
     )
 
     return TransitionResult(obligation=obligation, transition=move, event=event)
@@ -505,7 +570,9 @@ def record_pending(
     The answer is stamped with when it was given, so "next week" written two
     months ago reads as stale rather than as current.
     """
-    if "compliance.obligation.prepare" not in permissions:
+    if "compliance.obligation.prepare" not in effective_permissions(
+        permissions, obligation.entity_id
+    ):
         raise TransitionError(_("You do not have permission to do that."), code="forbidden")
 
     if obligation.is_superseded:
@@ -660,15 +727,11 @@ def ensure_steps(obligation: ObligationInstance) -> list[ObligationStep]:
     if existing:
         return existing
 
-    from stacos.catalog.models import DefinitionVersion
+    from stacos.obligations.custom import definition_for
 
-    version = (
-        DefinitionVersion.objects.filter(
-            definition__code=obligation.definition_code, version=obligation.definition_version
-        )
-        .only("workflow_steps")
-        .first()
-    )
+    # A custom obligation's version carries no named checklist, so it falls
+    # through to the generic four steps like most catalog definitions do.
+    version = definition_for(obligation.definition_code, obligation.definition_version)
     templates = (version.workflow_steps if version else None) or DEFAULT_WORKFLOW_STEPS
 
     ObligationStep.objects.bulk_create(
@@ -682,7 +745,7 @@ def ensure_steps(obligation: ObligationInstance) -> list[ObligationStep]:
                 label=template["label"],
                 role=template["role"],
                 assigned_to=_resolve_default_assignee(
-                    obligation.entity, template.get("default_owner_role", "")
+                    obligation, template.get("default_owner_role", ""), template["role"]
                 ),
                 days_before_due=template.get("days_before_due"),
                 requires_evidence=bool(template.get("requires_evidence", False)),
@@ -694,38 +757,68 @@ def ensure_steps(obligation: ObligationInstance) -> list[ObligationStep]:
     return list(obligation.steps.select_related("assigned_to", "completed_by"))
 
 
-def _resolve_default_assignee(entity: Any, role_code: str) -> Any | None:
-    """Whoever holds ``role_code`` in this entity's tenant, deterministically.
+def _resolve_default_assignee(
+    obligation: ObligationInstance, role_code: str, step_role: str
+) -> Any | None:
+    """The earliest-joined active holder of ``role_code`` who can actually do the step.
 
-    Several members can hold the same role, so this is not "the" holder in
-    any absolute sense — it is the earliest-joined active one, picked
-    consistently rather than arbitrarily. An unresolvable or empty code is
-    not an error: the step is simply left unassigned, the same outcome as a
-    definition that names no default at all. Not entity-scoped (does not
-    check ``Membership.all_entities``/``entities``) — a person scoped away
-    from this specific entity could still be picked; a v1 simplification.
+    Holding the role is not enough. The person must reach this obligation's
+    entity and compliance area, and hold the step's permission after any
+    individual changes — otherwise the step lands in a queue its owner cannot
+    open, which reads to them as a stuck task with no explanation. Nobody
+    qualifying is not an error: the step is left unassigned, the same outcome
+    as a definition that names no default at all.
     """
     if not role_code:
         return None
 
     from stacos.tenancy.models import Membership
 
-    membership = (
+    needed = ROLE_PERMISSION[step_role]
+    candidates = (
         Membership.objects.filter(
-            tenant_id=entity.tenant_id,
+            tenant_id=obligation.tenant_id,
             role__code=role_code,
             status=Membership.Status.ACTIVE,
         )
-        .select_related("user")
+        .select_related("user", "role", "tenant")
+        .prefetch_related("entities")
         .order_by("created_at")
-        .first()
     )
-    return membership.user if membership else None
+    for membership in candidates:
+        reaches_entity = membership.all_entities or any(
+            entity.pk == obligation.entity_id for entity in membership.entities.all()
+        )
+        in_area = not membership.categories or obligation.category in membership.categories
+        if reaches_entity and in_area and needed in membership.resolved_permissions():
+            return membership.user
+    return None
 
 
 def _require_step_permission(step: ObligationStep, permissions: frozenset[str]) -> None:
-    if ROLE_PERMISSION[step.role] not in permissions:
+    if ROLE_PERMISSION[step.role] not in effective_permissions(permissions, step.entity_id):
         raise TransitionError(_("You do not have permission to do that."), code="forbidden")
+
+
+def _require_independent_checker(step: ObligationStep, actor: Any) -> None:
+    """The checklist's own maker-checker: whoever ticked a *prepare* item on this
+    obligation does not tick its *review* or *approve* items."""
+    if step.role not in {ObligationStep.Role.REVIEW, ObligationStep.Role.APPROVE}:
+        return
+    actor_id = getattr(actor, "pk", None)
+    if actor_id is None:
+        return
+    prepared_by_actor = ObligationStep.objects.filter(
+        obligation_id=step.obligation_id,
+        role=ObligationStep.Role.PREPARE,
+        state=ObligationStep.State.DONE,
+        completed_by_id=actor_id,
+    ).exists()
+    if prepared_by_actor:
+        raise TransitionError(
+            _("You prepared this, so somebody else has to review and approve it."),
+            code="four_eyes",
+        )
 
 
 def complete_step(
@@ -739,6 +832,7 @@ def complete_step(
     silent click.
     """
     _require_step_permission(step, permissions)
+    _require_independent_checker(step, actor)
 
     evidence_note = evidence_note.strip()
     if step.requires_evidence and not evidence_note:

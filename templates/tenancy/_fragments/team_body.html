@@ -37,21 +37,51 @@
           <tr>
             <th scope="col">{% translate "Name" %}</th>
             <th scope="col">{% translate "Email" %}</th>
-            <th scope="col">{% translate "Can do" %}</th>
+            <th scope="col">{% translate "Role" %}</th>
+            <th scope="col">{% translate "Where" %}</th>
             <th scope="col">{% translate "Status" %}</th>
+            {% if can_change_access %}
+              <th scope="col"><span class="visually-hidden">{% translate "Actions" %}</span></th>
+            {% endif %}
           </tr>
         </thead>
         <tbody>
-          {% for membership in memberships %}
-            <tr>
-              <td>{{ membership.user.full_name|default:membership.user.email }}</td>
-              <td class="text-muted small">{{ membership.user.email }}</td>
-              <td class="text-muted small">{{ membership.role.name }}</td>
-              <td>
-                <c-status-chip status="{% if membership.status == 'ACTIVE' %}complete{% else %}na{% endif %}"
-                               :label="membership.get_status_display" />
-              </td>
-            </tr>
+          {% for row in rows %}
+            {% with membership=row.membership %}
+              <tr>
+                <td>
+                  {% if can_change_access %}
+                    <a class="link-strong" href="{% url 'app:team_member_access' membership.pk %}"
+                       hx-get="{% url 'app:team_member_access' membership.pk %}"
+                       hx-target="#main" hx-push-url="true">{{ membership.user.full_name|default:membership.user.email }}</a>
+                  {% else %}
+                    {{ membership.user.full_name|default:membership.user.email }}
+                  {% endif %}
+                </td>
+                <td class="text-muted small">{{ membership.user.email }}</td>
+                <td class="text-muted small">
+                  {{ membership.role.name }}
+                  {% if membership.extra_permissions or membership.revoked_permissions %}
+                    <span class="badge-soft badge-soft--attention">{% translate "Customised" %}</span>
+                  {% endif %}
+                </td>
+                <td class="text-muted small">{{ row.reach }}</td>
+                <td>
+                  <c-status-chip status="{% if membership.status == 'ACTIVE' %}complete{% else %}na{% endif %}"
+                                 :label="membership.get_status_display" />
+                </td>
+                {% if can_change_access %}
+                  <td class="text-end">
+                    <a class="btn btn-sm btn-outline-secondary"
+                       href="{% url 'app:team_member_access' membership.pk %}"
+                       hx-get="{% url 'app:team_member_access' membership.pk %}"
+                       hx-target="#main" hx-push-url="true">
+                      {% if membership.user_id == me %}{% translate "View my access" %}{% else %}{% translate "Manage access" %}{% endif %}
+                    </a>
+                  </td>
+                {% endif %}
+              </tr>
+            {% endwith %}
           {% endfor %}
         </tbody>
       </table>
@@ -69,7 +99,7 @@
           <thead>
             <tr>
               <th scope="col">{% translate "Email" %}</th>
-              <th scope="col">{% translate "Can do" %}</th>
+              <th scope="col">{% translate "Role" %}</th>
               <th scope="col">{% translate "Expires" %}</th>
               <th scope="col"><span class="visually-hidden">{% translate "Actions" %}</span></th>
             </tr>

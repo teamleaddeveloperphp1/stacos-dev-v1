@@ -378,6 +378,25 @@ def signed_in(client: Client, org_owner: User, org: Tenant) -> Client:
 
 
 @pytest.fixture
+def stepped_up(signed_in: Client) -> Client:
+    """``signed_in``, with re-authentication marked fresh on the same session.
+
+    For tests that record a filing, sign off as the client or reopen one — the
+    sensitive moves the web app now asks the user to re-confirm themselves for.
+    Used as ``@pytest.mark.usefixtures("stepped_up")`` so the test body keeps
+    talking to ``signed_in`` and the requirement stays visible on the test.
+    """
+    from django.utils import timezone as django_timezone
+
+    from stacos.accounts.stepup import SESSION_KEY as STEP_UP_KEY
+
+    session = signed_in.session
+    session[STEP_UP_KEY] = django_timezone.now().isoformat()
+    session.save()
+    return signed_in
+
+
+@pytest.fixture
 def rival_owner(other_org: Tenant) -> User:
     return _make_member(
         other_org, "owner@rival.example", "Vikram Singh", "+919800000002", "org-owner"

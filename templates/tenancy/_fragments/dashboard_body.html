@@ -34,30 +34,31 @@
   {% comment %}
     Every tile links through to the calendar pre-filtered to the rows behind
     its count — a number with no way to see what it is counting is a dead
-    end. `dashboard_entity_qs` carries the entity filter along so a tile
+    end. `dashboard_calendar_qs` carries the entity filter along so a tile
     clicked while narrowed to one entity lands on that entity's rows, not
-    every entity's.
+    every entity's — and `within=all`, because these counts span the whole
+    horizon and the calendar would otherwise open on its "Due within" window.
   {% endcomment %}
   <div class="row row-cols-2 row-cols-lg-5 g-3 mb-4">
     <div class="col">
       <c-stat-card icon="document" label="{% translate 'Total compliances' %}" :value="counts.total"
-                   href="{% url 'compliance:calendar' %}?status=all{{ dashboard_entity_qs }}" />
+                   href="{% url 'compliance:calendar' %}?status=all{{ dashboard_calendar_qs }}" />
     </div>
     <div class="col">
       <c-stat-card icon="calendar" label="{% translate 'Due soon' %}" :value="counts.due_soon" status="due-soon"
-                   href="{% url 'compliance:calendar' %}?status=due_soon{{ dashboard_entity_qs }}" />
+                   href="{% url 'compliance:calendar' %}?status=due_soon{{ dashboard_calendar_qs }}" />
     </div>
     <div class="col">
       <c-stat-card icon="alert" label="{% translate 'Overdue' %}" :value="counts.overdue" status="overdue"
-                   href="{% url 'compliance:calendar' %}?status=overdue{{ dashboard_entity_qs }}" />
+                   href="{% url 'compliance:calendar' %}?status=overdue{{ dashboard_calendar_qs }}" />
     </div>
     <div class="col">
       <c-stat-card icon="history" label="{% translate 'Pending' %}" :value="pending" status="pending"
-                   href="{% url 'compliance:calendar' %}?status=pending{{ dashboard_entity_qs }}" />
+                   href="{% url 'compliance:calendar' %}?status=pending{{ dashboard_calendar_qs }}" />
     </div>
     <div class="col">
       <c-stat-card icon="check" label="{% translate 'Completed' %}" :value="counts.completed" status="on-track"
-                   href="{% url 'compliance:calendar' %}?status=completed{{ dashboard_entity_qs }}" />
+                   href="{% url 'compliance:calendar' %}?status=completed{{ dashboard_calendar_qs }}" />
     </div>
   </div>
 

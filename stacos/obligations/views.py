@@ -13,13 +13,15 @@ page" is how HTMX applications leak data.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from django.db import transaction
 from django.db.models import Q, QuerySet
-from django.http import FileResponse, Http404, HttpRequest, HttpResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -27,19 +29,34 @@ from django.utils.http import urlencode
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
-from stacos.catalog.models import ComplianceDefinition, DefinitionVersion, PublicationStatus
+from stacos.accounts.stepup import step_up_is_fresh
+from stacos.catalog.models import ComplianceDefinition, PublicationStatus
 from stacos.core.audit import record_event
-from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob
+from stacos.core.exceptions import StepUpRequired
+from stacos.core.htmx import Fragment, Toast, is_fragment_request, oob, page_url
 from stacos.core.models import AuditAction
 from stacos.core.pagination import filters_querystring
-from stacos.core.permissions import public_view, require_permission
+from stacos.core.permissions import (
+    permission_registry,
+    public_view,
+    require_entity_permission,
+    require_permission,
+)
 from stacos.core.typing import current_user
-from stacos.engine.lifecycle import CLOSED_STATES, DUE_SOON_DAYS, OPEN_STATES, State, Transition
+from stacos.engine.lifecycle import (
+    CLOSED_STATES,
+    DUE_SOON_DAYS,
+    OPEN_STATES,
+    State,
+    Transition,
+    transition_for,
+)
 from stacos.engine.lifecycle import days_late as _days_late_calc
 from stacos.engine.penalty import compute_penalties
 from stacos.engine.types import occurrence_number
 from stacos.jurisdictions.events import EVENT_TYPES
 from stacos.jurisdictions.facts import ENTITY_TYPES
+from stacos.obligations.custom import definition_for
 from stacos.obligations.feed import (
     create_feed_token,
     feed_events_for_user,
@@ -48,6 +65,8 @@ from stacos.obligations.feed import (
     revoke_feed_token,
 )
 from stacos.obligations.forms import (
+    DEFAULT_DUE_WINDOW,
+    DUE_WINDOW_FILTERS,
     STATUS_FILTERS,
     AcknowledgementForm,
     AssignForm,
@@ -70,6 +89,7 @@ from stacos.obligations.models import (
     ObligationStep,
     ObligationSuppression,
 )
+from stacos.obligations.permissions_catalog import COMPLETE_UNREVIEWED
 from stacos.obligations.preview import (
     adopt_pack,
     for_preview,
@@ -80,6 +100,7 @@ from stacos.obligations.preview import (
 from stacos.obligations.profile import build_profile_view
 from stacos.obligations.queries import (
     annotate_status,
+    apply_due_window,
     apply_text_filters,
     keyset_page,
     live,
@@ -87,10 +108,11 @@ from stacos.obligations.queries import (
     overdue_penalty_exposure,
     related_scope_instances,
     scaled_bars,
-    sibling_instances,
+    sequence_instances,
     status_counts,
     weekly_workload,
 )
+from stacos.obligations.services import _add_months as add_months
 from stacos.obligations.services import materialise
 from stacos.obligations.services import preview as preview_materialisation
 from stacos.obligations.transitions import (
@@ -108,6 +130,7 @@ from stacos.obligations.transitions import (
     record_completion,
     record_pending,
     reopen_step,
+    submitted_for_review_by,
     unblock_step,
 )
 from stacos.tenancy.forms import QuestionForm
@@ -149,9 +172,33 @@ def _today() -> date:
     return timezone.localdate()
 
 
-def _permissions(request: HttpRequest) -> frozenset[str]:
+def _permissions(request: HttpRequest, entity_id: UUID | None = None) -> frozenset[str]:
+    """What this user may do — on one entity, when given, capped by its engagement."""
     scope = getattr(request, "access_scope", None)
-    return scope.permissions if scope is not None else frozenset()
+    return scope.permissions_for(entity_id) if scope is not None else frozenset()
+
+
+def _require_step_up_for(
+    request: HttpRequest, obligation: ObligationInstance, move: Transition | None
+) -> None:
+    """Demand fresh authentication before a sensitive move — signing off as the
+    client, recording a filing, marking one done without review, reopening.
+
+    The transition views declare only ``compliance.obligation.view``, because
+    which move is allowed is decided per target inside ``apply_transition``. So
+    the decorator's own step-up never sees these permissions, and without this
+    the "re-confirm who you are before certifying a filing" rule would hold on
+    mobile (which refuses them outright) and not on the web.
+    """
+    if move is None or not permission_registry.get(move.permission).is_sensitive:
+        return
+    if move.permission not in _permissions(request, obligation.entity_id):
+        return  # apply_transition refuses it with the ordinary message
+    if not step_up_is_fresh(request):
+        raise StepUpRequired(
+            permission=move.permission,
+            next_url=reverse("compliance:detail", args=[obligation.pk]),
+        )
 
 
 def _parse_uuid(value: str) -> UUID | None:
@@ -180,6 +227,108 @@ def _entity_options() -> QuerySet[Entity]:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class _CalendarFilters:
+    """The toolbar's choices, parsed once.
+
+    Parsed from a querystring rather than straight off ``request.GET`` so the
+    counter strip an action re-renders out-of-band (see ``_counters_fragment``)
+    can read the *page's* filters — the address bar's — and land on the same
+    numbers the list underneath it was built from.
+    """
+
+    status: str
+    search: str
+    category: str
+    entity_id: UUID | None
+    within: str
+    window_end: date | None
+
+
+def _calendar_filters(params: QueryDict, *, as_of: date) -> _CalendarFilters:
+    # No ``status`` in the querystring at all means a fresh visit to the
+    # calendar, not an explicit "Everything open". Default that case to
+    # "latest" — overdue, of any age, plus everything due within 90 days —
+    # so the register opens on what's actionable without silently dropping
+    # the backlog; a present-but-empty ``status=`` is the user's own choice
+    # of "Everything open" via the dropdown and must be left alone.
+    #
+    # ``within`` has no such split: there is no "empty" window, so anything
+    # absent or unrecognised — a stale bookmark included — is the default.
+    within = params.get("within", DEFAULT_DUE_WINDOW)
+    if within not in dict(DUE_WINDOW_FILTERS):
+        within = DEFAULT_DUE_WINDOW
+    return _CalendarFilters(
+        status=params.get("status", "latest"),
+        search=params.get("q", "").strip(),
+        category=params.get("category", "").strip(),
+        entity_id=_parse_uuid(params.get("entity", "").strip()),
+        within=within,
+        # Calendar months, by the planner's own arithmetic, so "12 months"
+        # here means what "18 months" means to the horizon it is a slice of.
+        window_end=None if within == "all" else add_months(as_of, int(within)),
+    )
+
+
+def _filtered_by(filters: _CalendarFilters, *, as_of: date) -> QuerySet[ObligationInstance]:
+    return _filtered(
+        as_of=as_of,
+        status=filters.status,
+        search=filters.search,
+        category=filters.category,
+        entity_id=filters.entity_id,
+        window_end=filters.window_end,
+    )
+
+
+def _counts_context(filters: _CalendarFilters, params: QueryDict, *, as_of: date) -> dict[str, Any]:
+    """What ``status_counts.html`` needs, narrowed exactly as the list is.
+
+    Every tile is counted under the same search/category/entity *and* "Due
+    within" window as the register, and every tile's link carries those same
+    filters (``tile_query``) — so the number on a tile is the number of rows a
+    click on it lands on, not a count taken under different filters.
+    """
+    tile_params = params.copy()
+    tile_params.pop("status", None)
+    tile_params.pop("cursor", None)
+    encoded = tile_params.urlencode()
+    return {
+        "counts": status_counts(
+            as_of=as_of,
+            entity_ids=[filters.entity_id] if filters.entity_id else None,
+            category=filters.category,
+            search=filters.search,
+            window_end=filters.window_end,
+        ),
+        "scope_description": _scope_description(
+            filters.status, as_of=as_of, window_end=filters.window_end
+        ),
+        "tile_query": f"&{encoded}" if encoded else "",
+    }
+
+
+def _counters_fragment(request: HttpRequest, *, as_of: date) -> Fragment:
+    """The counter strip, re-rendered after an action changed what it counts.
+
+    Built from the page's own filters (``HX-Current-URL``), not the action
+    endpoint's: counted with no filters at all, the tiles and their "Total"
+    would jump back to the whole horizon after every bulk assign while the
+    list beside them stayed inside the user's window. Off the calendar — an
+    action fired from somewhere with no ``#calendar-counts`` to swap — the
+    defaults are as good as anything, and harmless.
+    """
+    calendar_path = reverse("compliance:calendar")
+    url = urlsplit(page_url(request, fallback=calendar_path))
+    params = QueryDict(url.query if url.path == calendar_path else "")
+    filters = _calendar_filters(params, as_of=as_of)
+    context = _counts_context(filters, params, as_of=as_of)
+    context["total"] = _filtered_by(filters, as_of=as_of).count()
+    return Fragment(
+        "obligations/_fragments/status_counts.html", context, oob_target="calendar-counts"
+    )
+
+
 @require_permission("compliance.obligation.view")
 def calendar_list(request: HttpRequest) -> HttpResponse:
     """The register, filtered and keyset-paginated.
@@ -189,20 +338,15 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
     PostgreSQL walk and discard every row before it.
     """
     as_of = _today()
-    # No ``status`` in the querystring at all means a fresh visit to the
-    # calendar, not an explicit "Everything open". Default that case to
-    # "latest" — overdue, of any age, plus everything due within 90 days —
-    # so the register opens on what's actionable without silently dropping
-    # the backlog; a present-but-empty ``status=`` is the user's own choice
-    # of "Everything open" via the dropdown and must be left alone.
-    status = request.GET.get("status", "latest")
-    search = request.GET.get("q", "").strip()
-    category = request.GET.get("category", "").strip()
-    entity_id = _parse_uuid(request.GET.get("entity", "").strip())
-
-    queryset = _filtered(
-        as_of=as_of, status=status, search=search, category=category, entity_id=entity_id
+    filters = _calendar_filters(request.GET, as_of=as_of)
+    status, search, category, entity_id = (
+        filters.status,
+        filters.search,
+        filters.category,
+        filters.entity_id,
     )
+
+    queryset = _filtered_by(filters, as_of=as_of)
     page = keyset_page(queryset, cursor=request.GET.get("cursor", ""), page_size=PAGE_SIZE)
 
     cursor = request.GET.get("cursor", "")
@@ -211,17 +355,15 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
         "page": page,
         "as_of": as_of,
         # The dashboard-style facet counts (Overdue, Due soon, Completed, …) —
-        # each scoped to the same search/category/entity as the list, but
-        # never to `status` itself: these are the *other* buckets a click
+        # each scoped to the same search/category/entity/window as the list,
+        # but never to `status` itself: these are the *other* buckets a click
         # could switch to.
-        "counts": status_counts(
-            as_of=as_of,
-            entity_ids=[entity_id] if entity_id else None,
-            category=category,
-            search=search,
-        ),
+        **_counts_context(filters, request.GET, as_of=as_of),
         "status_filters": STATUS_FILTERS,
         "status": status,
+        "due_window_filters": DUE_WINDOW_FILTERS,
+        "within": filters.within,
+        "window_end": filters.window_end,
         "search": search,
         "category": category,
         "categories": ComplianceCategory.choices,
@@ -229,9 +371,13 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
         "entity_id": entity_id,
         "entities": _entity_options(),
         "querystring": filters_querystring(request),
-        "scope_description": _scope_description(status, as_of=as_of),
         "active_filters": _active_filters(
-            request, status=status, search=search, category=category, entity_id=entity_id
+            request,
+            status=status,
+            search=search,
+            category=category,
+            entity_id=entity_id,
+            within=filters.within,
         ),
         # Distinguishes two empty states that look identical in the table but
         # mean opposite things: nothing was ever generated for this tenant, vs.
@@ -248,10 +394,14 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
         # Same reasoning as `total` above: a look-ahead alongside the register,
         # not something a "load more" scroll needs recomputed. Scoped to the
         # same category/search/entity as the toolbar, so it never advertises a
-        # workload the filtered list underneath it doesn't contain.
+        # workload the filtered list underneath it doesn't contain. Not to the
+        # "Due within" window: four weeks ahead and the overdue backlog sit
+        # inside every window on offer, so it could never change a number.
         context["workload"] = _workload_forecast(
             as_of=as_of, entity_id=entity_id, category=category, search=search
         )
+        if not page.rows:
+            context.update(_empty_state_context(request, filters, as_of=as_of))
 
     # A cursor request is asking for more rows, not for the whole screen again.
     if cursor and is_fragment_request(request):
@@ -265,6 +415,30 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
     return render(request, template, context)
 
 
+def _empty_state_context(
+    request: HttpRequest, filters: _CalendarFilters, *, as_of: date
+) -> dict[str, Any]:
+    """Why an empty first screen is empty — only ever computed when it is.
+
+    ``beyond_window`` is how many rows these exact filters would show with no
+    "Due within" window. The list is empty, so every one of them is a row the
+    window hid: "nothing here" and "nothing through September, four filings
+    after it" are different answers, and only the second tells the user a
+    wider window is the way to find them. ``register_empty`` is the separate
+    onboarding case — nothing has been generated at all — asked of the whole
+    register rather than of the tiles, which are themselves windowed.
+    """
+    context: dict[str, Any] = {"register_empty": not live().exists()}
+    if filters.window_end is not None:
+        unwindowed = _filtered_by(replace(filters, window_end=None), as_of=as_of)
+        context["beyond_window"] = unwindowed.count()
+        widened = request.GET.copy()
+        widened["within"] = "all"
+        widened.pop("cursor", None)
+        context["widen_query"] = f"?{widened.urlencode()}"
+    return context
+
+
 def _filtered(
     *,
     as_of: date,
@@ -272,8 +446,12 @@ def _filtered(
     search: str = "",
     category: str = "",
     entity_id: UUID | None = None,
+    window_end: date | None = None,
 ) -> QuerySet[ObligationInstance]:
     """Apply the toolbar filters.
+
+    ``window_end`` is the "Due within" pick, applied through the same
+    ``apply_due_window`` the tiles above the list are counted with.
 
     ``select_related`` on entity and tenant is not optional here: without it a
     fifty-row page issues a hundred extra queries, and the query-count assertion
@@ -341,6 +519,7 @@ def _filtered(
         queryset = queryset.filter(state__in=_OPEN)
 
     queryset = apply_text_filters(queryset, category=category, search=search)
+    queryset = apply_due_window(queryset, window_end=window_end)
 
     if entity_id:
         queryset = queryset.filter(entity_id=entity_id)
@@ -402,27 +581,46 @@ def _workload_forecast(
     }
 
 
-def _scope_description(status: str, *, as_of: date) -> str:
+#: Statuses with no upper date bound of their own, so the "Due within" window
+#: is what ends them. The rest either end sooner than any window on offer
+#: (``latest``, ``due_*``) or hold nothing the window can hide (``overdue``,
+#: ``completed``) — naming the window on those would only be noise.
+_WINDOWED_STATUSES = frozenset({"", "all", "pending", "unconfirmed", "needs_input"})
+
+
+def _short_date(value: date) -> str:
+    # Not `%-d` — a GNU strftime extension the platform-provided Python on
+    # Windows (where `tasks.ps1` runs this same codebase) doesn't support.
+    return f"{value.day} {value.strftime('%b %Y')}"
+
+
+def _scope_description(status: str, *, as_of: date, window_end: date | None = None) -> str:
     """One line naming the date window a status filter implies.
 
     Due date is the single most important fact on this page — see it wrong and
     a filing is missed, not just miscounted — so which window is on screen is
     always spelled out, not left for the user to infer from a dropdown label.
+    That includes the "Due within" window, wherever it is the one doing the
+    cutting.
     """
+    status_part = _status_description(status, as_of=as_of, window_end=window_end)
+    if window_end is None or status not in _WINDOWED_STATUSES:
+        return status_part
+    window_part = _(
+        "Not-started filings due after %(end)s are left out — widen “Due within” to see them."
+    ) % {"end": _short_date(window_end)}
+    return f"{status_part} {window_part}" if status_part else window_part
 
-    def _fmt(value: date) -> str:
-        # Not `%-d` — a GNU strftime extension the platform-provided Python on
-        # Windows (where `tasks.ps1` runs this same codebase) doesn't support.
-        return f"{value.day} {value.strftime('%b %Y')}"
 
-    window_end = _fmt(as_of + timedelta(days=DUE_IN_90_DAYS))
-    thirty_end = _fmt(as_of + timedelta(days=DUE_IN_30_DAYS))
-    soon_end = _fmt(as_of + timedelta(days=DUE_SOON_DAYS))
-    today = _fmt(as_of)
+def _status_description(status: str, *, as_of: date, window_end: date | None) -> str:
+    window_end_90 = _short_date(as_of + timedelta(days=DUE_IN_90_DAYS))
+    thirty_end = _short_date(as_of + timedelta(days=DUE_IN_30_DAYS))
+    soon_end = _short_date(as_of + timedelta(days=DUE_SOON_DAYS))
+    today = _short_date(as_of)
 
     if status == "latest":
         return _("Overdue items of any age, plus everything due through %(end)s.") % {
-            "end": window_end
+            "end": window_end_90
         }
     if status == "overdue":
         return _("Everything overdue as of %(today)s, regardless of age.") % {"today": today}
@@ -431,8 +629,12 @@ def _scope_description(status: str, *, as_of: date) -> str:
     if status == "due_30":
         return _("Due between today and %(end)s. Overdue items are excluded.") % {"end": thirty_end}
     if status == "due_90":
-        return _("Due between today and %(end)s. Overdue items are excluded.") % {"end": window_end}
+        return _("Due between today and %(end)s. Overdue items are excluded.") % {
+            "end": window_end_90
+        }
     if status == "":
+        if window_end is not None:
+            return _("Every open obligation.")
         return _("Every open obligation, regardless of due date.")
     if status == "all":
         return _("Every obligation, including completed and not-applicable ones.")
@@ -446,6 +648,7 @@ def _active_filters(
     search: str,
     category: str,
     entity_id: UUID | None,
+    within: str = DEFAULT_DUE_WINDOW,
 ) -> list[dict[str, str]]:
     """Chips summarising every filter the user chose, each removable on its own.
 
@@ -483,6 +686,10 @@ def _active_filters(
         filters.append(
             {"label": _("Status: %(label)s") % {"label": status_label}, "href": _without("status")}
         )
+    # Like `status`, the default window is not a chip — it is where "Clear all"
+    # lands, so removing it would change nothing.
+    if within != DEFAULT_DUE_WINDOW:
+        filters.append({"label": str(dict(DUE_WINDOW_FILTERS)[within]), "href": _without("within")})
 
     return filters
 
@@ -667,26 +874,18 @@ def obligation_detail(request: HttpRequest, pk: str) -> HttpResponse:
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
 
-    definition = (
-        DefinitionVersion.objects.select_related("definition", "definition__authority")
-        .filter(
-            definition__code=obligation.definition_code,
-            version=obligation.definition_version,
-        )
-        .first()
-    )
+    definition = definition_for(obligation.definition_code, obligation.definition_version)
 
     events = list(obligation.events.select_related("actor")[:50])
     permissions = _permissions(request)
-    neighbours = sibling_instances(obligation, as_of=as_of)
+    sequence = sequence_instances(obligation, as_of=as_of)
 
     context = {
         "definition": definition,
         **_panel_context(obligation, request, as_of=as_of),
         **_discussion_context(events),
         "comment_form": CommentForm(),
-        "previous_obligation": neighbours["previous"],
-        "next_obligation": neighbours["next"],
+        "sequence_obligations": sequence if len(sequence) > 1 else [],
         "related_scope_obligations": related_scope_instances(obligation, as_of=as_of)[:8],
         "registrations": (
             EntityRegistration.objects.filter(
@@ -759,6 +958,20 @@ _MAKER_CHECKER_ONLY: frozenset[tuple[State, State]] = frozenset(
 )
 
 
+#: States that are already somewhere in a review chain. Once an obligation is
+#: in one, everybody looking at it sees the chain's next step — including an
+#: owner who could have skipped it — because somebody else started it and is
+#: waiting on it.
+_IN_REVIEW_CHAIN: frozenset[State] = frozenset(
+    {
+        State.INFO_REQUESTED,
+        State.PENDING_REVIEW,
+        State.PENDING_CLIENT_APPROVAL,
+        State.READY_TO_FILE,
+    }
+)
+
+
 def _visible_for_manual_tracking(move: Transition) -> bool:
     """Whether ``move`` belongs on the "Update status" list for a solo tracker.
 
@@ -772,7 +985,24 @@ def _visible_for_manual_tracking(move: Transition) -> bool:
     return (move.source, move.target) not in _MAKER_CHECKER_ONLY
 
 
-def _action_context(obligation: ObligationInstance, permissions: frozenset[str]) -> dict[str, Any]:
+def _shows_review_chain(obligation: ObligationInstance, permissions: frozenset[str]) -> bool:
+    """Whether this user works this obligation through prepare → review → sign-off.
+
+    Somebody who may mark work done without review — an owner, a partner — keeps
+    the single "is it done?" question the product has always opened with, and
+    never sees review moves they have no use for. Everybody else has no other
+    route to a filing, so the chain is their workflow and is shown. And once an
+    obligation is in the chain, it is shown to everyone, because someone is
+    waiting on it.
+    """
+    if obligation.state in _IN_REVIEW_CHAIN:
+        return True
+    return COMPLETE_UNREVIEWED not in permissions
+
+
+def _action_context(
+    obligation: ObligationInstance, permissions: frozenset[str], actor: Any = None
+) -> dict[str, Any]:
     """Every control the panel can offer right now, named by what it *does*
     rather than handed over as one undifferentiated list.
 
@@ -783,12 +1013,34 @@ def _action_context(obligation: ObligationInstance, permissions: frozenset[str])
     is still exactly ``available_actions``, sorted into the slots the template
     already knows how to render.
     """
-    actions = available_actions(obligation, permissions=permissions)
+    actions = available_actions(obligation, permissions=permissions, actor=actor)
     visible = [a for a in actions if _visible_for_manual_tracking(a)]
     by_target = {a.target: a for a in visible}
+    review_chain = _shows_review_chain(obligation, permissions)
+    # The "yes, it is done" answer: the reviewed "Record filing" from Ready to
+    # file, or — for whoever holds it — the explicit "without review" exception.
+    filing_action = next(
+        (a for a in actions if a.target == State.FILED and a.requires_filing_reference), None
+    )
+    # The checker rule, said out loud: a reviewer looking at their own
+    # submission would otherwise just find the approve buttons missing.
+    awaiting_other_reviewer = (
+        obligation.state == State.PENDING_REVIEW
+        and "compliance.obligation.review" in permissions
+        and getattr(actor, "pk", None) is not None
+        and getattr(submitted_for_review_by(obligation), "pk", None) == actor.pk
+    )
 
     return {
         "actions": actions,
+        "review_actions": (
+            [a for a in actions if (a.source, a.target) in _MAKER_CHECKER_ONLY]
+            if review_chain
+            else []
+        ),
+        "awaiting_other_reviewer": awaiting_other_reviewer,
+        "filing_action": filing_action,
+        "filing_skips_review": bool(filing_action and filing_action.skips_review),
         "start_action": (
             by_target.get(State.IN_PREPARATION) if obligation.state == State.NOT_STARTED else None
         ),
@@ -824,7 +1076,11 @@ def _action_context(obligation: ObligationInstance, permissions: frozenset[str])
                 if a.target in {State.DEFERRED, State.NOT_APPLICABLE, State.DISPUTED}
             ]
         ),
-        "can_record_filing": "compliance.obligation.file" in permissions,
+        # Attaching the acknowledgement to something already filed: whoever may
+        # record a filing, by either route.
+        "can_record_filing": bool(
+            {"compliance.obligation.file", COMPLETE_UNREVIEWED} & permissions
+        ),
         "can_record_pending": "compliance.obligation.prepare" in permissions,
         # Only meaningful once filed: closing is the one transition this can
         # block, so this stays empty everywhere else rather than costing a
@@ -859,7 +1115,9 @@ def _panel_context(
         "completed_form": completed_form or FilingCompletedForm(initial={"filed_on": as_of}),
         "pending_form": pending_form or FilingPendingForm(),
         "open_answer": open_answer,
-        **_action_context(obligation, _permissions(request)),
+        **_action_context(
+            obligation, _permissions(request, obligation.entity_id), current_user(request)
+        ),
         **_off_path_context(obligation),
         "form": TransitionForm(),
         "event_form": (
@@ -922,10 +1180,7 @@ def _evidence_fragment(obligation: ObligationInstance) -> Fragment | None:
     when the definition names nothing to attach, so a caller can drop it from
     ``also=`` with a plain truthiness check.
     """
-    definition = DefinitionVersion.objects.filter(
-        definition__code=obligation.definition_code,
-        version=obligation.definition_version,
-    ).first()
+    definition = definition_for(obligation.definition_code, obligation.definition_version)
     if definition is None or not definition.evidence_requirements:
         return None
     return Fragment(
@@ -1030,6 +1285,10 @@ def obligation_transition(request: HttpRequest, pk: str) -> HttpResponse:
     if not form.is_valid():
         return _detail_error(request, obligation, _("That form could not be read."))
 
+    _require_step_up_for(
+        request, obligation, transition_for(obligation.state, form.cleaned_data["target"])
+    )
+
     try:
         result = apply_transition(
             obligation,
@@ -1106,13 +1365,12 @@ def obligation_complete_modal(request: HttpRequest, pk: str) -> HttpResponse:
     """
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
-    action = _action_context(obligation, _permissions(request))["complete_action"]
+    action = _action_context(obligation, _permissions(request, obligation.entity_id))[
+        "complete_action"
+    ]
     if action is None:
         raise Http404
-    definition = DefinitionVersion.objects.filter(
-        definition__code=obligation.definition_code,
-        version=obligation.definition_version,
-    ).first()
+    definition = definition_for(obligation.definition_code, obligation.definition_version)
     return render(
         request,
         "obligations/_fragments/complete_modal.html",
@@ -1139,7 +1397,9 @@ def obligation_reopen_modal(request: HttpRequest, pk: str) -> HttpResponse:
     """
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
-    action = _action_context(obligation, _permissions(request))["reopen_action"]
+    action = _action_context(obligation, _permissions(request, obligation.entity_id))[
+        "reopen_action"
+    ]
     if action is None:
         raise Http404
     return render(
@@ -1166,7 +1426,14 @@ def bulk_assign(request: HttpRequest) -> HttpResponse:
     """
     as_of = _today()
     ids = request.GET.getlist("ids") if request.method == "GET" else request.POST.getlist("ids")
-    obligations = _bulk_get(ids, as_of=as_of)
+    # The decorator checked the role. An engaged client's entity may cap it, so
+    # rows the engagement does not let this user assign are dropped exactly as
+    # rows out of scope are — the count in the modal then says what will happen.
+    obligations = [
+        obligation
+        for obligation in _bulk_get(ids, as_of=as_of)
+        if "compliance.obligation.assign" in _permissions(request, obligation.entity_id)
+    ]
 
     if request.method == "GET":
         return render(
@@ -1190,7 +1457,6 @@ def bulk_assign(request: HttpRequest) -> HttpResponse:
         assign(obligation, assignee=assignee, actor=actor)
 
     refreshed = _bulk_get([str(o.pk) for o in obligations], as_of=as_of)
-    counts = status_counts(as_of=as_of)
     return oob(
         request,
         "",
@@ -1203,11 +1469,7 @@ def bulk_assign(request: HttpRequest) -> HttpResponse:
                 )
                 for obligation in refreshed
             ),
-            Fragment(
-                "obligations/_fragments/status_counts.html",
-                {"counts": counts, "total": counts["total"]},
-                oob_target="calendar-counts",
-            ),
+            _counters_fragment(request, as_of=as_of),
         ],
         toast=Toast(
             _("Assigned %(count)d obligations to %(name)s.")
@@ -1272,7 +1534,6 @@ def bulk_not_applicable(request: HttpRequest) -> HttpResponse:
             failed += 1
 
     refreshed = _bulk_get([str(o.pk) for o in succeeded], as_of=as_of)
-    counts = status_counts(as_of=as_of)
     row_fragments = [
         Fragment(
             "obligations/_fragments/obligation_row.html",
@@ -1281,13 +1542,7 @@ def bulk_not_applicable(request: HttpRequest) -> HttpResponse:
         )
         for obligation in refreshed
     ]
-    row_fragments.append(
-        Fragment(
-            "obligations/_fragments/status_counts.html",
-            {"counts": counts, "total": counts["total"]},
-            oob_target="calendar-counts",
-        )
-    )
+    row_fragments.append(_counters_fragment(request, as_of=as_of))
 
     if failed and not succeeded:
         message, level = (
@@ -1339,6 +1594,7 @@ def obligation_status(request: HttpRequest, pk: str) -> HttpResponse:
         form = FilingCompletedForm(request.POST, request.FILES)
         if not form.is_valid():
             return _detail_error(request, obligation, completed_form=form, open_answer="yes")
+        _require_step_up_for(request, obligation, transition_for(obligation.state, State.FILED))
         try:
             record_completion(
                 obligation,
@@ -1438,7 +1694,9 @@ def obligation_acknowledgement(request: HttpRequest, pk: str) -> HttpResponse | 
     obligation = _get(pk, as_of=as_of)
 
     if request.method == "POST":
-        if "compliance.obligation.file" not in _permissions(request):
+        if not {"compliance.obligation.file", COMPLETE_UNREVIEWED} & _permissions(
+            request, obligation.entity_id
+        ):
             return oob(
                 request,
                 "",
@@ -1501,6 +1759,7 @@ def obligation_assign(request: HttpRequest, pk: str) -> HttpResponse:
     """
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
+    require_entity_permission(request, "compliance.obligation.assign", obligation.entity_id)
 
     if request.method == "GET":
         form = AssignForm(initial={"assigned_to": obligation.assigned_to_id})
@@ -1560,6 +1819,7 @@ def obligation_comment(request: HttpRequest, pk: str) -> HttpResponse:
     """
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
+    require_entity_permission(request, "compliance.obligation.comment", obligation.entity_id)
     form = CommentForm(request.POST)
 
     if not form.is_valid():
@@ -1588,6 +1848,7 @@ def obligation_nudge(request: HttpRequest, pk: str) -> HttpResponse:
     """Re-ping whoever is holding this obligation, by email and WhatsApp."""
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
+    require_entity_permission(request, "compliance.obligation.request_info", obligation.entity_id)
 
     if obligation.assigned_to is None:
         return oob(
@@ -1728,6 +1989,7 @@ def obligation_step_assign(request: HttpRequest, pk: str) -> HttpResponse:
     assigning the obligation as a whole, since ``AssignForm`` carries no
     obligation-specific coupling."""
     step = _get_step(pk)
+    require_entity_permission(request, "compliance.obligation.assign", step.entity_id)
 
     if request.method == "GET":
         form = AssignForm(initial={"assigned_to": step.assigned_to_id})
@@ -1764,6 +2026,7 @@ def obligation_step_assign(request: HttpRequest, pk: str) -> HttpResponse:
 def obligation_step_nudge(request: HttpRequest, pk: str) -> HttpResponse:
     """Re-ping whoever is holding up one checklist item."""
     step = _get_step(pk)
+    require_entity_permission(request, "compliance.obligation.request_info", step.entity_id)
     if step.assigned_to is None:
         return oob(
             request,
@@ -1839,6 +2102,7 @@ def record_entity_event(request: HttpRequest, pk: str) -> HttpResponse:
     """
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
+    require_entity_permission(request, "compliance.event.record", obligation.entity_id)
     form = EntityEventForm(request.POST)
 
     if not form.is_valid():
@@ -1946,6 +2210,7 @@ def confirm_obligation(request: HttpRequest, pk: str) -> HttpResponse:
     """
     as_of = _today()
     obligation = _get(pk, as_of=as_of)
+    require_entity_permission(request, "tenancy.profile.edit", obligation.entity_id)
     questions = _askable_questions(obligation, as_of=as_of)
 
     if not questions and not obligation.missing_facts:
@@ -2042,12 +2307,7 @@ def _confirmed_response(
     of ranking questions by how much each one unlocks — so the counters are
     re-rendered too rather than only the row that was clicked.
     """
-    counts = status_counts(as_of=as_of)
-    counters = Fragment(
-        "obligations/_fragments/status_counts.html",
-        {"counts": counts, "total": counts["total"]},
-        oob_target="calendar-counts",
-    )
+    counters = _counters_fragment(request, as_of=as_of)
 
     refreshed = (
         annotate_status(ObligationInstance.objects.all(), as_of=as_of)
@@ -2106,6 +2366,7 @@ def event_create(request: HttpRequest, entity_pk: str) -> HttpResponse:
     that something was waiting on it.
     """
     entity = _entity_or_404(entity_pk)
+    require_entity_permission(request, "compliance.event.record", entity.pk)
     as_of = _today()
     form = RecordEventForm(request.POST or None, country=entity.country)
 
@@ -2158,6 +2419,7 @@ def event_withdraw(request: HttpRequest, pk: str) -> HttpResponse:
         raise Http404
 
     entity = event.entity
+    require_entity_permission(request, "compliance.event.withdraw", entity.pk)
     as_of = _today()
 
     with transaction.atomic():
@@ -2260,6 +2522,7 @@ def rebuild_calendar(request: HttpRequest, entity_pk: str) -> HttpResponse:
     entity = Entity.objects.filter(pk=entity_pk, archived_at__isnull=True).first()
     if entity is None:
         raise Http404
+    require_entity_permission(request, "compliance.calendar.rebuild", entity.pk)
 
     run = materialise(entity, as_of=as_of, trigger="MANUAL", actor=current_user(request))
 
@@ -2617,6 +2880,7 @@ def answer_entity_question(request: HttpRequest, entity_pk: str, fact_key: str) 
     entity = Entity.objects.filter(pk=entity_pk, archived_at__isnull=True).first()
     if entity is None:
         raise Http404
+    require_entity_permission(request, "tenancy.profile.edit", entity.pk)
 
     form = QuestionForm(request.POST, fact_key=fact_key)
 
@@ -2664,6 +2928,7 @@ def toggle_entity_pack(request: HttpRequest, entity_pk: str, code: str) -> HttpR
     entity = Entity.objects.filter(pk=entity_pk, archived_at__isnull=True).first()
     if entity is None:
         raise Http404
+    require_entity_permission(request, "tenancy.profile.edit", entity.pk)
 
     added = code not in _accepted_pack_codes(entity)
     with transaction.atomic():

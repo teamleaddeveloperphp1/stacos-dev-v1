@@ -1,0 +1,77 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  One team member, as two separate answers:
+
+  1. Role and reach — the role decides what they can do, and entities or clients
+     and compliance areas decide where. A crispy form.
+  2. Permissions — the role's permissions, ticked, plus or minus individual ones.
+     Hand-rendered with the same `form-check` markup crispy emits, because each
+     row carries its origin ("from role", "added", "removed from role") and a
+     locked state that a plain checkbox widget cannot say.
+
+  Both post back here and re-render this body, so the ticks always reflect what
+  was saved. Every change is audited with the before and after.
+{% endcomment %}
+<c-page-header title="{{ membership.user.full_name|default:membership.user.email }}"
+               subtitle="{{ membership.user.email }} · {{ membership.role.name }} · {{ reach }}">
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'app:team' %}"
+     hx-get="{% url 'app:team' %}" hx-target="#main" hx-push-url="true">
+    {% translate "Back to team" %}
+  </a>
+</c-page-header>
+
+<div id="member-access-panel" aria-live="polite" aria-atomic="false">
+  {% if is_self %}
+    <section class="card">
+      <p class="callout callout--info mb-0" role="note">
+        <c-icon name="info" size="14" />
+        {% translate "This is your own access, shown read-only. Another administrator has to change it." %}
+      </p>
+    </section>
+    {% include "tenancy/_fragments/member_permissions_list.html" with readonly=True %}
+  {% else %}
+
+    <section class="card" aria-labelledby="access-heading">
+      <div class="card__header">
+        <h2 class="card__title" id="access-heading">{% translate "Role and reach" %}</h2>
+      </div>
+      {% if access_error %}
+        <p class="callout callout--danger" role="alert">{{ access_error }}</p>
+      {% endif %}
+      <form hx-post="{% url 'app:team_member_access' membership.pk %}"
+            hx-target="#member-access-panel" hx-select="#member-access-panel" hx-swap="outerHTML"
+            method="post" action="{% url 'app:team_member_access' membership.pk %}">
+        {% csrf_token %}
+        {% crispy form %}
+        <button class="btn btn-primary mt-3" type="submit">{% translate "Save role and reach" %}</button>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="permissions-heading">
+      <div class="card__header">
+        <h2 class="card__title" id="permissions-heading">{% translate "Permissions" %}</h2>
+        {% if customised %}
+          <span class="badge-soft badge-soft--attention">{% translate "Customised from the role" %}</span>
+        {% endif %}
+      </div>
+      <p class="text-muted small">
+        {% blocktranslate with role=membership.role.name %}Ticked boxes are what they can do now. Everything that comes with the {{ role }} role starts ticked; tick more to give extra permissions, or untick to take some away. You can only change permissions you hold yourself.{% endblocktranslate %}
+      </p>
+      {% if permissions_error %}
+        <p class="callout callout--danger" role="alert">{{ permissions_error }}</p>
+      {% endif %}
+
+      <form hx-post="{% url 'app:team_member_permissions' membership.pk %}"
+            hx-target="#member-access-panel" hx-select="#member-access-panel" hx-swap="outerHTML"
+            method="post" action="{% url 'app:team_member_permissions' membership.pk %}">
+        {% csrf_token %}
+        {% include "tenancy/_fragments/member_permissions_list.html" with readonly=False only_fields=True %}
+        <p class="text-muted small">
+          {% translate "Some permissions need others to work — ticking “Record a filing” also gives “View the compliance calendar” — and those are added for you when you save." %}
+        </p>
+        <button class="btn btn-primary" type="submit">{% translate "Save permissions" %}</button>
+      </form>
+    </section>
+
+  {% endif %}
+</div>

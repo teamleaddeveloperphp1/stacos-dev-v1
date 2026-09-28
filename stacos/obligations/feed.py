@@ -131,7 +131,9 @@ def feed_events_for_user(user: User, *, as_of: date) -> list[ObligationInstance]
         writable_tenant_ids=scope.writable_tenant_ids,
         entity_ids=scope.entity_ids,
         categories=scope.categories,
+        entity_categories=scope.entity_categories,
         permissions=scope.permissions,
+        entity_permissions=scope.entity_permissions,
         reason="feed:ics",
     ):
         entity_ids = list(scope.entity_ids) if scope.entity_ids is not None else None
