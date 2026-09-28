@@ -185,23 +185,6 @@
   border-top: 1px solid var(--stacos-border);
 }
 
-// "Checked by the compliance desk on 1 June" — a provenance line, which is a
-// reassurance rather than a warning, so it is tinted with the on-track hue
-// instead of sitting in the same grey as the metadata around it.
-.verified-note {
-  display: flex;
-  align-items: center;
-  gap: $stacos-space-2;
-  margin: $stacos-space-3 0 0;
-  padding: $stacos-space-2 $stacos-space-3;
-  border-radius: var(--stacos-radius-md);
-  background: var(--stacos-status-on-track-bg);
-  color: var(--stacos-status-on-track);
-  font-size: $stacos-text-xs;
-
-  svg { flex: none; }
-}
-
 // -----------------------------------------------------------------------------
 // A panel hanging off a header control — the notification bell.
 //

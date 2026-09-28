@@ -246,13 +246,6 @@
           <p class="callout callout--warning small mt-3 mb-0">
             {% translate "This summary has not been reviewed against the statute recently. Treat it as a guide and check the reference." %}
           </p>
-        {% else %}
-          <p class="verified-note">
-            <c-icon name="shield" size="13" />
-            {% blocktranslate with who=definition.reviewed_by when=definition.reviewed_at|date:"j M Y" %}
-              Checked by {{ who }} on {{ when }}
-            {% endblocktranslate %}
-          </p>
         {% endif %}
       </section>
     {% endif %}

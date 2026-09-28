@@ -183,7 +183,7 @@ class FilingPendingForm(forms.Form):
     """
 
     pending_reason = forms.CharField(
-        label=_("Why is it still pending?"),
+        label=_("Remark"),
         max_length=300,
         widget=forms.Textarea(attrs={"rows": 2}),
         help_text=_("Recorded on the timeline, so whoever picks this up knows where it stands."),
