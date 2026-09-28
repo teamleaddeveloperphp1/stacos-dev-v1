@@ -15,6 +15,7 @@ Proving a Google identity proves neither the email nor the phone STACOS holds.
 
 from __future__ import annotations
 
+from typing import Any
 from urllib.parse import quote
 
 import structlog
@@ -24,21 +25,31 @@ from django.db import IntegrityError, transaction
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
 from stacos.accounts.devices import recognised_device, remember_device, revoke_all_devices
-from stacos.accounts.forms import DualOtpForm, LoginForm, RegistrationForm, StepUpForm
+from stacos.accounts.forms import (
+    DualOtpForm,
+    LoginForm,
+    ProfileForm,
+    RegistrationForm,
+    StepUpForm,
+)
 from stacos.accounts.middleware import SESSION_PENDING_KEY, SESSION_VERIFIED_KEY
 from stacos.accounts.models import PendingVerification, TrustedDevice, User, UserSession
 from stacos.accounts.otp import resend_codes, start_verification, verify_codes
 from stacos.accounts.stepup import mark_step_up_complete
-from stacos.core.htmx import is_fragment_request
+from stacos.billing.models import Subscription
+from stacos.core.audit import diff_fields, record_event
+from stacos.core.htmx import Toast, is_fragment_request, oob, page_url
 from stacos.core.htmx import navigate as _navigate
+from stacos.core.models import AuditAction
 from stacos.core.permissions import public_view, require_permission
 from stacos.core.rls import rls_bootstrap
 from stacos.core.typing import current_user
-from stacos.tenancy.models import Membership
+from stacos.tenancy.models import ComplianceCategory, Membership
 from stacos.tenancy.scope_resolver import SESSION_TENANT_KEY
 from stacos.tenancy.services import default_workspace_name, provision_tenant
 
@@ -495,6 +506,132 @@ def step_up(request: HttpRequest) -> HttpResponse:
         "accounts/step_up.html",
         {"form": form, "next": _safe_next(request)},
     )
+
+
+# ---------------------------------------------------------------------------
+# Profile
+# ---------------------------------------------------------------------------
+
+
+@require_permission("accounts.profile.view")
+def profile(request: HttpRequest) -> HttpResponse:
+    """The signed-in person's own profile: identity, org, access and security.
+
+    ``subscription`` is fetched unconditionally — one cheap indexed lookup
+    scoped to the bound tenant — and gated in the template by ``{% can
+    'billing.view' %}``, the same permission the billing app itself enforces.
+    Owners see what their organisation is on; a regular team member does not.
+
+    The security panel names *where* codes go, masked, rather than repeating
+    the full address and number the details panel already shows: it is the
+    part of the page most likely to be read over someone's shoulder.
+    """
+    user = current_user(request)
+    now = timezone.now()
+    membership = getattr(request, "membership", None)
+    subscription = (
+        Subscription.objects.select_related("plan")
+        .exclude(status=Subscription.Status.CANCELLED)
+        .first()
+    )
+    category_labels = dict(ComplianceCategory.choices)
+    context = {
+        "profile_user": user,
+        "membership": membership,
+        "membership_categories": (
+            [category_labels.get(code, code) for code in membership.categories]
+            if membership
+            else []
+        ),
+        "membership_entity_count": (
+            membership.entities.count() if membership and not membership.all_entities else None
+        ),
+        "subscription": subscription,
+        "trusted_device_count": TrustedDevice.objects.filter(
+            user=user, revoked_at__isnull=True, expires_at__gt=now
+        ).count(),
+        "active_session_count": UserSession.objects.filter(
+            user=user, ended_at__isnull=True
+        ).count(),
+        "masked_email": _mask_email(user.email),
+        "masked_phone": _mask_phone(user.phone_e164) if user.phone_e164 else "",
+        "profile_gaps": _profile_gaps(user),
+    }
+    template = (
+        "accounts/_fragments/profile_body.html"
+        if is_fragment_request(request)
+        else "accounts/profile.html"
+    )
+    return render(request, template, context)
+
+
+@require_permission("accounts.profile.view")
+@require_http_methods(["GET", "POST"])
+def profile_edit(request: HttpRequest) -> HttpResponse:
+    """Change your own name and timezone, from a modal on the profile page.
+
+    ``accounts.profile.view`` is catalogued as "view and edit your own profile":
+    nobody needs a grant to correct the spelling of their own name. The form
+    only ever touches ``current_user`` — there is no id in the URL to forge.
+    """
+    user = current_user(request)
+    form = ProfileForm(request.POST or None, initial=ProfileForm.initial_for(user))
+
+    if request.method == "POST" and form.is_valid():
+        _save_profile(user, form.cleaned_data)
+        return oob(
+            request,
+            main="",
+            toast=Toast(_("Profile updated.")),
+            triggers={"stacos:modal-close": True, "stacos:navigate": page_url(request)},
+        )
+
+    status = 422 if request.method == "POST" else 200
+    return render(
+        request, "accounts/_fragments/profile_edit_modal.html", {"form": form}, status=status
+    )
+
+
+_PROFILE_FIELDS = ["first_name", "last_name", "full_name", "display_name", "timezone"]
+
+
+def _save_profile(user: User, data: dict[str, Any]) -> None:
+    """Write the edit and its audit entry together. A no-op edit records nothing."""
+    original = {field: getattr(user, field) for field in _PROFILE_FIELDS}
+    for field in ("first_name", "last_name", "display_name", "timezone"):
+        setattr(user, field, data[field])
+    # `User.save` derives `full_name` from the halves and adds it to
+    # `update_fields` itself.
+    user.save(update_fields=["first_name", "last_name", "display_name", "timezone"])
+
+    before, after = diff_fields(user, fields=_PROFILE_FIELDS, original=original)
+    changed = [field for field in _PROFILE_FIELDS if before.get(field) != after.get(field)]
+    if not changed:
+        return
+    record_event(
+        action=AuditAction.UPDATE,
+        actor=user,
+        obj=user,
+        before={field: before[field] for field in changed},
+        after={field: after[field] for field in changed},
+    )
+
+
+def _profile_gaps(user: User) -> list[str]:
+    """What is genuinely missing, in words — not a vanity percentage.
+
+    Sign-up already demands both verified channels, so for most people this is
+    empty and the page shows nothing. It earns its place for accounts created
+    before names were split, or by an invitation that has not finished.
+    """
+    gaps = []
+    if not user.full_name:
+        gaps.append(_("Add your name so colleagues know who acted on a filing."))
+    if not user.email_verified:
+        gaps.append(_("Verify your email address."))
+    if not user.phone_verified:
+        gaps.append(_("Verify your WhatsApp number."))
+    return gaps
 
 
 # ---------------------------------------------------------------------------

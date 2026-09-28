@@ -1,0 +1,13 @@
+{% load i18n %}
+{% comment %}
+  One "used of included" row on the plan card. The bar is a <meter>, so a
+  screen reader announces the fraction; the figures beside it say the same in
+  words, because a bar alone is colour and length and nothing else.
+  Caller passes `label`, `used`, `included`.
+{% endcomment %}
+<div class="usage__row">
+  <span class="usage__label">{{ label }}</span>
+  <meter class="usage__meter" min="0" max="{{ included }}" value="{{ used }}"
+         aria-label="{{ label }}"></meter>
+  <span class="usage__figure num">{{ used }} / {{ included }}</span>
+</div>

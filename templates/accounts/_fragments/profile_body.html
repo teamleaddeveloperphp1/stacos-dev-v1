@@ -1,0 +1,334 @@
+{% load i18n %}
+{% comment %}
+  The profile: one person's control centre, in three bands.
+
+  1. Who you are, and in what capacity — the header. The only place the role is
+     named, so the access card below does not repeat it.
+  2. The overview strip — the four figures worth a glance, each a link to where
+     it can be acted on.
+  3. Two columns that never mix: *My profile* (things about you, which you can
+     change) and *My organisation* (things about the workspace you are in,
+     which your permissions decide whether you can change).
+
+  Every fact appears once. Destructive controls live only in the security card,
+  never beside the name.
+{% endcomment %}
+{% can 'tenancy.entity.view' as may_see_entities %}
+{% can 'tenancy.tenant.manage' as may_manage_org %}
+{% can 'accounts.user.invite' as may_manage_team %}
+{% can 'billing.view' as may_see_billing %}
+
+<c-page-header title="{% translate 'Profile' %}"
+               subtitle="{% translate 'Your details, how you sign in, and the organisation you are working in.' %}" />
+
+{# ---------------------------------------------------------------------- #}
+{# Identity                                                                #}
+{# ---------------------------------------------------------------------- #}
+<section class="card profile-header" aria-labelledby="profile-name">
+  <span class="avatar profile-header__avatar" aria-hidden="true">{{ profile_user.initials }}</span>
+
+  <div class="profile-header__identity">
+    <div class="profile-header__line">
+      <h2 class="profile-header__name" id="profile-name">{{ profile_user.full_name|default:profile_user.email }}</h2>
+      {% if profile_user.is_fully_verified %}
+        <c-status-chip status="on-track" label="{% translate 'Verified' %}" />
+      {% else %}
+        <c-status-chip status="pending" label="{% translate 'Verification incomplete' %}" />
+      {% endif %}
+    </div>
+    <p class="profile-header__role">
+      {% if membership and current_tenant %}
+        {% blocktranslate with role=membership.role.name org=current_tenant.name %}{{ role }} at <strong>{{ org }}</strong>{% endblocktranslate %}
+      {% else %}
+        {{ profile_user.email }}
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="profile-header__actions">
+    <button type="button" class="btn btn-sm btn-outline-secondary"
+            hx-get="{% url 'accounts:profile_edit' %}" hx-target="#modal-container" hx-swap="innerHTML">
+      <c-icon name="user" size="14" /> {% translate "Edit profile" %}
+    </button>
+  </div>
+</section>
+
+{% if profile_gaps %}
+  <div class="card profile-gaps" role="note" aria-labelledby="profile-gaps-title">
+    <div class="card__title" id="profile-gaps-title">
+      <c-icon name="info" size="16" />{% translate "Finish setting up your profile" %}
+    </div>
+    <ul class="profile-gaps__list">
+      {% for gap in profile_gaps %}<li>{{ gap }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+{# ---------------------------------------------------------------------- #}
+{# Account overview                                                        #}
+{# ---------------------------------------------------------------------- #}
+<section class="profile-overview" aria-labelledby="profile-overview-title">
+  <h2 class="section-title" id="profile-overview-title">{% translate "Account overview" %}</h2>
+  <div class="profile-overview__tiles">
+    {% if membership and may_see_entities %}
+      <a class="stat-tile" href="{% url 'app:entity_list' %}" preload>
+        <span class="stat-tile__value">
+          {% if membership.all_entities %}{% translate "All" %}{% else %}{{ membership_entity_count }}{% endif %}
+        </span>
+        <span class="stat-tile__label">{% translate "Entities you can access" %}</span>
+      </a>
+    {% endif %}
+    <a class="stat-tile" href="{% url 'accounts:security' %}" preload>
+      <span class="stat-tile__value">{{ active_session_count }}</span>
+      <span class="stat-tile__label">{% translate "Signed-in sessions" %}</span>
+    </a>
+    <a class="stat-tile" href="{% url 'accounts:security' %}" preload>
+      <span class="stat-tile__value">{{ trusted_device_count }}</span>
+      <span class="stat-tile__label">{% translate "Trusted devices" %}</span>
+    </a>
+    <div class="stat-tile stat-tile--static">
+      <span class="stat-tile__value">{{ profile_user.date_joined|date:"M Y" }}</span>
+      <span class="stat-tile__label">{% translate "Member since" %}</span>
+    </div>
+  </div>
+</section>
+
+<div class="profile-columns">
+  {# ==================================================================== #}
+  {# My profile                                                           #}
+  {# ==================================================================== #}
+  <section class="profile-columns__col" aria-labelledby="my-profile-title">
+    <h2 class="section-title" id="my-profile-title">{% translate "My profile" %}</h2>
+
+    <div class="card">
+      <div class="card__header">
+        <h3 class="card__title"><c-icon name="user" size="16" />{% translate "Personal details" %}</h3>
+        <button type="button" class="btn btn-sm btn-link link-strong p-0"
+                hx-get="{% url 'accounts:profile_edit' %}" hx-target="#modal-container" hx-swap="innerHTML">
+          {% translate "Edit" %}
+        </button>
+      </div>
+      <dl class="key-values mb-0">
+        <dt>{% translate "Name" %}</dt>
+        <dd>{{ profile_user.full_name|default:"—" }}</dd>
+
+        {% if profile_user.display_name %}
+          <dt>{% translate "Display name" %}</dt>
+          <dd>{{ profile_user.display_name }}</dd>
+        {% endif %}
+
+        <dt>{% translate "Email" %}</dt>
+        <dd class="text-break">{{ profile_user.email }}</dd>
+
+        <dt>{% translate "WhatsApp" %}</dt>
+        <dd>{{ profile_user.phone_e164|default:"—" }}</dd>
+
+        {% if profile_user.mobile_e164 %}
+          <dt>{% translate "Mobile" %}</dt>
+          <dd>{{ profile_user.mobile_e164 }}</dd>
+        {% endif %}
+
+        <dt>{% translate "Timezone" %}</dt>
+        <dd>{{ profile_user.timezone }}</dd>
+      </dl>
+    </div>
+
+    {# ------------------------------------------------------------------ #}
+    <div class="card card--security">
+      <div class="card__header">
+        <h3 class="card__title"><c-icon name="shield" size="16" />{% translate "Security" %}</h3>
+        <a class="link-strong small" href="{% url 'accounts:security' %}" preload>{% translate "Manage" %}</a>
+      </div>
+
+      <div class="security-summary">
+        <div class="security-summary__status">
+          <strong>{% translate "Two-step sign-in" %}</strong>
+          {% if profile_user.is_fully_verified %}
+            <c-status-chip status="on-track" label="{% translate 'On' %}" />
+          {% else %}
+            <c-status-chip status="pending" label="{% translate 'Incomplete' %}" />
+          {% endif %}
+        </div>
+        <p class="security-summary__body">
+          {% translate "On a device STACOS does not recognise, you confirm a code sent to both:" %}
+        </p>
+        <ul class="security-channels">
+          <li>
+            <c-icon name="mail" size="14" />
+            <span class="security-channels__value">{{ masked_email }}</span>
+            {% if profile_user.email_verified %}
+              <c-status-chip status="on-track" label="{% translate 'Verified' %}" />
+            {% else %}
+              <c-status-chip status="na" label="{% translate 'Not verified' %}" />
+            {% endif %}
+          </li>
+          <li>
+            <c-icon name="whatsapp" size="14" />
+            <span class="security-channels__value">{{ masked_phone|default:"—" }}</span>
+            {% if profile_user.phone_verified %}
+              <c-status-chip status="on-track" label="{% translate 'Verified' %}" />
+            {% else %}
+              <c-status-chip status="na" label="{% translate 'Not verified' %}" />
+            {% endif %}
+          </li>
+        </ul>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:security' %}" preload>
+          <c-icon name="eye" size="14" /> {% translate "Review devices and sessions" %}
+        </a>
+      </div>
+
+      <div class="danger-zone">
+        <div>
+          <strong class="danger-zone__title">{% translate "Lost a device?" %}</strong>
+          <p class="danger-zone__body">
+            {% translate "Ends every session and forgets every trusted device, including this one. Use it if a device is lost or you suspect someone else has signed in." %}
+          </p>
+        </div>
+        {% comment %}
+          Opted out of boosting so the browser performs a real navigation: this
+          ends the current session too, and a boosted submit would swap the
+          sign-in page into the shell instead of leaving it — same reasoning as
+          the identical control on the Security page.
+        {% endcomment %}
+        <form method="post" action="{% url 'accounts:revoke_devices' %}" hx-boost="false"
+              onsubmit="return confirm('{% translate "Sign out of every device, including this one?" %}')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-outline-danger text-nowrap">
+            <c-icon name="logout" size="14" /> {% translate "Sign out everywhere" %}
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  {# ==================================================================== #}
+  {# My organisation                                                      #}
+  {# ==================================================================== #}
+  <section class="profile-columns__col" aria-labelledby="my-org-title">
+    <h2 class="section-title" id="my-org-title">{% translate "My organisation" %}</h2>
+
+    {% if current_tenant and membership %}
+      <div class="card">
+        <div class="card__header">
+          <h3 class="card__title"><c-icon name="building" size="16" />{% translate "Organisation" %}</h3>
+          {% if may_manage_org %}
+            <button type="button" class="btn btn-sm btn-link link-strong p-0"
+                    hx-get="{% url 'app:workspace_rename' %}" hx-target="#modal-container" hx-swap="innerHTML">
+              {% translate "Rename" %}
+            </button>
+          {% endif %}
+        </div>
+        <div class="org-summary">
+          <span class="org-summary__name">{{ current_tenant.name }}</span>
+          {% if current_tenant.status == "ACTIVE" %}
+            <c-status-chip status="on-track" label="{{ current_tenant.get_status_display }}" />
+          {% elif current_tenant.status == "TRIAL" %}
+            <c-status-chip status="pending" label="{{ current_tenant.get_status_display }}" />
+          {% elif current_tenant.status == "PAST_DUE" %}
+            <c-status-chip status="overdue" label="{{ current_tenant.get_status_display }}" />
+          {% else %}
+            <c-status-chip status="na" label="{{ current_tenant.get_status_display }}" />
+          {% endif %}
+        </div>
+        <p class="org-summary__meta">
+          {{ current_tenant.get_type_display }} · {{ current_tenant.country }} ·
+          {% blocktranslate with date=current_tenant.created_at|date:"M Y" %}on STACOS since {{ date }}{% endblocktranslate %}
+        </p>
+      </div>
+
+      {# ---------------------------------------------------------------- #}
+      <div class="card">
+        <div class="card__header">
+          <h3 class="card__title"><c-icon name="briefcase" size="16" />{% translate "Your access" %}</h3>
+          {% if may_manage_team %}
+            <a class="link-strong small" href="{% url 'app:team' %}" preload>{% translate "Manage team" %}</a>
+          {% endif %}
+        </div>
+        <dl class="key-values mb-0">
+          <dt>{% translate "Membership" %}</dt>
+          <dd>
+            {% if membership.status == "ACTIVE" %}
+              <c-status-chip status="on-track" label="{{ membership.get_status_display }}" />
+            {% elif membership.status == "INVITED" %}
+              <c-status-chip status="pending" label="{{ membership.get_status_display }}" />
+            {% else %}
+              <c-status-chip status="na" label="{{ membership.get_status_display }}" />
+            {% endif %}
+            {% if membership.joined_at %}
+              <span class="text-muted small ms-1">
+                {% blocktranslate with date=membership.joined_at|date:"j M Y" %}since {{ date }}{% endblocktranslate %}
+              </span>
+            {% endif %}
+          </dd>
+
+          {% if may_see_entities %}
+            <dt>{% translate "Entities" %}</dt>
+            <dd>
+              {% if membership.all_entities %}
+                {% translate "All entities, including new ones" %}
+              {% else %}
+                {% blocktranslate count counter=membership_entity_count %}{{ counter }} entity{% plural %}{{ counter }} entities{% endblocktranslate %}
+              {% endif %}
+              <a class="link-strong small ms-1" href="{% url 'app:entity_list' %}" preload>{% translate "View" %}</a>
+            </dd>
+
+            <dt>{% translate "Compliance areas" %}</dt>
+            <dd>
+              {% if membership_categories %}
+                <span class="d-inline-flex flex-wrap gap-1">
+                  {% for label in membership_categories %}<span class="badge-soft">{{ label }}</span>{% endfor %}
+                </span>
+              {% else %}
+                {% translate "All areas" %}
+              {% endif %}
+            </dd>
+          {% endif %}
+
+          {% if membership.department %}
+            <dt>{% translate "Department" %}</dt>
+            <dd>{{ membership.department }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+
+      {# ---------------------------------------------------------------- #}
+      {% if may_see_billing and subscription %}
+        <div class="card">
+          <div class="card__header">
+            <h3 class="card__title"><c-icon name="document" size="16" />{% translate "Plan & billing" %}</h3>
+            <a class="link-strong small" href="{% url 'billing:overview' %}" preload>{% translate "Manage billing" %}</a>
+          </div>
+          <div class="org-summary">
+            <span class="org-summary__name">{{ subscription.plan.name }}</span>
+            {% if subscription.status == "ACTIVE" %}
+              <c-status-chip status="on-track" label="{{ subscription.get_status_display }}" />
+            {% elif subscription.status == "TRIALING" %}
+              <c-status-chip status="pending" label="{{ subscription.get_status_display }}" />
+            {% elif subscription.status == "PAST_DUE" %}
+              <c-status-chip status="overdue" label="{{ subscription.get_status_display }}" />
+            {% else %}
+              <c-status-chip status="na" label="{{ subscription.get_status_display }}" />
+            {% endif %}
+          </div>
+          <p class="org-summary__meta">
+            {{ subscription.plan.amount_minor|minor|inr }} / {{ subscription.plan.get_interval_display|lower }} ·
+            {% if subscription.status == "TRIALING" and subscription.trial_ends_on %}
+              {% blocktranslate with date=subscription.trial_ends_on|date:"j M Y" %}trial ends {{ date }}{% endblocktranslate %}
+            {% else %}
+              {% blocktranslate with date=subscription.current_period_end|date:"j M Y" %}renews {{ date }}{% endblocktranslate %}
+            {% endif %}
+          </p>
+          <div class="usage">
+            {% include "accounts/_fragments/_usage_meter.html" with label=_("Entities") used=subscription.entity_count included=subscription.plan.included_entities %}
+            {% include "accounts/_fragments/_usage_meter.html" with label=_("Users") used=subscription.user_count included=subscription.plan.included_users %}
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="card">
+        <c-empty-state title="{% translate 'No organisation yet' %}"
+                       body="{% translate 'You are not a member of any organisation.' %}" />
+      </div>
+    {% endif %}
+  </section>
+</div>

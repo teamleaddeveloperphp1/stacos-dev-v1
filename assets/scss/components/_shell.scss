@@ -95,6 +95,15 @@
     background: var(--stacos-surface);
     text-align: left;
     font-size: $stacos-text-sm;
+    text-decoration: none;
+    color: inherit;
+    transition: background var(--stacos-duration-fast) var(--stacos-ease),
+                border-color var(--stacos-duration-fast) var(--stacos-ease);
+
+    &:hover {
+      background: var(--stacos-surface-sunken);
+      border-color: var(--stacos-border-strong);
+    }
   }
 
   &__name {

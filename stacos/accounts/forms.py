@@ -548,3 +548,66 @@ class StepUpForm(_CrispyForm):
         if self.user is None or not self.user.check_password(password):
             raise forms.ValidationError(_("That password is not correct."))
         return password
+
+
+def _timezone_choices() -> list[tuple[str, str]]:
+    # A callable, so Django builds it per form rather than at import: ~600
+    # zones, sorted, and only the profile modal ever needs them.
+    from zoneinfo import available_timezones
+
+    return [(zone, zone.replace("_", " ")) for zone in sorted(available_timezones())]
+
+
+class ProfileForm(forms.Form):
+    """The parts of your own profile you can change without re-verifying.
+
+    Email and the WhatsApp number are absent on purpose: both are sign-in
+    channels, and changing one is a verification flow, not a form field.
+
+    A plain ``forms.Form`` for the same reason as the workspace rename: the
+    write goes through ``accounts.views._save_profile`` so the audit entry and
+    the save cannot drift apart.
+    """
+
+    first_name = PersonNameField(label=_("First name"))
+    last_name = PersonNameField(label=_("Last name"))
+    display_name = forms.CharField(
+        label=_("Display name"),
+        max_length=80,
+        required=False,
+        help_text=_("Optional. What colleagues see in lists and mentions."),
+    )
+    timezone = forms.ChoiceField(
+        label=_("Timezone"),
+        choices=_timezone_choices,
+        help_text=_("Reminder emails and timestamps use this."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper()
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Row(
+                Column("first_name", css_class="col-sm-6"),
+                Column("last_name", css_class="col-sm-6"),
+            ),
+            "display_name",
+            "timezone",
+        )
+
+    @classmethod
+    def initial_for(cls, user: User) -> dict[str, str]:
+        """Pre-fill, splitting ``full_name`` for accounts that predate the halves."""
+        first, last = user.first_name, user.last_name
+        if not (first or last) and user.full_name:
+            first, _sep, last = user.full_name.partition(" ")
+        return {
+            "first_name": first,
+            "last_name": last,
+            "display_name": user.display_name,
+            "timezone": user.timezone,
+        }
+
+    def clean_display_name(self) -> str:
+        return " ".join(self.cleaned_data["display_name"].split())

@@ -12,6 +12,8 @@ urlpatterns = [
     path("verify/", views.verify, name="verify"),
     path("verify/resend/", views.resend, name="resend"),
     path("step-up/", views.step_up, name="step_up"),
+    path("profile/", views.profile, name="profile"),
+    path("profile/edit/", views.profile_edit, name="profile_edit"),
     path("security/", views.security_settings, name="security"),
     path("security/revoke-all/", views.revoke_devices, name="revoke_devices"),
     # Under /auth/, not /app/: an invitee has no membership yet, and everything

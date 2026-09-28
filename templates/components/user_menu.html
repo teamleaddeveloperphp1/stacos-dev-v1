@@ -12,6 +12,9 @@
       <div class="fw-semibold small">{{ user.full_name|default:user.email }}</div>
       <div class="text-muted" style="font-size:.75rem">{{ user.email }}</div>
     </div>
+    <a class="palette__item" href="{% url 'accounts:profile' %}" role="menuitem" preload>
+      <c-icon name="user" size="14" /><span>{% translate "View profile" %}</span>
+    </a>
     <a class="palette__item" href="{% url 'accounts:security' %}" role="menuitem" preload>
       <c-icon name="shield" size="14" /><span>{% translate "Security and devices" %}</span>
     </a>

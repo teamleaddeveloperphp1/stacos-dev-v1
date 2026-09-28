@@ -39,6 +39,7 @@ _VIEW_BASICS = frozenset(
     {
         "core.search",
         "accounts.security.manage",
+        "accounts.profile.view",
         "tenancy.tenant.view",
         "tenancy.entity.view",
         "tenancy.profile.view",
@@ -198,6 +199,7 @@ SYSTEM_ROLES: tuple[RoleSpec, ...] = (
             {
                 "core.search",
                 "accounts.security.manage",
+                "accounts.profile.view",
                 "tenancy.tenant.view",
                 "accounts.user.view",
                 "accounts.user.invite",

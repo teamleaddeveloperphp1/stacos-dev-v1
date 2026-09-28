@@ -871,3 +871,226 @@
 
   li { margin-bottom: $stacos-space-1; }
 }
+
+// The profile page — an account control centre rather than a details dump.
+//
+// Three bands: a compact identity header, an overview strip, then two columns
+// that keep "about you" apart from "about the organisation you are in". Built
+// from the same card, stat-tile and key-value parts as every other screen; what
+// lives here is only the arrangement and the few pieces no other page needs.
+// -----------------------------------------------------------------------------
+.profile-header {
+  display: flex;
+  // Bootstrap's `.card` is a column; this header is a row that wraps.
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $stacos-space-3 $stacos-space-4;
+  margin-bottom: $stacos-space-4;
+
+  // The one place in the product an avatar is drawn larger than a list row's
+  // initial — large enough to anchor the header, not so large it becomes it.
+  &__avatar {
+    width: 3rem;
+    height: 3rem;
+    font-size: $stacos-text-md;
+    flex: none;
+  }
+
+  &__identity { flex: 1 1 14rem; min-width: 0; }
+
+  &__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: $stacos-space-2;
+  }
+
+  &__name {
+    font-family: $stacos-font-sans;
+    font-size: $stacos-text-lg;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: $stacos-leading-tight;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  &__role {
+    color: var(--stacos-text-muted);
+    font-size: $stacos-text-sm;
+    margin: 0.125rem 0 0;
+
+    strong { color: var(--stacos-text); font-weight: 500; }
+  }
+
+  &__actions { display: flex; gap: $stacos-space-2; }
+
+  @media (max-width: 36em) {
+    &__actions { width: 100%; }
+    &__actions .btn { flex: 1; justify-content: center; }
+  }
+}
+
+// Shown only when something is genuinely missing, so it may be loud.
+.profile-gaps {
+  margin-bottom: $stacos-space-4;
+  border-left: 3px solid var(--stacos-status-due-soon);
+  background: var(--stacos-status-due-soon-bg);
+
+  .card__title { margin-bottom: $stacos-space-2; }
+
+  &__list {
+    margin: 0;
+    padding-left: $stacos-space-5;
+    font-size: $stacos-text-sm;
+  }
+}
+
+.profile-overview {
+  margin-bottom: $stacos-space-5;
+
+  // A grid rather than `.stat-row`'s wrap: four equal tiles on a desktop, two
+  // by two on a phone, never one orphan stretched across the width.
+  &__tiles {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: $stacos-space-3;
+
+    @media (max-width: 48em) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  .stat-tile { min-width: 0; }
+}
+
+// A tile that states a fact rather than linking to rows. No hover affordance,
+// because there is nothing behind it to click through to.
+.stat-tile--static {
+  &:hover { border-color: var(--stacos-border); box-shadow: none; }
+}
+
+.profile-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $stacos-space-5;
+  align-items: start;
+
+  @media (max-width: 62em) { grid-template-columns: minmax(0, 1fr); }
+
+  &__col {
+    display: flex;
+    flex-direction: column;
+    gap: $stacos-space-3;
+    min-width: 0;
+
+    > .section-title { margin-bottom: 0; }
+  }
+
+  .card__title { margin: 0; }
+  // Centred rather than `.card__header`'s baseline: the actions here are
+  // buttons as often as links, and a button's baseline sits low.
+  .card__header { align-items: center; }
+}
+
+// Security matters more than anything else on the page, so it gets the
+// accent edge — the colour of the product, not of a status.
+.card--security { border-left: 3px solid var(--stacos-accent); }
+
+.security-summary {
+  &__status {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    font-size: $stacos-text-sm;
+  }
+
+  &__body {
+    margin: $stacos-space-2 0;
+    font-size: $stacos-text-sm;
+    color: var(--stacos-text-muted);
+  }
+}
+
+.security-channels {
+  list-style: none;
+  margin: 0 0 $stacos-space-3;
+  padding: 0;
+  font-size: $stacos-text-sm;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: $stacos-space-2;
+    padding: $stacos-space-2 0;
+    border-top: 1px solid var(--stacos-border);
+
+    &:last-child { border-bottom: 1px solid var(--stacos-border); }
+    svg { color: var(--stacos-text-subtle); flex: none; }
+  }
+
+  &__value {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// Ruled off and spelled out: an irreversible control should never be one
+// click away from a harmless one without a sentence saying what it does.
+.danger-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: $stacos-space-3;
+  margin-top: $stacos-space-4;
+  padding-top: $stacos-space-3;
+  border-top: 1px solid var(--stacos-border);
+
+  > div { flex: 1 1 16rem; }
+
+  &__title { font-size: $stacos-text-sm; }
+
+  &__body {
+    margin: 0.125rem 0 0;
+    font-size: $stacos-text-xs;
+    color: var(--stacos-text-muted);
+  }
+}
+
+// The headline of a summary card — an organisation's or a plan's name, with
+// its status beside it and the supporting facts on one line underneath.
+.org-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $stacos-space-2;
+
+  &__name { font-size: $stacos-text-md; font-weight: 600; overflow-wrap: anywhere; }
+
+  &__meta {
+    margin: $stacos-space-1 0 0;
+    font-size: $stacos-text-sm;
+    color: var(--stacos-text-muted);
+  }
+}
+
+.usage {
+  display: grid;
+  gap: $stacos-space-2;
+  margin-top: $stacos-space-3;
+
+  &__row {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: $stacos-space-3;
+    font-size: $stacos-text-sm;
+  }
+
+  &__label { color: var(--stacos-text-muted); }
+  &__meter { width: 100%; height: 0.5rem; }
+  &__figure { min-width: 3.5rem; }
+}

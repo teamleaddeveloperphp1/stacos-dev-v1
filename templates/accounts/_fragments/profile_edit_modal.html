@@ -1,0 +1,51 @@
+{% load i18n crispy_forms_tags %}
+{% comment %}
+  Editing your own name and timezone, opened from the profile page.
+
+  `hx-swap="none"`: the response carries no fragment, only a toast and a
+  `stacos:navigate` trigger that refetches the profile so the header, the
+  details card and the completion prompt all pick up the change together.
+
+  Static backdrop and no Esc, like the entity form: a stray click outside the
+  dialog should not throw away a half-typed name.
+{% endcomment %}
+<div class="modal fade" tabindex="-1" aria-labelledby="profile-edit-title" aria-hidden="true"
+     data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+
+      <form hx-post="{% url 'accounts:profile_edit' %}"
+            hx-target="#main"
+            hx-swap="none"
+            hx-disabled-elt="find button[type=submit]"
+            hx-indicator="#profile-edit-spinner">
+        {% csrf_token %}
+
+        <div class="modal-header">
+          <h2 class="modal-title h5" id="profile-edit-title">{% translate "Edit profile" %}</h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="{% translate 'Close' %}"></button>
+        </div>
+
+        <div class="modal-body">
+          {% crispy form %}
+          <p class="small text-muted mb-0">
+            {% translate "Your email address and WhatsApp number are how you sign in, so changing either needs re-verification and is not done here." %}
+          </p>
+        </div>
+
+        <div class="modal-footer">
+          <span class="htmx-indicator me-auto" id="profile-edit-spinner">
+            <span class="spinner-inline"></span>
+            <span class="small text-muted ms-1">{% translate "Saving…" %}</span>
+          </span>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+            {% translate "Cancel" %}
+          </button>
+          <button type="submit" class="btn btn-primary">{% translate "Save changes" %}</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+</div>

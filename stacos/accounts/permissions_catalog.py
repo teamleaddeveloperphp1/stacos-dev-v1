@@ -51,5 +51,14 @@ permission_registry.register_many(
                 "can end them."
             ),
         ),
+        Permission(
+            code="accounts.profile.view",
+            label="View and edit your own profile",
+            category=CATEGORY,
+            description=(
+                "Held by every signed-in user. Governs the profile screen, "
+                "which shows the signed-in person's name, email and phone."
+            ),
+        ),
     ]
 )

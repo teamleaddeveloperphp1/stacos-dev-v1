@@ -3,13 +3,14 @@
   The organisation identity — always visible, top left.
 
   STACOS is one identity per user, decided at sign-up: there is nothing to
-  switch between and nothing to set up from here, so this is a static display,
-  not a menu. `tenant` is `None` only in the moment between login and the
-  session's tenant binding taking effect, which is why the label still has a
-  fallback rather than assuming it is always set.
+  switch between, so this has never been a tenant *menu*. It links to the
+  signed-in person's own profile instead — the one place account identity
+  can actually be inspected. `tenant` is `None` only in the moment between
+  login and the session's tenant binding taking effect, which is why the
+  label still has a fallback rather than assuming it is always set.
 {% endcomment %}
 <div class="tenant-switcher">
-  <span class="tenant-switcher__button" aria-hidden="false">
+  <a class="tenant-switcher__button" href="{% url 'accounts:profile' %}" preload>
     <span class="avatar">{{ tenant.name|slice:":1"|upper|default:"?" }}</span>
     <span class="flex-grow-1 overflow-hidden">
       <span class="tenant-switcher__name d-block">
@@ -22,5 +23,5 @@
         {% else %}{% translate "Setting up…" %}{% endif %}
       </span>
     </span>
-  </span>
+  </a>
 </div>
