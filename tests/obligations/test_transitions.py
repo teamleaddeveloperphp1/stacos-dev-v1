@@ -8,7 +8,7 @@ assert that it does.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -22,6 +22,7 @@ from stacos.obligations.transitions import (
     apply_transition,
     attach_acknowledgement,
     available_actions,
+    opens_on,
 )
 
 pytestmark = pytest.mark.django_db
@@ -313,3 +314,62 @@ def test_closing_succeeds_once_the_evidence_is_attached(
         an_obligation.refresh_from_db()
 
     assert an_obligation.state == State.CLOSED
+
+
+# ---------------------------------------------------------------------------
+# A period that has not begun
+# ---------------------------------------------------------------------------
+
+
+def test_work_cannot_start_before_the_period_begins(an_obligation: ObligationInstance) -> None:
+    """A filing is created ``NOT_STARTED`` and stays that way until its period
+    opens — no stray click can start January's work in September."""
+    before = an_obligation.period_start - timedelta(days=1)
+    with platform_scope(reason="test"):
+        offered = {
+            move.target for move in available_actions(an_obligation, permissions=ALL, as_of=before)
+        }
+        with pytest.raises(TransitionError) as exc:
+            apply_transition(
+                an_obligation,
+                target=State.IN_PREPARATION,
+                actor=None,
+                permissions=ALL,
+                as_of=before,
+            )
+        an_obligation.refresh_from_db()
+
+    assert exc.value.code == "not_open"
+    assert an_obligation.state == State.NOT_STARTED
+    assert opens_on(an_obligation, as_of=before) == an_obligation.period_start
+    assert offered <= {State.NOT_APPLICABLE, State.DEFERRED, State.DISPUTED}
+    assert State.IN_PREPARATION not in offered
+
+
+def test_a_future_period_can_still_be_ruled_out(an_obligation: ObligationInstance) -> None:
+    before = an_obligation.period_start - timedelta(days=1)
+    with platform_scope(reason="test"):
+        apply_transition(
+            an_obligation,
+            target=State.NOT_APPLICABLE,
+            actor=None,
+            permissions=ALL,
+            note="Business closed before this period.",
+            as_of=before,
+        )
+
+    assert an_obligation.state == State.NOT_APPLICABLE
+
+
+def test_work_can_start_on_the_day_the_period_begins(an_obligation: ObligationInstance) -> None:
+    with platform_scope(reason="test"):
+        apply_transition(
+            an_obligation,
+            target=State.IN_PREPARATION,
+            actor=None,
+            permissions=ALL,
+            as_of=an_obligation.period_start,
+        )
+
+    assert an_obligation.state == State.IN_PREPARATION
+    assert opens_on(an_obligation, as_of=an_obligation.period_start) is None

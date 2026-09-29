@@ -10,6 +10,8 @@ would drift the moment a catalog definition changes.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from django.test import Client
 from django.urls import reverse
@@ -18,6 +20,7 @@ from django.utils import timezone
 from stacos.accounts.models import User
 from stacos.core.scope import platform_scope
 from stacos.obligations.queries import (
+    calendar_window_end,
     category_counts,
     overdue_aging,
     status_counts,
@@ -26,6 +29,11 @@ from stacos.obligations.queries import (
 from stacos.tenancy.models import Entity, Tenant
 
 pytestmark = pytest.mark.django_db
+
+
+def _window_end() -> date:
+    """The dashboard counts under the calendar's 12-month window."""
+    return calendar_window_end(timezone.localdate())
 
 
 @pytest.fixture
@@ -64,7 +72,7 @@ def test_stat_tiles_agree_with_status_counts(signed_in: Client, materialised: En
     calls.
     """
     with platform_scope(reason="test"):
-        expected = status_counts(as_of=timezone.localdate())
+        expected = status_counts(as_of=timezone.localdate(), window_end=_window_end())
 
     response = signed_in.get(reverse("app:dashboard"))
 
@@ -84,7 +92,7 @@ def test_stat_tiles_agree_with_status_counts(signed_in: Client, materialised: En
 
 def test_category_bars_sum_to_open_obligations(signed_in: Client, materialised: Entity) -> None:
     with platform_scope(reason="test"):
-        expected = category_counts()
+        expected = category_counts(window_end=_window_end())
 
     response = signed_in.get(reverse("app:dashboard"))
     categories = response.context["categories"]
@@ -122,8 +130,10 @@ def test_selecting_one_entity_scopes_every_breakdown_to_it(
         # check below (that the combined total actually moved) is vacuous.
         EntityRegistration.objects.create(tenant=org, entity=second, type="PAN", value="AAACS1234C")
         materialise(second, as_of=timezone.localdate(), trigger="ONBOARDING")
-        expected = status_counts(as_of=timezone.localdate(), entity_ids=[materialised.id])
-        combined = status_counts(as_of=timezone.localdate())
+        expected = status_counts(
+            as_of=timezone.localdate(), entity_ids=[materialised.id], window_end=_window_end()
+        )
+        combined = status_counts(as_of=timezone.localdate(), window_end=_window_end())
 
     # Sanity check: the second entity must actually have moved the combined
     # total, or this test would pass even with the filter silently ignored.

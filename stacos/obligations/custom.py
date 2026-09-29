@@ -16,7 +16,7 @@ calendar a person is looking at already reflects what they just did:
 :func:`create_custom_obligation`
     A definition and its first schedule version.
 :func:`update_custom_obligation`
-    Details (name, description, category, evidence) are edited in place. A
+    Details (name, description, category) are edited in place. A
     schedule change is a **new version** with its own window — see
     :func:`_split_windows` — so periods that already ended keep the rule that
     dated them.
@@ -45,7 +45,6 @@ from stacos.engine.dates import generate_periods
 from stacos.engine.lifecycle import OPEN_STATES
 from stacos.engine.types import (
     DefinitionSnapshot,
-    EvidenceRequirement,
     FiscalYearConvention,
     InstanceScope,
     Periodicity,
@@ -71,6 +70,7 @@ __all__ = [
     "definition_for",
     "evidence_requirements_for",
     "removal_reasons",
+    "resolve_schedule",
     "schedule_summary",
     "update_custom_obligation",
     "withdraw_custom_obligation",
@@ -90,11 +90,7 @@ SCHEDULE_PERIODICITIES: tuple[Periodicity, ...] = (
 DETAIL_FIELDS: tuple[str, ...] = (
     "title",
     "description",
-    "source_reference",
-    "consequence",
     "category",
-    "evidence_labels",
-    "evidence_mandatory",
 )
 
 #: Versioned on :class:`CustomObligationVersion`. Changing any one of them is a
@@ -102,10 +98,8 @@ DETAIL_FIELDS: tuple[str, ...] = (
 SCHEDULE_FIELDS: tuple[str, ...] = (
     "periodicity",
     "period_anchor",
-    "due_mode",
-    "due_days",
+    "due_offset_months",
     "due_day_of_month",
-    "shift_to_working_day",
 )
 
 
@@ -161,14 +155,7 @@ def _to_snapshot(
         period_anchor=version.period_anchor,
         effective_from=version.effective_from,
         effective_to=version.effective_to,
-        evidence_requirements=tuple(
-            EvidenceRequirement(
-                key=item["key"],
-                label=item["label"],
-                mandatory_for_close=item["mandatory_for_close"],
-            )
-            for item in obligation.evidence_requirements
-        ),
+        evidence_requirements=(),
     )
 
 
@@ -217,8 +204,7 @@ def definition_for(code: str, version: int) -> Any:
 def evidence_requirements_for(code: str, version: int) -> list[dict[str, Any]]:
     """The evidence list the completion guard enforces, whoever wrote the rule."""
     if is_custom_code(code):
-        obligation = CustomObligation.objects.filter(code=code).first()
-        return obligation.evidence_requirements if obligation is not None else []
+        return []
 
     from stacos.catalog.models import DefinitionVersion
 
@@ -239,24 +225,27 @@ def current_version(obligation: CustomObligation) -> CustomObligationVersion:
 
 
 def schedule_summary(version: CustomObligationVersion) -> str:
-    """ "Quarterly (financial year) — due 30 days after each period ends"."""
+    """ "Quarterly (financial year) — due on the 20th, 1 month after each period ends"."""
     from stacos.core.templatetags.stacos import periodicity_adjective
 
     frequency = str(periodicity_adjective(version.periodicity))
     if version.periodicity != Periodicity.MONTHLY:
         frequency = f"{frequency} ({version.get_period_anchor_display().lower()})"
 
-    if version.due_mode == CustomObligationVersion.DueMode.DAY_OF_NEXT_MONTH:
-        day = version.due_day_of_month or 1
-        due = f"due on day {day} of the month after each period ends"
-    elif version.due_days:
-        due = f"due {version.due_days} days after each period ends"
-    else:
-        due = "due on the last day of each period"
+    day = version.due_day_of_month
+    months = version.due_offset_months
+    if day is None or (day == -1 and months == 0):
+        return f"{frequency} — due on the last day of each period"
+    day_label = "the last day" if day == -1 else f"the {_ordinal(day)}"
+    if months == 0:
+        return f"{frequency} — due on {day_label} of the month each period ends"
+    unit = "month" if months == 1 else "months"
+    return f"{frequency} — due on {day_label}, {months} {unit} after each period ends"
 
-    if version.shift_to_working_day:
-        due = f"{due}, moved to the next working day if it falls on a weekend"
-    return f"{frequency} — {due}"
+
+def _ordinal(day: int) -> str:
+    suffix = "th" if 10 <= day % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +261,58 @@ def _fiscal_year(entity: Entity) -> FiscalYearConvention:
             "year to schedule against."
         )
     return fiscal_year_for(pack)
+
+
+def _period_due_on(
+    due_date: date, *, periodicity: str, period_anchor: str, fy: FiscalYearConvention
+) -> Any:
+    """The period an occurrence due on ``due_date`` belongs to: the latest one
+    ending on or before it. A due date that falls inside a period belongs to the
+    one before — "due 15 December, quarterly" is the July–September quarter."""
+    periods = generate_periods(
+        periodicity=Periodicity(periodicity),
+        fy=fy,
+        window_start=due_date - timedelta(days=400),
+        window_end=due_date,
+        period_anchor=period_anchor,
+    )
+    ended = [period for period in periods if period.end <= due_date]
+    if not ended:
+        raise CustomObligationError("No period ends on or before that due date.")
+    return max(ended, key=lambda period: period.end)
+
+
+def resolve_schedule(
+    entity: Entity, schedule: Mapping[str, Any]
+) -> tuple[dict[str, Any], date | None]:
+    """The form's schedule — frequency plus one due date — as stored fields.
+
+    Returns the :data:`SCHEDULE_FIELDS` values, and the end of the period the
+    given due date belongs to (``None`` when no date was given), so the caller
+    can make sure that very occurrence is tracked. The date becomes "N months
+    after each period ends, on day D", so one date repeats for every period: a
+    quarterly obligation due 20 October is next due 20 January. A date on the
+    last day of its month is stored as "the last day", so 31 December is next
+    due 31 March, not 31 March's non-existent neighbour.
+    """
+    resolved = {name: schedule[name] for name in ("periodicity", "period_anchor")}
+    due_date: date | None = schedule.get("due_date")
+    if due_date is None:
+        return {**resolved, "due_offset_months": 0, "due_day_of_month": None}, None
+
+    period = _period_due_on(
+        due_date,
+        periodicity=resolved["periodicity"],
+        period_anchor=resolved["period_anchor"],
+        fy=_fiscal_year(entity),
+    )
+    months = (due_date.year - period.end.year) * 12 + due_date.month - period.end.month
+    last_day = (due_date + timedelta(days=1)).day == 1
+    return {
+        **resolved,
+        "due_offset_months": months,
+        "due_day_of_month": -1 if last_day else due_date.day,
+    }, period.end
 
 
 def _rebuild(entity: Entity, *, actor: Any, as_of: date) -> MaterialisationRun:
@@ -304,10 +345,21 @@ def create_custom_obligation(
     actor: Any,
     details: Mapping[str, Any],
     schedule: Mapping[str, Any],
-    starts_on: date,
     as_of: date,
+    starts_on: date | None = None,
 ) -> CustomObligation:
-    """Write a new obligation and put its instances on the calendar now."""
+    """Write a new obligation and put its instances on the calendar now.
+
+    Tracking starts ``as_of``: the first occurrence is the period that ends on
+    or after it — or, when the due date given belongs to a period that already
+    ended, that period, so the date the person typed is on the calendar.
+    ``starts_on`` backdates that, for seed data only — the form does not ask.
+    """
+    stored, due_period_end = resolve_schedule(entity, schedule)
+    effective_from = starts_on or as_of
+    if due_period_end is not None:
+        effective_from = min(effective_from, due_period_end)
+
     obligation = CustomObligation(
         tenant=entity.tenant,
         entity=entity,
@@ -321,9 +373,9 @@ def create_custom_obligation(
         entity=entity,
         obligation=obligation,
         version=1,
-        effective_from=starts_on,
+        effective_from=effective_from,
         created_by=obligation.created_by,
-        **{name: schedule[name] for name in SCHEDULE_FIELDS},
+        **stored,
     )
 
     run = _rebuild(entity, actor=actor, as_of=as_of)
@@ -402,7 +454,8 @@ def update_custom_obligation(
     changed_details = {
         name: details[name] for name in DETAIL_FIELDS if details[name] != getattr(obligation, name)
     }
-    schedule_changed = any(schedule[name] != getattr(current, name) for name in SCHEDULE_FIELDS)
+    stored, _ = resolve_schedule(entity, schedule)
+    schedule_changed = any(stored[name] != getattr(current, name) for name in SCHEDULE_FIELDS)
 
     if not changed_details and not schedule_changed:
         raise CustomObligationError("Nothing has changed.")
@@ -427,7 +480,7 @@ def update_custom_obligation(
             version=current.version + 1,
             effective_from=applies_from,
             created_by=actor if getattr(actor, "is_authenticated", False) else None,
-            **{name: schedule[name] for name in SCHEDULE_FIELDS},
+            **stored,
         )
 
     if changed_details:

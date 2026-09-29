@@ -13,7 +13,7 @@ page" is how HTMX applications leak data.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 from urllib.parse import urlsplit
@@ -65,8 +65,6 @@ from stacos.obligations.feed import (
     revoke_feed_token,
 )
 from stacos.obligations.forms import (
-    DEFAULT_DUE_WINDOW,
-    DUE_WINDOW_FILTERS,
     STATUS_FILTERS,
     AcknowledgementForm,
     AssignForm,
@@ -102,6 +100,7 @@ from stacos.obligations.queries import (
     annotate_status,
     apply_due_window,
     apply_text_filters,
+    calendar_window_end,
     keyset_page,
     live,
     overdue_aging,
@@ -112,7 +111,6 @@ from stacos.obligations.queries import (
     status_counts,
     weekly_workload,
 )
-from stacos.obligations.services import _add_months as add_months
 from stacos.obligations.services import materialise
 from stacos.obligations.services import preview as preview_materialisation
 from stacos.obligations.transitions import (
@@ -126,6 +124,7 @@ from stacos.obligations.transitions import (
     block_step,
     complete_step,
     nudge,
+    opens_on,
     outstanding_mandatory_evidence,
     record_completion,
     record_pending,
@@ -241,8 +240,7 @@ class _CalendarFilters:
     search: str
     category: str
     entity_id: UUID | None
-    within: str
-    window_end: date | None
+    window_end: date
 
 
 def _calendar_filters(params: QueryDict, *, as_of: date) -> _CalendarFilters:
@@ -253,20 +251,14 @@ def _calendar_filters(params: QueryDict, *, as_of: date) -> _CalendarFilters:
     # the backlog; a present-but-empty ``status=`` is the user's own choice
     # of "Everything open" via the dropdown and must be left alone.
     #
-    # ``within`` has no such split: there is no "empty" window, so anything
-    # absent or unrecognised — a stale bookmark included — is the default.
-    within = params.get("within", DEFAULT_DUE_WINDOW)
-    if within not in dict(DUE_WINDOW_FILTERS):
-        within = DEFAULT_DUE_WINDOW
+    # The 12-month window is not a filter at all: every request gets it, and
+    # a stale ``?within=all`` bookmark is simply ignored.
     return _CalendarFilters(
         status=params.get("status", "latest"),
         search=params.get("q", "").strip(),
         category=params.get("category", "").strip(),
         entity_id=_parse_uuid(params.get("entity", "").strip()),
-        within=within,
-        # Calendar months, by the planner's own arithmetic, so "12 months"
-        # here means what "18 months" means to the horizon it is a slice of.
-        window_end=None if within == "all" else add_months(as_of, int(within)),
+        window_end=calendar_window_end(as_of),
     )
 
 
@@ -284,8 +276,8 @@ def _filtered_by(filters: _CalendarFilters, *, as_of: date) -> QuerySet[Obligati
 def _counts_context(filters: _CalendarFilters, params: QueryDict, *, as_of: date) -> dict[str, Any]:
     """What ``status_counts.html`` needs, narrowed exactly as the list is.
 
-    Every tile is counted under the same search/category/entity *and* "Due
-    within" window as the register, and every tile's link carries those same
+    Every tile is counted under the same search/category/entity *and* 12-month
+    window as the register, and every tile's link carries those same
     filters (``tile_query``) — so the number on a tile is the number of rows a
     click on it lands on, not a count taken under different filters.
     """
@@ -361,8 +353,6 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
         **_counts_context(filters, request.GET, as_of=as_of),
         "status_filters": STATUS_FILTERS,
         "status": status,
-        "due_window_filters": DUE_WINDOW_FILTERS,
-        "within": filters.within,
         "window_end": filters.window_end,
         "search": search,
         "category": category,
@@ -377,7 +367,6 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
             search=search,
             category=category,
             entity_id=entity_id,
-            within=filters.within,
         ),
         # Distinguishes two empty states that look identical in the table but
         # mean opposite things: nothing was ever generated for this tenant, vs.
@@ -395,13 +384,16 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
         # not something a "load more" scroll needs recomputed. Scoped to the
         # same category/search/entity as the toolbar, so it never advertises a
         # workload the filtered list underneath it doesn't contain. Not to the
-        # "Due within" window: four weeks ahead and the overdue backlog sit
-        # inside every window on offer, so it could never change a number.
+        # 12-month window: four weeks ahead and the overdue backlog sit inside
+        # it, so it could never change a number.
         context["workload"] = _workload_forecast(
             as_of=as_of, entity_id=entity_id, category=category, search=search
         )
         if not page.rows:
-            context.update(_empty_state_context(request, filters, as_of=as_of))
+            # Why an empty first screen is empty: nothing generated at all (the
+            # onboarding case) is asked of the whole register rather than of
+            # the tiles, which are themselves windowed.
+            context["register_empty"] = not live().exists()
 
     # A cursor request is asking for more rows, not for the whole screen again.
     if cursor and is_fragment_request(request):
@@ -415,30 +407,6 @@ def calendar_list(request: HttpRequest) -> HttpResponse:
     return render(request, template, context)
 
 
-def _empty_state_context(
-    request: HttpRequest, filters: _CalendarFilters, *, as_of: date
-) -> dict[str, Any]:
-    """Why an empty first screen is empty — only ever computed when it is.
-
-    ``beyond_window`` is how many rows these exact filters would show with no
-    "Due within" window. The list is empty, so every one of them is a row the
-    window hid: "nothing here" and "nothing through September, four filings
-    after it" are different answers, and only the second tells the user a
-    wider window is the way to find them. ``register_empty`` is the separate
-    onboarding case — nothing has been generated at all — asked of the whole
-    register rather than of the tiles, which are themselves windowed.
-    """
-    context: dict[str, Any] = {"register_empty": not live().exists()}
-    if filters.window_end is not None:
-        unwindowed = _filtered_by(replace(filters, window_end=None), as_of=as_of)
-        context["beyond_window"] = unwindowed.count()
-        widened = request.GET.copy()
-        widened["within"] = "all"
-        widened.pop("cursor", None)
-        context["widen_query"] = f"?{widened.urlencode()}"
-    return context
-
-
 def _filtered(
     *,
     as_of: date,
@@ -450,7 +418,7 @@ def _filtered(
 ) -> QuerySet[ObligationInstance]:
     """Apply the toolbar filters.
 
-    ``window_end`` is the "Due within" pick, applied through the same
+    ``window_end`` is the calendar's 12-month window, applied through the same
     ``apply_due_window`` the tiles above the list are counted with.
 
     ``select_related`` on entity and tenant is not optional here: without it a
@@ -581,8 +549,8 @@ def _workload_forecast(
     }
 
 
-#: Statuses with no upper date bound of their own, so the "Due within" window
-#: is what ends them. The rest either end sooner than any window on offer
+#: Statuses with no upper date bound of their own, so the 12-month window is
+#: what ends them. The rest either end sooner than the window
 #: (``latest``, ``due_*``) or hold nothing the window can hide (``overdue``,
 #: ``completed``) — naming the window on those would only be noise.
 _WINDOWED_STATUSES = frozenset({"", "all", "pending", "unconfirmed", "needs_input"})
@@ -600,14 +568,15 @@ def _scope_description(status: str, *, as_of: date, window_end: date | None = No
     Due date is the single most important fact on this page — see it wrong and
     a filing is missed, not just miscounted — so which window is on screen is
     always spelled out, not left for the user to infer from a dropdown label.
-    That includes the "Due within" window, wherever it is the one doing the
+    That includes the 12-month window, wherever it is the one doing the
     cutting.
     """
     status_part = _status_description(status, as_of=as_of, window_end=window_end)
     if window_end is None or status not in _WINDOWED_STATUSES:
         return status_part
     window_part = _(
-        "Not-started filings due after %(end)s are left out — widen “Due within” to see them."
+        "The calendar reaches 12 months ahead: not-started filings due after %(end)s "
+        "are not listed."
     ) % {"end": _short_date(window_end)}
     return f"{status_part} {window_part}" if status_part else window_part
 
@@ -648,7 +617,6 @@ def _active_filters(
     search: str,
     category: str,
     entity_id: UUID | None,
-    within: str = DEFAULT_DUE_WINDOW,
 ) -> list[dict[str, str]]:
     """Chips summarising every filter the user chose, each removable on its own.
 
@@ -686,11 +654,6 @@ def _active_filters(
         filters.append(
             {"label": _("Status: %(label)s") % {"label": status_label}, "href": _without("status")}
         )
-    # Like `status`, the default window is not a chip — it is where "Clear all"
-    # lands, so removing it would change nothing.
-    if within != DEFAULT_DUE_WINDOW:
-        filters.append({"label": str(dict(DUE_WINDOW_FILTERS)[within]), "href": _without("within")})
-
     return filters
 
 
@@ -1041,6 +1004,9 @@ def _action_context(
         "awaiting_other_reviewer": awaiting_other_reviewer,
         "filing_action": filing_action,
         "filing_skips_review": bool(filing_action and filing_action.skips_review),
+        # Set while the period has not begun: the panel says when work can start
+        # instead of offering a "Start" that `available_actions` has withheld.
+        "opens_on": opens_on(obligation),
         "start_action": (
             by_target.get(State.IN_PREPARATION) if obligation.state == State.NOT_STARTED else None
         ),
@@ -2712,7 +2678,7 @@ def entity_preview_context(
     has_calendar = MaterialisationRun.objects.filter(entity=entity).exists()
     # The button only ever names a number while it still says "Create my
     # calendar" (see `entity_build_button_label.html`) — once a calendar
-    # exists and this isn't the wizard, it says "Save changes" and no count is
+    # exists and this isn't the wizard, it says "Rebuild calendar" and no count is
     # rendered, so there is nothing here worth the extra planner run.
     #
     # `preview.applies_count` used to stand in for this number, which is a
@@ -2733,10 +2699,22 @@ def entity_preview_context(
     # archived, not superseded" filter the calendar's own total tile counts
     # by, so this number matches what the calendar shows immediately
     # afterwards in both the first-build and the revisit case.
+    #
+    # Once a calendar exists, the same planner run answers the other question
+    # this card has to: is the calendar still what the facts on file say it
+    # should be? An edit to the entity (a corrected incorporation date, say)
+    # deliberately does not rebuild — see `tenancy.views.entity_edit` — so the
+    # card is where the difference is shown, as the one-line diff a rebuild
+    # would apply, beside the button that applies it.
     show_obligation_count = not has_calendar or in_setup
     obligation_count = 0
-    if show_obligation_count:
+    pending_changes = ""
+    plan = None
+    if show_obligation_count or not hide_build:
         plan = preview_materialisation(entity, as_of=as_of).plan
+    if has_calendar and not in_setup and plan is not None and not plan.is_empty:
+        pending_changes = plan.summary()
+    if show_obligation_count and plan is not None:
         live_now = live(ObligationInstance.objects.filter(entity=entity)).count()
         obligation_count = (
             live_now
@@ -2752,6 +2730,7 @@ def entity_preview_context(
         "total_count": obligation_count,
         "show_obligation_count": show_obligation_count,
         "has_calendar": has_calendar,
+        "pending_changes": pending_changes,
         "hide_build": hide_build,
         "in_setup": in_setup,
         "hide_questions": hide_questions,

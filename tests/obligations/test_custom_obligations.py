@@ -9,12 +9,13 @@ that editing or withdrawing one never destroys what it already produced.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
 from django.test import Client
 from django.urls import reverse
+from django.utils import timezone
 
 from stacos.accounts.models import User
 from stacos.catalog.loader import iter_documents, parse_document
@@ -26,6 +27,8 @@ from stacos.obligations.custom import (
     CustomObligationError,
     create_custom_obligation,
     custom_snapshots,
+    resolve_schedule,
+    schedule_summary,
     update_custom_obligation,
     withdraw_custom_obligation,
 )
@@ -36,6 +39,7 @@ from stacos.obligations.models import (
     ObligationEvent,
     ObligationInstance,
 )
+from stacos.obligations.queries import calendar_window_end
 from stacos.obligations.services import materialise, preview
 from stacos.obligations.transitions import ensure_steps, outstanding_mandatory_evidence
 from stacos.tenancy.models import Entity, Tenant
@@ -45,23 +49,13 @@ pytestmark = pytest.mark.django_db
 
 AS_OF = date(2026, 8, 12)
 
-MONTHLY_ON_THE_7TH: dict[str, Any] = {
-    "periodicity": "MONTHLY",
-    "period_anchor": "FY",
-    "due_mode": CustomObligationVersion.DueMode.DAY_OF_NEXT_MONTH,
-    "due_days": 0,
-    "due_day_of_month": 7,
-    "shift_to_working_day": False,
-}
+MONTHLY: dict[str, Any] = {"periodicity": "MONTHLY", "period_anchor": "FY"}
+QUARTERLY: dict[str, Any] = {"periodicity": "QUARTERLY", "period_anchor": "FY"}
 
 COVENANT: dict[str, Any] = {
     "title": "DSCR covenant certificate",
     "description": "Send the lender a certificate of the debt service coverage ratio.",
-    "source_reference": "Facility agreement cl. 14.2",
-    "consequence": "Event of default after 30 days.",
     "category": "INTERNAL_GOVERNANCE",
-    "evidence_labels": ["Signed certificate"],
-    "evidence_mandatory": True,
 }
 
 
@@ -70,7 +64,7 @@ def _create(entity: Entity, actor: Any = None, **overrides: Any) -> CustomObliga
         entity,
         actor=actor,
         details={**COVENANT, **overrides.pop("details", {})},
-        schedule={**MONTHLY_ON_THE_7TH, **overrides.pop("schedule", {})},
+        schedule={**MONTHLY, **overrides.pop("schedule", {})},
         starts_on=overrides.pop("starts_on", date(2026, 4, 1)),
         as_of=AS_OF,
     )
@@ -102,7 +96,8 @@ def test_creating_one_puts_recurring_instances_on_the_calendar(
 
         assert obligation.code.startswith("CUSTOM-")
         september = rows["2026-09"]
-        assert september.due_date == date(2026, 10, 7)
+        # Due on the last day of its period.
+        assert september.due_date == date(2026, 9, 30)
         assert september.title == COVENANT["title"]
         assert september.category == "INTERNAL_GOVERNANCE"
         assert september.state == State.NOT_STARTED
@@ -116,7 +111,7 @@ def test_creating_one_puts_recurring_instances_on_the_calendar(
         ).exists()
 
 
-def test_its_instances_carry_the_same_checklist_and_evidence_guard(
+def test_its_instances_carry_the_same_checklist_and_no_proof_requirement(
     materialised: Entity, org_owner: User
 ) -> None:
     with platform_scope(reason="test"):
@@ -129,7 +124,7 @@ def test_its_instances_carry_the_same_checklist_and_evidence_guard(
             "approve",
             "file",
         ]
-        assert outstanding_mandatory_evidence(instance) == ["Signed certificate"]
+        assert outstanding_mandatory_evidence(instance) == []
 
 
 def test_a_rebuild_after_creating_one_changes_nothing(
@@ -169,7 +164,7 @@ def test_editing_details_renames_open_instances_but_not_completed_ones(
             obligation,
             actor=org_owner,
             details={**COVENANT, "title": "DSCR certificate to lender", "category": "LICENSING"},
-            schedule=MONTHLY_ON_THE_7TH,
+            schedule=MONTHLY,
             applies_from=None,
             as_of=AS_OF,
         )
@@ -182,61 +177,24 @@ def test_editing_details_renames_open_instances_but_not_completed_ones(
         assert obligation.versions.count() == 1
 
 
-def test_a_schedule_change_keeps_earlier_periods_on_the_old_rule(
-    materialised: Entity, org_owner: User
-) -> None:
-    with platform_scope(reason="test"):
-        obligation = _create(materialised, org_owner)
-
-        new_version = update_custom_obligation(
-            obligation,
-            actor=org_owner,
-            details=COVENANT,
-            schedule={
-                **MONTHLY_ON_THE_7TH,
-                "due_mode": CustomObligationVersion.DueMode.DAYS_AFTER_PERIOD,
-                "due_days": 15,
-                "due_day_of_month": None,
-            },
-            applies_from=date(2026, 10, 15),
-            as_of=AS_OF,
-        )
-
-        assert new_version is not None and new_version.version == 2
-        rows = _by_period(obligation)
-        # Ended before the change: the rule that dated it still does.
-        assert rows["2026-09"].due_date == date(2026, 10, 7)
-        assert rows["2026-09"].definition_version == 1
-        # In progress on the change date, and after: the new rule.
-        assert rows["2026-10"].due_date == date(2026, 11, 15)
-        assert rows["2026-10"].definition_version == 2
-        # One October, not one under each rule.
-        assert len(_instances(obligation, period_key="2026-10", archived_at__isnull=True)) == 1
-        assert preview(materialised, as_of=AS_OF).is_empty
-
-
 def test_a_frequency_change_follows_the_rule_in_force_when_each_period_closes(
     materialised: Entity, org_owner: User
 ) -> None:
     with platform_scope(reason="test"):
         obligation = _create(materialised, org_owner)
-        update_custom_obligation(
+        new_version = update_custom_obligation(
             obligation,
             actor=org_owner,
             details=COVENANT,
-            schedule={
-                **MONTHLY_ON_THE_7TH,
-                "periodicity": "QUARTERLY",
-                "due_mode": CustomObligationVersion.DueMode.DAYS_AFTER_PERIOD,
-                "due_days": 30,
-                "due_day_of_month": None,
-            },
+            schedule=QUARTERLY,
             applies_from=date(2026, 11, 15),
             as_of=AS_OF,
         )
 
+        assert new_version is not None and new_version.version == 2
         rows = _by_period(obligation)
-        assert "2026-10" in rows  # closed before the change
+        # Closed before the change: the rule that dated it still does.
+        assert rows["2026-10"].definition_version == 1
         assert "2026-11" not in rows  # would have closed after it, as a month
         quarter = next(
             row
@@ -244,7 +202,8 @@ def test_a_frequency_change_follows_the_rule_in_force_when_each_period_closes(
             if (row.period_start, row.period_end) == (date(2026, 10, 1), date(2026, 12, 31))
         )
         assert quarter.definition_version == 2
-        assert quarter.due_date == date(2027, 1, 30)
+        assert quarter.due_date == date(2026, 12, 31)
+        assert preview(materialised, as_of=AS_OF).is_empty
 
 
 def test_a_schedule_change_cannot_reach_back_before_the_current_one(
@@ -257,7 +216,7 @@ def test_a_schedule_change_cannot_reach_back_before_the_current_one(
                 obligation,
                 actor=org_owner,
                 details=COVENANT,
-                schedule={**MONTHLY_ON_THE_7TH, "due_day_of_month": 10},
+                schedule=QUARTERLY,
                 applies_from=date(2026, 5, 1),
                 as_of=AS_OF,
             )
@@ -272,13 +231,13 @@ def test_a_schedule_change_from_the_very_start_retires_the_first_version(
             obligation,
             actor=org_owner,
             details=COVENANT,
-            schedule={**MONTHLY_ON_THE_7TH, "due_day_of_month": 10},
+            schedule=QUARTERLY,
             applies_from=date(2026, 6, 1),
             as_of=AS_OF,
         )
 
         assert [s.version for s in custom_snapshots(materialised)] == [2]
-        assert all(row.due_date.day == 10 for row in _by_period(obligation).values())
+        assert all(row.definition_version == 2 for row in _by_period(obligation).values())
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +322,7 @@ def test_a_withdrawn_obligation_cannot_be_edited_or_withdrawn_again(
                 obligation,
                 actor=org_owner,
                 details={**COVENANT, "title": "Renamed"},
-                schedule=MONTHLY_ON_THE_7TH,
+                schedule=MONTHLY,
                 applies_from=None,
                 as_of=AS_OF,
             )
@@ -435,16 +394,10 @@ def _form_data(**overrides: Any) -> dict[str, Any]:
     data = {
         "title": "Monthly stock audit",
         "description": "Count and reconcile the warehouse.",
-        "source_reference": "Internal control IC-7",
         "category": "INTERNAL_GOVERNANCE",
-        "consequence": "",
         "periodicity": "MONTHLY",
         "period_anchor": "FY",
-        "due_mode": CustomObligationVersion.DueMode.DAYS_AFTER_PERIOD,
-        "due_days": "5",
-        "due_day_of_month": "",
-        "evidence_labels": "Count sheet\nVariance report",
-        "starts_on": "2026-04-01",
+        "due_date": (timezone.localdate() + timedelta(days=20)).isoformat(),
     }
     data.update(overrides)
     return data
@@ -465,7 +418,7 @@ def test_creating_through_the_library_lands_on_its_own_page(
     assert b"Monthly stock audit" in response.content
     with platform_scope(reason="test"):
         obligation = CustomObligation.objects.get(entity=materialised)
-        assert obligation.evidence_labels == ["Count sheet", "Variance report"]
+        assert obligation.versions.get().effective_from == timezone.localdate()
         assert response["HX-Push-Url"] == reverse(
             "compliance:custom_detail", args=[materialised.pk, obligation.pk]
         )
@@ -477,7 +430,7 @@ def test_an_invalid_form_rerenders_with_422(
     sign_in(client, org_owner)
     response = client.post(
         reverse("compliance:custom_create", args=[materialised.pk]),
-        _form_data(due_days=""),
+        _form_data(periodicity=""),
         headers={"HX-Request": "true"},
     )
     assert response.status_code == 422
@@ -521,6 +474,30 @@ def test_its_page_lists_the_soonest_due_first(
     assert due_dates == sorted(due_dates)
 
 
+def test_its_page_lists_every_due_date_in_the_calendars_12_month_window(
+    client: Client, materialised: Entity, org_owner: User
+) -> None:
+    """Every occurrence due within the next 12 months, and none after — the
+    same window the calendar shows, not the planner's full 18 months."""
+    with platform_scope(reason="test"):
+        obligation = _create(materialised, org_owner)
+        all_rows = _instances(obligation)
+    sign_in(client, org_owner)
+
+    response = client.get(
+        reverse("compliance:custom_detail", args=[materialised.pk, obligation.pk]),
+        headers={"HX-Request": "true"},
+    )
+
+    window_end = calendar_window_end(timezone.localdate())
+    assert any(row.due_date and row.due_date > window_end for row in all_rows), (
+        "fixture sanity: the planner built occurrences beyond the window"
+    )
+    expected = {row.pk for row in all_rows if row.due_date and row.due_date <= window_end}
+    assert {row.pk for row in response.context["instances"]} == expected
+    assert response.context["window_end"] == window_end
+
+
 def test_edit_and_withdraw_over_http(client: Client, materialised: Entity, org_owner: User) -> None:
     with platform_scope(reason="test"):
         obligation = _create(materialised, org_owner)
@@ -530,15 +507,7 @@ def test_edit_and_withdraw_over_http(client: Client, materialised: Entity, org_o
     edit_form = client.get(reverse("compliance:custom_edit", args=args))
     edited = client.post(
         reverse("compliance:custom_edit", args=args),
-        _form_data(
-            title="DSCR certificate",
-            due_mode=CustomObligationVersion.DueMode.DAY_OF_NEXT_MONTH,
-            due_days="",
-            due_day_of_month="7",
-            evidence_labels="Signed certificate",
-            evidence_mandatory="on",
-            applies_from="2026-10-01",
-        ),
+        _form_data(title="DSCR certificate", periodicity="QUARTERLY", applies_from="2026-10-01"),
         headers={"HX-Request": "true"},
     )
     withdrawn = client.post(
@@ -570,8 +539,24 @@ def test_an_instance_page_says_who_wrote_the_rule(
     assert response.status_code == 200
     assert b"What you wrote" in response.content
     assert b"What the law says" not in response.content
-    assert b"Facility agreement cl. 14.2" in response.content
-    assert b"Signed certificate" in response.content
+
+
+def test_other_is_offered_as_a_category_and_saved(
+    client: Client, materialised: Entity, org_owner: User
+) -> None:
+    sign_in(client, org_owner)
+    url = reverse("compliance:custom_create", args=[materialised.pk])
+
+    modal = client.get(url, headers={"HX-Request": "true"})
+    response = client.post(url, _form_data(category="OTHER"), headers={"HX-Request": "true"})
+
+    assert b'value="OTHER"' in modal.content
+    assert response.status_code == 200
+    with platform_scope(reason="test"):
+        obligation = CustomObligation.objects.get(entity=materialised)
+        assert obligation.category == "OTHER"
+        assert obligation.category_label == "Other"
+        assert {row.category for row in _instances(obligation)} == {"OTHER"}
 
 
 def test_a_view_only_member_cannot_create(
@@ -639,3 +624,104 @@ def test_a_forged_obligation_id_under_the_wrong_entity_is_a_404(
 
     response = client.get(reverse("compliance:custom_detail", args=[entity_a.pk, obligation.pk]))
     assert response.status_code == 404
+
+
+def test_a_future_occurrence_says_when_work_can_start_instead_of_offering_it(
+    client: Client, materialised: Entity, org_owner: User
+) -> None:
+    """Added like any other filing: not started, and not startable until its
+    period begins."""
+    with platform_scope(reason="test"):
+        obligation = _create(materialised, org_owner)
+        future = max(_instances(obligation), key=lambda row: row.period_start)
+    assert future.period_start > timezone.localdate(), "fixture sanity"
+    sign_in(client, org_owner)
+
+    body = client.get(
+        reverse("compliance:detail", args=[future.pk]), headers={"HX-Request": "true"}
+    ).content.decode()
+
+    assert "Work can start on" in body
+    assert "Start compliance" not in body
+
+
+# ---------------------------------------------------------------------------
+# The due date
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("schedule", "due", "months", "day"),
+    [
+        # 20 Oct belongs to the Jul–Sep quarter: one month after it ends, on the 20th.
+        (QUARTERLY, date(2026, 10, 20), 1, 20),
+        # The last day of a month is "the last day", so 31 Dec repeats as 31 Mar.
+        (QUARTERLY, date(2026, 12, 31), 0, -1),
+        # Mid-quarter belongs to the quarter before: 15 Dec is Jul–Sep, three months on.
+        (QUARTERLY, date(2026, 12, 15), 3, 15),
+        (MONTHLY, date(2026, 11, 7), 1, 7),
+    ],
+)
+def test_one_due_date_becomes_a_repeating_rule(
+    materialised: Entity, schedule: dict[str, Any], due: date, months: int, day: int
+) -> None:
+    with platform_scope(reason="test"):
+        stored, _ = resolve_schedule(materialised, {**schedule, "due_date": due})
+
+    assert stored["due_offset_months"] == months
+    assert stored["due_day_of_month"] == day
+
+
+def test_every_occurrence_falls_due_the_same_way_as_the_date_given(
+    materialised: Entity, org_owner: User
+) -> None:
+    """Quarterly, due 20 Oct: the calendar then reads 20 Oct, 20 Jan, 20 Apr…"""
+    with platform_scope(reason="test"):
+        obligation = _create(
+            materialised, org_owner, schedule={**QUARTERLY, "due_date": date(2026, 10, 20)}
+        )
+        due_dates = sorted(row.due_date for row in _instances(obligation) if row.due_date)
+        summary = schedule_summary(obligation.versions.get())
+
+    assert date(2026, 10, 20) in due_dates
+    assert date(2027, 1, 20) in due_dates
+    assert date(2027, 4, 20) in due_dates
+    assert all(d.day == 20 for d in due_dates)
+    assert "due on the 20th, 1 month after each period ends" in summary
+
+
+def test_the_due_date_given_is_on_the_calendar_even_if_its_period_already_ended(
+    materialised: Entity, org_owner: User
+) -> None:
+    """Created 12 Aug, due 20 Aug: that is July's filing, whose period ended
+    before tracking started — and it is exactly the one that was asked for."""
+    with platform_scope(reason="test"):
+        obligation = create_custom_obligation(
+            materialised,
+            actor=org_owner,
+            details=COVENANT,
+            schedule={**MONTHLY, "due_date": date(2026, 8, 20)},
+            as_of=AS_OF,
+        )
+        due_dates = {row.due_date for row in _instances(obligation)}
+
+    assert date(2026, 8, 20) in due_dates
+
+
+def test_changing_the_due_date_opens_a_new_schedule(materialised: Entity, org_owner: User) -> None:
+    with platform_scope(reason="test"):
+        obligation = _create(
+            materialised, org_owner, schedule={**MONTHLY, "due_date": date(2026, 9, 10)}
+        )
+        update_custom_obligation(
+            obligation,
+            actor=org_owner,
+            details=COVENANT,
+            schedule={**MONTHLY, "due_date": date(2026, 9, 25)},
+            applies_from=date(2026, 9, 1),
+            as_of=AS_OF,
+        )
+        latest = obligation.versions.order_by("-version").first()
+
+    assert latest is not None and latest.version == 2
+    assert latest.due_day_of_month == 25

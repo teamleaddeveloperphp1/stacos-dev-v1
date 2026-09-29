@@ -83,10 +83,9 @@ class LibraryRow:
     origin: str = "catalog"
     #: The :class:`CustomObligation` behind a custom row.
     custom_pk: UUID | None = None
-    #: A custom row's schedule in words, and where the requirement comes from.
-    #: A catalog row shows its code and family instead.
+    #: A custom row's schedule in words. A catalog row shows its code and
+    #: family instead.
     schedule: str = ""
-    source_reference: str = ""
 
     @property
     def is_custom(self) -> bool:
@@ -186,7 +185,6 @@ def _custom_rows(
                 origin="custom",
                 custom_pk=obligation.pk,
                 schedule=schedule_summary(versions[0]) if versions else "",
-                source_reference=obligation.source_reference,
             )
         )
     return rows

@@ -107,24 +107,6 @@
           {% endfor %}
         </select>
 
-        {% comment %}
-          "Due within" — how far ahead the list reaches. The planner builds
-          eighteen months; a filing a year out sitting beside this week's
-          work drowns it, so a fresh visit opens on twelve. Marked
-          `--filtered` whenever it narrows at all, for the same reason as the
-          status select above: a window the user did not choose is still a
-          window. Never hides anything overdue or already underway — see
-          `queries.apply_due_window`.
-        {% endcomment %}
-        <select name="within"
-                class="form-select form-select-sm{% if within != 'all' %} form-select--filtered{% endif %}"
-                style="max-width: 12rem"
-                aria-label="{% translate 'Filter by how far ahead it is due' %}">
-          {% for value, label in due_window_filters %}
-            <option value="{{ value }}" {% if within == value %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-
         <select name="category" class="form-select form-select-sm" style="max-width: 16rem"
                 aria-label="{% translate 'Filter by category' %}">
           <option value="">{% translate "Every category" %}</option>
@@ -219,27 +201,6 @@
         <tbody>
           {% if obligations %}
             {% include "obligations/_fragments/calendar_rows.html" %}
-          {% elif beyond_window %}
-            {% comment %}
-              Checked first: whatever else is narrowing the list, if the "Due
-              within" window is what emptied it, that is the answer — and the
-              one action that would bring rows back is widening it, which
-              keeps every other filter the user chose. `beyond_window` is how
-              many rows these same filters hold past the window; see
-              `_empty_state_context`.
-            {% endcomment %}
-            <tr>
-              <td colspan="7" class="p-0">
-                {% blocktranslate asvar window_title with end=window_end|date:"j M Y" %}Nothing due through {{ end }}{% endblocktranslate %}
-                {% blocktranslate asvar window_body count counter=beyond_window with end=window_end|date:"j M Y" %}One not-started filing matching these filters falls due after {{ end }}, outside the “Due within” window. Anything overdue or already underway is always shown, whatever the window.{% plural %}{{ counter }} not-started filings matching these filters fall due after {{ end }}, outside the “Due within” window. Anything overdue or already underway is always shown, whatever the window.{% endblocktranslate %}
-                <c-empty-state title="{{ window_title }}" body="{{ window_body }}">
-                  <a class="btn btn-sm btn-outline-secondary" href="{{ widen_query }}"
-                     hx-get="{{ widen_query }}" hx-target="#main" hx-push-url="true">
-                    {% translate "Show every due date" %}
-                  </a>
-                </c-empty-state>
-              </td>
-            </tr>
           {% elif has_narrowing_filters %}
             {% comment %}
               A search term, category or entity picked matches nothing —
@@ -260,9 +221,8 @@
             </tr>
           {% elif not register_empty %}
             {% comment %}
-              The tenant has obligations, and the "Due within" window hid none
-              of this status's (that case is above) — so an empty table means
-              this particular status window is genuinely clear, not that the
+              The tenant has obligations — so an empty table means this
+              particular status window is genuinely clear, not that the
               register is empty. `register_empty` asks the whole register
               rather than `counts.total`, which is itself windowed.
             {% endcomment %}

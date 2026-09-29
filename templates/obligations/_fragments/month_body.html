@@ -72,8 +72,8 @@
               {% endfor %}
               {% if cell.obligations|length > 4 %}
                 <a class="month-cell__more"
-                   href="{% url 'compliance:calendar' %}?status=all&within=all"
-                   hx-get="{% url 'compliance:calendar' %}?status=all&within=all"
+                   href="{% url 'compliance:calendar' %}?status=all"
+                   hx-get="{% url 'compliance:calendar' %}?status=all"
                    hx-target="#main" hx-push-url="true">
                   {% blocktranslate count counter=cell.obligations|length|add:"-4" %}
                     +{{ counter }} more

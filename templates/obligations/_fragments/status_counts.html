@@ -4,7 +4,7 @@
   updates. Counts come from one conditional aggregation rather than several
   `.count()` calls, so the tiles can never disagree with each other — and,
   since `status_counts` now takes the toolbar's own search/category/entity
-  filters and "Due within" window, typing "gst" or picking an entity narrows
+  filters and 12-month window, typing "gst" or picking an entity narrows
   every tile to match, not just the table underneath them. Each tile's link
   carries those same filters (`tile_query`) — a tile that counted under the
   user's window but linked to the default one would promise a number its own
@@ -50,7 +50,7 @@
   </a>
   <a class="stat-tile" href="?status={{ tile_query }}"
      hx-get="?status={{ tile_query }}" hx-target="#main" hx-push-url="true"
-     title="{% translate 'Every open obligation inside the Due within window' %}">
+     title="{% translate 'Every open obligation due within the next 12 months, plus anything overdue or underway' %}">
     <span class="stat-tile__value">{{ counts.open }}</span>
     <span class="stat-tile__label">{% translate "All open" %}</span>
   </a>

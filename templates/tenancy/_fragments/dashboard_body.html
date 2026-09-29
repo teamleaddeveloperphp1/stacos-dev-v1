@@ -36,8 +36,8 @@
     its count — a number with no way to see what it is counting is a dead
     end. `dashboard_calendar_qs` carries the entity filter along so a tile
     clicked while narrowed to one entity lands on that entity's rows, not
-    every entity's — and `within=all`, because these counts span the whole
-    horizon and the calendar would otherwise open on its "Due within" window.
+    every entity's. The counts use the calendar's own 12-month window, so a
+    tile's number is the number of rows its click lands on.
   {% endcomment %}
   <div class="row row-cols-2 row-cols-lg-5 g-3 mb-4">
     <div class="col">

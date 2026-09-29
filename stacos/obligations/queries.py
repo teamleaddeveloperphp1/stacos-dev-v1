@@ -50,12 +50,14 @@ from stacos.engine.lifecycle import (
     State,
 )
 from stacos.obligations.models import ObligationInstance
+from stacos.obligations.services import _add_months as add_months
 
 #: A translated string is a ``Promise`` until something renders it, which is
 #: what lets one process serve a user in English and another in Hindi.
 StrOrPromise = str | Promise
 
 __all__ = [
+    "CALENDAR_WINDOW_MONTHS",
     "CategoryCount",
     "KeysetPage",
     "PenaltyExposure",
@@ -63,6 +65,7 @@ __all__ = [
     "annotate_status",
     "apply_due_window",
     "apply_text_filters",
+    "calendar_window_end",
     "category_counts",
     "keyset_page",
     "live",
@@ -283,17 +286,34 @@ def apply_text_filters(
     return queryset
 
 
+#: How far ahead the calendar reaches, in calendar months from today. Fixed,
+#: not a toolbar choice: the planner builds eighteen months, and a filing more
+#: than a year out sitting beside this week's work only drowns it. Wider than
+#: every 90-day status bucket, so it never cuts into a window a status promises.
+CALENDAR_WINDOW_MONTHS = 12
+
+
+def calendar_window_end(as_of: date) -> date:
+    """The last due date the calendar shows a not-started filing for.
+
+    Calendar months, by the planner's own arithmetic, so "12 months" here
+    means what "18 months" means to the horizon it is a slice of.
+    """
+    return add_months(as_of, CALENDAR_WINDOW_MONTHS)
+
+
 def apply_due_window(
     queryset: QuerySet[ObligationInstance], *, window_end: date | None
 ) -> QuerySet[ObligationInstance]:
-    """The calendar's "Due within" narrowing, shared by the register and its tiles.
+    """The calendar's 12-month narrowing, shared by the register and its tiles.
 
     Hides only what nobody has touched and is not yet near: ``NOT_STARTED`` and
     due after ``window_end``. Everything else stays, whatever its date — an
     overdue row is before the window's end by definition, a row somebody has
     started (or deferred, or disputed) is live work however far out it falls,
     a closed row is history, and a row still waiting on a date cannot be
-    placed outside a window at all. ``None`` is "any due date".
+    placed outside a window at all. ``None`` is "any due date" — the calendar
+    always passes :func:`calendar_window_end`.
 
     A view concern only: the planner still materialises its full horizon, and
     nothing here decides what exists — only what the list is showing.
@@ -328,9 +348,8 @@ def status_counts(
     does — see :func:`apply_text_filters` — so that typing "gst" into the
     search box updates the tiles to match what is actually on screen, not the
     tenant's entire backlog. ``entity_ids`` behaves the same way it always has.
-    ``window_end`` is the calendar's "Due within" pick, applied through
-    :func:`apply_due_window` exactly as the register applies it; the dashboard
-    leaves it unset and counts the whole horizon.
+    ``window_end`` is the calendar's 12-month window, applied through
+    :func:`apply_due_window` exactly as the register applies it.
     Deliberately *not* narrowed by the register's own ``status`` selection:
     these tiles are the other buckets a click could switch to, and a tile that
     only ever counted the bucket already showing would be pointless.
@@ -392,17 +411,22 @@ class CategoryCount(TypedDict):
     count: int
 
 
-def category_counts(*, entity_ids: Sequence[UUID] | None = None) -> list[CategoryCount]:
+def category_counts(
+    *, entity_ids: Sequence[UUID] | None = None, window_end: date | None = None
+) -> list[CategoryCount]:
     """Open obligations grouped by compliance category, busiest first.
 
     Open-only, deliberately: a lifetime count would only ever grow and stop
-    telling anyone what their current workload looks like.
+    telling anyone what their current workload looks like. ``window_end``
+    narrows exactly as it does for :func:`status_counts`, so the bars sum to
+    the "open" tile beside them.
     """
     from stacos.tenancy.models import ComplianceCategory
 
     queryset = live().filter(state__in=_OPEN)
     if entity_ids is not None:
         queryset = queryset.filter(entity_id__in=list(entity_ids))
+    queryset = apply_due_window(queryset, window_end=window_end)
 
     rows = queryset.values("category").annotate(count=Count("id")).order_by("-count")
     return [

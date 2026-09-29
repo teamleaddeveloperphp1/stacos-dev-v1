@@ -22,6 +22,16 @@
   </div>
 
   <div class="card-body">
+    {% if pending_changes %}
+      {% comment %}
+        The calendar no longer matches the facts on file — an entity edit, an
+        answered question — and nothing rebuilds on its own. Said here, beside
+        the button, with the exact diff a rebuild would apply.
+      {% endcomment %}
+      <p class="callout callout--attention small" role="status">
+        {% blocktranslate with changes=pending_changes %}Your calendar is out of date with the details on file. Rebuilding it will apply: {{ changes }}.{% endblocktranslate %}
+      </p>
+    {% endif %}
     {% comment %}
       The headline counts stay full width — this card now spans the whole
       page (see `entity_detail_body.html`) rather than sharing a column with

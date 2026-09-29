@@ -25,11 +25,6 @@ urlpatterns = [
         name="entity_setup_answers",
     ),
     path(
-        "entities/<uuid:pk>/setup/packs/",
-        entity_setup.packs,
-        name="entity_setup_packs",
-    ),
-    path(
         "entities/<uuid:pk>/setup/build/",
         entity_setup.build,
         name="entity_setup_build",

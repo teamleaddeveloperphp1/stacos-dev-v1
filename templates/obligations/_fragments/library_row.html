@@ -18,7 +18,7 @@
            hx-target="#main" hx-push-url="true">{{ row.title }}</a>
         <span class="badge-soft">{% translate "Your own" %}</span>
       </div>
-      <div class="text-muted small">{{ row.schedule }}{% if row.source_reference %} · {{ row.source_reference }}{% endif %}</div>
+      <div class="text-muted small">{{ row.schedule }}</div>
     {% else %}
       <div class="d-flex align-items-center flex-wrap gap-2">
         <a class="link-strong" href="{% url 'compliance:definition' row.code %}"

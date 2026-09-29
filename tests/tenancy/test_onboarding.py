@@ -81,7 +81,7 @@ def test_resume_url_follows_the_entitys_own_furthest_step(entity_a: Entity) -> N
     with tenant_context(tenant_ids={entity_a.tenant_id}, reason="test"):
         state = workspace_state(entity_a.tenant)
     assert state.resume_step_number == 2
-    assert state.setup_step_total == 4
+    assert state.setup_step_total == 3
 
 
 def test_a_workspace_with_no_tenant_at_all_is_first_run(platform: object) -> None:

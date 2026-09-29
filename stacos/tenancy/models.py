@@ -63,6 +63,9 @@ class ComplianceCategory(models.TextChoices):
     SECTORAL = "SECTORAL", _("Sector-specific")
     DATA_PRIVACY = "DATA_PRIVACY", _("Data privacy")
     INTERNAL_GOVERNANCE = "INTERNAL_GOVERNANCE", _("Internal governance")
+    #: For an entity's own obligation that fits none of the above. An access
+    #: boundary like the rest: a member limited to other categories does not see it.
+    OTHER = "OTHER", _("Other")
 
 
 class Tenant(TimeStampedModel):
@@ -200,13 +203,12 @@ class Entity(TenantScopedModel, SoftDeleteModel):
         """How far the guided first-run setup has got for this entity.
 
         The step keys match the url-name suffixes in
-        :mod:`stacos.tenancy.entity_setup`, because they name the same four
+        :mod:`stacos.tenancy.entity_setup`, because they name the same three
         screens and two spellings of one list is one spelling too many.
         """
 
         REGISTRATIONS = "registrations", _("Registrations")
         ANSWERS = "answers", _("Answer what applies")
-        PACKS = "packs", _("Optional add-ons")
         BUILD = "build", _("Review and create")
 
     name = models.CharField(max_length=200)

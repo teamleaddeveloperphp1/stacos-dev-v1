@@ -93,6 +93,7 @@ VALID_CATEGORIES: frozenset[str] = frozenset(
         "SECTORAL",
         "DATA_PRIVACY",
         "INTERNAL_GOVERNANCE",
+        "OTHER",
     }
 )
 

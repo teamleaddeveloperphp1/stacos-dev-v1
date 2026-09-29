@@ -193,7 +193,7 @@ def test_saving_closes_the_modal_and_toasts(signed_in: Client, entity_a: Entity)
     triggers = response["HX-Trigger"]
     assert "stacos:modal-close" in triggers
     assert "stacos:toast" in triggers
-    assert "Save changes" in triggers, "the user is not told the calendar may now be stale"
+    assert "Rebuild calendar" in triggers, "the user is not told the calendar may now be stale"
 
 
 def test_the_edited_row_keeps_its_registration_count(
@@ -344,3 +344,39 @@ def test_an_archived_entity_is_not_editable(signed_in: Client, entity_a: Entity)
     response = signed_in.get(reverse("app:entity_edit", args=[entity_a.pk]), headers=HTMX)
 
     assert response.status_code == 404
+
+
+def test_the_card_says_when_an_edit_left_the_calendar_out_of_date(
+    signed_in: Client, manufacturer: Entity
+) -> None:
+    """Editing never rebuilds on its own, so the Compliance card has to say the
+    calendar is stale, and by how much, beside a button named for what it does.
+    Moving the incorporation date back adds the year the entity now existed in;
+    one rebuild applies it and the notice goes away."""
+    from django.utils import timezone
+
+    from stacos.obligations.services import materialise
+
+    today = timezone.localdate()
+    card = reverse("compliance:entity_summary", args=[manufacturer.pk])
+    with platform_scope(reason="test"):
+        manufacturer.incorporation_date = today
+        manufacturer.save(update_fields=["incorporation_date"])
+        materialise(manufacturer, as_of=today, trigger="MANUAL")
+
+    up_to_date = signed_in.get(card, headers=HTMX).content.decode()
+    assert "Rebuild calendar" in up_to_date
+    assert "Your calendar is out of date" not in up_to_date
+
+    with platform_scope(reason="test"):
+        manufacturer.incorporation_date = today.replace(year=today.year - 3)
+        manufacturer.save(update_fields=["incorporation_date"])
+
+    stale = signed_in.get(card, headers=HTMX).content.decode()
+    assert "Your calendar is out of date" in stale
+    assert "added" in stale
+
+    rebuilt = signed_in.post(
+        reverse("compliance:rebuild", args=[manufacturer.pk]), headers=HTMX
+    ).content.decode()
+    assert "Your calendar is out of date" not in rebuilt

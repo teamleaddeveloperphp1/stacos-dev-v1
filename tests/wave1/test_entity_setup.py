@@ -1,17 +1,15 @@
 """
 The guided path from "an entity now exists" to "its calendar exists".
 
-Four steps — registrations, answers, packs, review — reached only while an
-entity owns no obligations at all; `entity_detail` redirects here for as long
-as that holds and never again once a calendar exists. The packs step is
-skipped when there is nothing to suggest. See `stacos.tenancy.entity_setup`.
+Three steps — registrations, answers, review — reached only while an entity
+owns no obligations at all; `entity_detail` redirects here for as long as that
+holds and never again once a calendar exists. See
+`stacos.tenancy.entity_setup`.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
-from unittest.mock import patch
 
 import pytest
 from django.test import Client
@@ -19,29 +17,12 @@ from django.urls import reverse
 
 from stacos.accounts.models import User
 from stacos.core.scope import platform_scope
-from stacos.tenancy import entity_setup
 from stacos.tenancy.models import Entity, Tenant
 from tests.conftest import sign_in
 
 pytestmark = pytest.mark.django_db
 
 HTMX = {"HX-Request": "true"}
-
-
-def _hiding_packs(real: Callable[..., dict[str, object]]) -> Callable[..., dict[str, object]]:
-    """A stand-in for `entity_setup.entity_preview_context` reporting no pack
-    suggestions at all, for exercising the packs step's skip-when-empty
-    behaviour without needing a fixture entity/jurisdiction combination that
-    happens to have none. An already-accepted pack stays listed (with a
-    "Remove" action) rather than disappearing from `packs`, so adopting every
-    real suggestion does not produce this state — see
-    `stacos.obligations.preview.suggest_packs`.
-    """
-
-    def fake(*args: object, **kwargs: object) -> dict[str, object]:
-        return {**real(*args, **kwargs), "packs": []}
-
-    return fake
 
 
 @pytest.fixture
@@ -183,55 +164,52 @@ def test_answering_a_question_on_step_two_stays_on_the_reduced_card(
 
 
 # ---------------------------------------------------------------------------
-# Step three — packs
+# No packs step
 # ---------------------------------------------------------------------------
 
 
-def test_packs_are_offered_on_their_own_step(signed_in: Client, entity_a: Entity) -> None:
-    body = signed_in.get(reverse("app:entity_setup_packs", args=[entity_a.pk])).content.decode()
+def test_step_two_goes_straight_to_review(signed_in: Client, entity_a: Entity) -> None:
+    """The "Optional add-ons" step is gone: setup offers no obligations the
+    rules did not infer themselves."""
+    body = signed_in.get(reverse("app:entity_setup_answers", args=[entity_a.pk])).content.decode()
 
-    assert "Sets other businesses like yours track" in body
-    assert "Answer these first" not in body
-    assert "What applies to you, by category" not in body
+    assert reverse("app:entity_setup_build", args=[entity_a.pk]) in body
+    assert "Optional add-ons" not in body
 
 
-def test_packs_step_is_skipped_when_there_is_nothing_to_suggest(
+def test_review_goes_back_to_the_questions(signed_in: Client, entity_a: Entity) -> None:
+    body = signed_in.get(reverse("app:entity_setup_build", args=[entity_a.pk])).content.decode()
+
+    assert reverse("app:entity_setup_answers", args=[entity_a.pk]) in body
+
+
+def test_an_entity_left_on_the_retired_packs_step_moves_forward(
     signed_in: Client, entity_a: Entity
 ) -> None:
-    """`entity_setup.packs` redirects straight past itself when there is
-    nothing to offer, rather than rendering an empty step."""
-    with patch.object(
-        entity_setup, "entity_preview_context", _hiding_packs(entity_setup.entity_preview_context)
-    ):
-        response = signed_in.get(reverse("app:entity_setup_packs", args=[entity_a.pk]), follow=True)
+    """A row written before the step was removed still says "packs"; reaching
+    review must overwrite it rather than leave it stuck."""
+    with platform_scope(reason="test"):
+        Entity.objects.filter(pk=entity_a.pk).update(setup_step="packs")
 
-    assert response.status_code == 200
-    assert response.redirect_chain
-    assert response.redirect_chain[-1][0] == reverse("app:entity_setup_build", args=[entity_a.pk])
+    signed_in.get(reverse("app:entity_setup_build", args=[entity_a.pk]))
 
-
-def test_packs_step_is_a_404_for_another_tenants_entity(
-    client: Client, org_owner: User, rival_entity: Entity
-) -> None:
-    signed_in = sign_in(client, org_owner, step_up=True)
-
-    response = signed_in.get(reverse("app:entity_setup_packs", args=[rival_entity.pk]))
-
-    assert response.status_code == 404
+    with platform_scope(reason="test"):
+        entity_a.refresh_from_db()
+    assert entity_a.setup_step == Entity.SetupStep.BUILD
 
 
 # ---------------------------------------------------------------------------
-# Step four — review & create
+# Step three — review & create
 # ---------------------------------------------------------------------------
 
 
-def test_step_four_shows_the_build_button(signed_in: Client, entity_a: Entity) -> None:
+def test_step_three_shows_the_build_button(signed_in: Client, entity_a: Entity) -> None:
     body = signed_in.get(reverse("app:entity_setup_build", args=[entity_a.pk])).content.decode()
 
     assert "Create my calendar" in body
 
 
-def test_step_four_shows_the_category_breakdown_not_the_question_queue_or_packs(
+def test_step_three_shows_the_category_breakdown_not_the_question_queue_or_packs(
     signed_in: Client, entity_a: Entity
 ) -> None:
     body = signed_in.get(reverse("app:entity_setup_build", args=[entity_a.pk])).content.decode()
@@ -241,7 +219,7 @@ def test_step_four_shows_the_category_breakdown_not_the_question_queue_or_packs(
     assert "Sets other businesses like yours track" not in body
 
 
-def test_step_four_puts_the_build_button_in_the_wizard_footer(
+def test_step_three_puts_the_build_button_in_the_wizard_footer(
     signed_in: Client, entity_a: Entity
 ) -> None:
     """Where every earlier step puts its "Next", and where a user who has
@@ -277,7 +255,7 @@ def test_the_card_on_step_four_has_no_build_button_of_its_own(
     assert reverse("compliance:rebuild", args=[entity_a.pk]) not in card
 
 
-def test_step_four_is_a_404_for_another_tenants_entity(
+def test_step_three_is_a_404_for_another_tenants_entity(
     client: Client, org_owner: User, rival_entity: Entity
 ) -> None:
     signed_in = sign_in(client, org_owner, step_up=True)
@@ -344,22 +322,6 @@ def test_packs_are_not_offered_on_the_entity_page(signed_in: Client, materialise
     assert "Sets other businesses like yours track" not in body
     # The card itself is still there; only the strip went.
     assert "Compliance" in body
-
-
-def test_the_step_rail_drops_packs_when_none_are_suggested(
-    signed_in: Client, entity_a: Entity
-) -> None:
-    """The rail must not promise a step that is about to redirect away — see
-    `stacos.tenancy.entity_setup._step_context`.
-    """
-    with patch.object(
-        entity_setup, "entity_preview_context", _hiding_packs(entity_setup.entity_preview_context)
-    ):
-        body = signed_in.get(
-            reverse("app:entity_setup_registrations", args=[entity_a.pk])
-        ).content.decode()
-
-    assert "Optional add-ons" not in body
 
 
 def test_waiting_on_link_crosses_to_the_answers_step_from_review(entity_a: Entity) -> None:

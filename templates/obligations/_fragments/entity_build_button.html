@@ -1,10 +1,12 @@
 {% load i18n %}
 {% comment %}
   "Create my calendar" reads as an offer; once a calendar already exists the
-  button instead says "Save changes" — "Rebuild calendar" read as "start over
-  from scratch" to a user who had just answered one more question, when what
-  actually happens is a re-run of materialisation against whatever is on file
-  now. The label is decided by `has_calendar`
+  button says "Rebuild calendar". It briefly said "Save changes", to avoid
+  reading as "start over from scratch" — but after editing an entity, nobody
+  connected "Save changes" with "put this on the calendar", and the calendar
+  stayed stale. The card now says above the button exactly what a rebuild
+  would change (`pending_changes`), which answers the "start over?" worry
+  better than a vaguer label did: nothing carrying history is ever removed. The label is decided by `has_calendar`
   (`stacos.obligations.views.entity_preview_context`), not repeated in two
   places — except inside the guided setup wizard, where `in_setup` overrides
   it back to the "create" phrasing regardless; see
@@ -62,7 +64,7 @@
       hx-target="#entity-obligations" hx-swap="outerHTML">
   {% csrf_token %}
   <button type="submit"
-          class="{{ button_class|default:'btn btn-sm' }} {% if has_calendar and not in_setup %}btn-outline-secondary{% else %}btn-primary{% endif %}"
+          class="{{ button_class|default:'btn btn-sm' }} {% if has_calendar and not in_setup and not pending_changes %}btn-outline-secondary{% else %}btn-primary{% endif %}"
           hx-disabled-elt="this">
     <span id="build-button-label">
       {% include "obligations/_fragments/entity_build_button_label.html" %}

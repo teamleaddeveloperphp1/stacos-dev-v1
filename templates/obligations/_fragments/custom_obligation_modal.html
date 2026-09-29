@@ -24,7 +24,7 @@
         <div class="modal-body">
           <p class="text-muted small">
             {% if obligation %}
-              {% translate "Name, description, category and proof are corrected everywhere they appear. Changing when it falls due starts a new schedule from the date you give — occurrences that already ended keep theirs." %}
+              {% translate "Name, description and category are corrected everywhere they appear. Changing how often it falls due starts a new schedule from the date you give — occurrences that already ended keep theirs." %}
             {% else %}
               {% blocktranslate with name=entity.name %}Something {{ name }} owes that the catalog does not know about — a licence condition, a lender's covenant, an internal control. It goes on the calendar like any other obligation, with the same status, evidence, assignment and audit trail.{% endblocktranslate %}
             {% endif %}

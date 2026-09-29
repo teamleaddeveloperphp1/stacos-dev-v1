@@ -41,6 +41,9 @@
   <div class="detail-grid__main">
     <section class="card">
       <h2 class="card__title"><c-icon name="calendar" size="14" /> {% translate "On the calendar" %}</h2>
+      <p class="text-muted small">
+        {% blocktranslate with months=window_months end=window_end|date:"j M Y" %}Every due date in the next {{ months }} months, up to {{ end }} — the same window as the calendar. Later ones appear as they come within it.{% endblocktranslate %}
+      </p>
       <div class="data-table__scroll" aria-live="polite">
         {% if instances %}
           <table class="table table-sm mb-0">
@@ -83,7 +86,7 @@
           {% endif %}
         {% else %}
           <c-empty-state title="{% translate 'Nothing scheduled yet' %}"
-                         body="{% translate 'No period of this schedule falls due within the calendar window yet. It will appear here as soon as one does.' %}" />
+                         body="{% translate 'No period of this schedule falls due in the next 12 months. It will appear here as soon as one does.' %}" />
         {% endif %}
       </div>
     </section>
@@ -131,27 +134,9 @@
         <p class="card__lede">{{ obligation.description|linebreaksbr }}</p>
       {% endif %}
       <dl class="key-values small">
-        {% if obligation.source_reference %}
-          <dt>{% translate "Source" %}</dt><dd>{{ obligation.source_reference }}</dd>
-        {% endif %}
-        {% if obligation.consequence %}
-          <dt>{% translate "If missed" %}</dt><dd>{{ obligation.consequence }}</dd>
-        {% endif %}
         <dt>{% translate "Added" %}</dt>
         <dd>{{ obligation.created_at|date:"j M Y" }}{% if obligation.created_by %} · {{ obligation.created_by }}{% endif %}</dd>
       </dl>
     </section>
-
-    {% if obligation.evidence_labels %}
-      <section class="card">
-        <h2 class="card__title"><c-icon name="folder" size="14" /> {% translate "What you'll need" %}</h2>
-        <ul class="reason-list">
-          {% for label in obligation.evidence_labels %}<li>{{ label }}</li>{% endfor %}
-        </ul>
-        {% if obligation.evidence_mandatory %}
-          <p class="text-muted small mb-0">{% translate "Attached proof is required before an occurrence can be completed." %}</p>
-        {% endif %}
-      </section>
-    {% endif %}
   </aside>
 </div>

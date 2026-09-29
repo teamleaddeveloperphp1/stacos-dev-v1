@@ -74,6 +74,10 @@
               hx-target="#modal-container" hx-swap="innerHTML">
         {% translate "Reopen" %}
       </button>
+    {% elif opens_on %}
+      <span class="text-muted small ms-auto" role="status">
+        {% blocktranslate with date=opens_on|date:"j M Y" %}Work can start on {{ date }}, when this period begins.{% endblocktranslate %}
+      </span>
     {% endif %}
   </div>
 

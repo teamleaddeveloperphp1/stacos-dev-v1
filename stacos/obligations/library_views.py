@@ -52,7 +52,12 @@ from stacos.obligations.library import (
     restore_definition,
 )
 from stacos.obligations.models import CustomObligation, ObligationInstance
-from stacos.obligations.queries import annotate_status
+from stacos.obligations.queries import (
+    CALENDAR_WINDOW_MONTHS,
+    annotate_status,
+    apply_due_window,
+    calendar_window_end,
+)
 from stacos.tenancy.models import ComplianceCategory, Entity
 
 VIEW = "compliance.library.view"
@@ -147,11 +152,7 @@ def _filtered(rows: tuple[LibraryRow, ...], *, request: HttpRequest) -> list[Lib
         filtered = [row for row in filtered if row.category == category]
     if search:
         filtered = [
-            row
-            for row in filtered
-            if search in row.title.lower()
-            or search in row.code.lower()
-            or search in row.source_reference.lower()
+            row for row in filtered if search in row.title.lower() or search in row.code.lower()
         ]
     return filtered
 
@@ -401,15 +402,22 @@ def _custom_detail_context(
     request: HttpRequest, entity: Entity, obligation: CustomObligation, *, as_of: date
 ) -> dict[str, Any]:
     versions = list(obligation.versions.order_by("-version"))
+    # The same 12-month window the calendar shows, so every due date in the
+    # coming year is listed here and nothing past it: the planner builds
+    # eighteen months, and the far end of that is noise on this page too.
+    window_end = calendar_window_end(as_of)
     produced = annotate_status(
-        ObligationInstance.objects.filter(
-            entity=entity, definition_code=obligation.code, archived_at__isnull=True
+        apply_due_window(
+            ObligationInstance.objects.filter(
+                entity=entity, definition_code=obligation.code, archived_at__isnull=True
+            ),
+            window_end=window_end,
         ),
         as_of=as_of,
     ).order_by("-period_end", "-due_date")
     # The latest rows are the ones kept (the page promises "the latest N"),
     # but they read soonest-due first, like the calendar: the next filing on
-    # top, not the one eighteen months out. Undated rows go last.
+    # top, not the one a year out. Undated rows go last.
     shown = sorted(
         produced[:CUSTOM_HISTORY_ROWS],
         key=lambda row: (
@@ -426,6 +434,8 @@ def _custom_detail_context(
         ],
         "instances": shown,
         "instance_total": produced.count(),
+        "window_end": window_end,
+        "window_months": CALENDAR_WINDOW_MONTHS,
         "can_manage": MANAGE in _permissions(request),
     }
 
@@ -489,7 +499,6 @@ def custom_create(request: HttpRequest, entity_pk: str) -> HttpResponse:
             actor=current_user(request),
             details=form.details,
             schedule=form.schedule,
-            starts_on=form.cleaned_data["starts_on"],
             as_of=_today(),
         )
     except CustomObligationError as exc:
@@ -499,6 +508,23 @@ def custom_create(request: HttpRequest, entity_pk: str) -> HttpResponse:
     return _land_on_custom_detail(
         request, entity, obligation, toast=_("Added — %(title)s.") % {"title": obligation.title}
     )
+
+
+def _next_due(obligation: CustomObligation) -> date | None:
+    """The soonest due date still ahead, which the edit form offers back."""
+    row = (
+        ObligationInstance.objects.filter(
+            definition_code=obligation.code,
+            entity_id=obligation.entity_id,
+            archived_at__isnull=True,
+            superseded_at__isnull=True,
+            due_date__gte=_today(),
+        )
+        .order_by("due_date")
+        .only("due_date")
+        .first()
+    )
+    return row.due_date if row is not None else None
 
 
 @require_permission(MANAGE)
@@ -515,7 +541,9 @@ def custom_edit(request: HttpRequest, entity_pk: str, pk: str) -> HttpResponse:
 
     if request.method == "GET":
         form = CustomObligationForm(
-            initial=CustomObligationForm.initial_for(obligation, current_version(obligation)),
+            initial=CustomObligationForm.initial_for(
+                obligation, current_version(obligation), next_due=_next_due(obligation)
+            ),
             editing=True,
             allowed_categories=allowed,
         )

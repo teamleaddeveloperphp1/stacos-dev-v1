@@ -1,11 +1,9 @@
 """
 The guided path from "an entity now exists" to "its calendar exists".
 
-Four steps, the third conditional: review the registrations the Add Entity
-screen already collected (and add any it did not); answer the ranked
-questions that settle the most; opt into any optional packs suggested for
-this entity, if there are any; then review the full result and create the
-calendar. A brand-new entity has nowhere near enough reason to justify the
+Three steps: review the registrations the Add Entity screen already
+collected (and add any it did not); answer the ranked questions that settle
+the most; then review the full result and create the calendar. A brand-new entity has nowhere near enough reason to justify the
 entity detail page's five cards at once — showing them all together the
 moment an entity exists is how a user ends up staring at a Compliance card
 with no idea it was the thing to do *next*. This says which one thing to do
@@ -13,9 +11,13 @@ now, in order, and shows what comes after only once this one is behind them.
 
 Each step is its own page showing only the part of the Compliance card
 (`obligations/_fragments/entity_summary.html`) relevant to the decision it is
-asking for — the headline counts, the question queue, the pack strip, the
-category breakdown — controlled by the `hide_questions`/`hide_columns`/
-`hide_packs` flags on `stacos.obligations.views.entity_preview_context`.
+asking for — the headline counts, the question queue, the category
+breakdown — controlled by the `hide_questions`/`hide_columns` flags on
+`stacos.obligations.views.entity_preview_context`.
+
+There used to be an "Optional add-ons" step between the questions and the
+review, offering packs of obligations the rules had not selected. It was
+removed: setup adds only what the rules themselves infer.
 Interleaving all of them on one screen, which is what this flow used to do,
 is what made answering one question feel like it was rearranging a page of
 unrelated content underneath the user.
@@ -23,9 +25,9 @@ unrelated content underneath the user.
 ``tenancy.views.entity_detail`` redirects here — always to step one — for as
 long as the entity owns no obligations at all; once a calendar exists even
 once, it never redirects again. This is a first-run path, not a permanent
-fixture: adding a further registration, answering a question, opting into a
-pack, or rebuilding the calendar afterwards all still happen on the ordinary
-entity detail page, exactly as they did before this existed.
+fixture: adding a further registration, answering a question, or rebuilding
+the calendar afterwards all still happen on the ordinary entity detail page,
+exactly as they did before this existed.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ from __future__ import annotations
 from datetime import date
 
 from django.http import Http404, HttpRequest, HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -46,14 +48,10 @@ from stacos.tenancy.onboarding import SETUP_STEP_ORDER
 from stacos.tenancy.registration_gaps import registration_gaps
 
 #: One entry per step in the rail. The key is also the url name suffix
-#: (`app:entity_setup_<key>`) and the fragment's directory name. "packs" is
-#: dropped from the rendered rail — see `_step_context` — whenever this
-#: entity has no pack suggestions at all; the page itself is skipped the same
-#: way, by `packs()` redirecting straight past it.
+#: (`app:entity_setup_<key>`) and the fragment's directory name.
 STEPS = (
     ("registrations", _("Registrations")),
     ("answers", _("Answer what applies")),
-    ("packs", _("Optional add-ons")),
     ("build", _("Review & create")),
 )
 
@@ -78,9 +76,8 @@ def _template(request: HttpRequest, page: str) -> str:
     return derive_fragment_template(page) if is_fragment_request(request) else page
 
 
-def _step_context(step: str, entity: Entity, *, has_packs: bool) -> dict[str, object]:
-    steps = tuple((key, label) for key, label in STEPS if key != "packs" or has_packs)
-    return {"steps": steps, "current_step": step, "entity": entity}
+def _step_context(step: str, entity: Entity) -> dict[str, object]:
+    return {"steps": STEPS, "current_step": step, "entity": entity}
 
 
 def _mark_reached(entity: Entity, step: str) -> None:
@@ -90,15 +87,20 @@ def _mark_reached(entity: Entity, step: str) -> None:
     Never moves backwards: clicking "Back" to recheck a registration must not
     make the dashboard's "resume" link forget that the questions were already
     reached. Compared by position in :data:`SETUP_STEP_ORDER` rather than by
-    string, since "packs" sorts after "answers" alphabetically by accident, not
-    by design, and a future step added to the rail should not have to keep that
-    coincidence true.
+    string, since a step added to the rail should not have to sort after the
+    one before it alphabetically.
+
+    A stored step this version no longer has (the retired "packs") counts as
+    not having started, so the entity moves forward from it instead of
+    staying stuck on a step that no longer exists.
     """
+    if step not in SETUP_STEP_ORDER:
+        return
+    new_index = SETUP_STEP_ORDER.index(step)
     try:
-        new_index = SETUP_STEP_ORDER.index(step)
         current_index = SETUP_STEP_ORDER.index(entity.setup_step)
     except ValueError:
-        return
+        current_index = -1
     if new_index > current_index:
         entity.setup_step = step
         entity.save(update_fields=["setup_step", "updated_at"])
@@ -109,9 +111,8 @@ def registrations(request: HttpRequest, pk: str) -> HttpResponse:
     """Step one: what the Add Entity screen already recorded, and anything else."""
     entity = _entity_or_404(pk)
     _mark_reached(entity, "registrations")
-    has_packs = bool(entity_preview_context(entity, as_of=_today())["packs"])
     context = {
-        **_step_context("registrations", entity, has_packs=has_packs),
+        **_step_context("registrations", entity),
         "registrations": entity.registrations.filter(archived_at__isnull=True),
         "gaps": registration_gaps(entity),
     }
@@ -122,9 +123,9 @@ def registrations(request: HttpRequest, pk: str) -> HttpResponse:
 def answers(request: HttpRequest, pk: str) -> HttpResponse:
     """Step two: the ranked question queue, on its own.
 
-    Shown beside the headline counts alone — no category breakdown, no pack
-    strip — so answering a question is felt as "the counts moved" rather than
-    as a page of unrelated content reflowing at the same time. See
+    Shown beside the headline counts alone — no category breakdown — so
+    answering a question is felt as "the counts moved" rather than as a page
+    of unrelated content reflowing at the same time. See
     ``obligations.views.entity_preview_context``'s ``hide_columns``/
     ``hide_packs``.
     """
@@ -139,7 +140,7 @@ def answers(request: HttpRequest, pk: str) -> HttpResponse:
         hide_packs=True,
     )
     context = {
-        **_step_context("answers", entity, has_packs=bool(preview_context["packs"])),
+        **_step_context("answers", entity),
         **preview_context,
         "back_url": reverse("app:entity_setup_registrations", args=[entity.pk]),
     }
@@ -147,45 +148,13 @@ def answers(request: HttpRequest, pk: str) -> HttpResponse:
 
 
 @require_permission("tenancy.entity.view")
-def packs(request: HttpRequest, pk: str) -> HttpResponse:
-    """Step three: optional packs, skipped entirely when there is nothing to offer.
-
-    Not gated on anything answered in step two — a suggestion list with
-    nothing in it is not a step somebody should have to click through, it is
-    an empty page. ``suggest_packs`` is re-evaluated fresh here regardless of
-    how the user arrived (forward from step two, back from step four,
-    a bookmark), so a stale "nothing to suggest" never strands a real
-    suggestion, and a stale suggestion never strands an empty step.
-    """
-    entity = _entity_or_404(pk)
-    _mark_reached(entity, "packs")
-    preview_context = entity_preview_context(
-        entity,
-        as_of=_today(),
-        hide_build=True,
-        in_setup=True,
-        hide_questions=True,
-        hide_columns=True,
-    )
-    if not preview_context["packs"]:
-        return redirect("app:entity_setup_build", pk=entity.pk)
-
-    context = {
-        **_step_context("packs", entity, has_packs=True),
-        **preview_context,
-        "back_url": reverse("app:entity_setup_answers", args=[entity.pk]),
-    }
-    return render(request, _template(request, "tenancy/setup/packs.html"), context)
-
-
-@require_permission("tenancy.entity.view")
 def build(request: HttpRequest, pk: str) -> HttpResponse:
-    """Step four, and the end of the flow: the full reviewed result, and the
+    """Step three, and the end of the flow: the full reviewed result, and the
     button that creates the calendar.
 
-    Neither the question queue nor the pack strip render here — both belong to
-    the steps behind this one, so what is left is a stable snapshot to review
-    rather than a screen still inviting more editing. See
+    The question queue does not render here — it belongs to the step behind
+    this one, so what is left is a stable snapshot to review rather than a
+    screen still inviting more editing. See
     ``obligations.views.entity_preview_context``'s ``hide_questions``/
     ``hide_packs``.
 
@@ -213,11 +182,9 @@ def build(request: HttpRequest, pk: str) -> HttpResponse:
         hide_questions=True,
         hide_packs=True,
     )
-    has_packs = bool(preview_context["packs"])
-    back_step = "app:entity_setup_packs" if has_packs else "app:entity_setup_answers"
     context = {
-        **_step_context("build", entity, has_packs=has_packs),
+        **_step_context("build", entity),
         **preview_context,
-        "back_url": reverse(back_step, args=[entity.pk]),
+        "back_url": reverse("app:entity_setup_answers", args=[entity.pk]),
     }
     return render(request, _template(request, "tenancy/setup/build.html"), context)

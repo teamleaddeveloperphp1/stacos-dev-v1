@@ -132,6 +132,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
 
     from stacos.engine.lifecycle import OPEN_STATES
     from stacos.obligations.queries import (
+        calendar_window_end,
         category_counts,
         overdue_aging,
         status_counts,
@@ -187,13 +188,16 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             if selected_entity is not None:
                 entity_ids = [selected_entity.id]
 
-    counts = status_counts(as_of=as_of, entity_ids=entity_ids)
+    # Counted under the calendar's own 12-month window, so a tile's number is
+    # the number of rows its click lands on.
+    window_end = calendar_window_end(as_of)
+    counts = status_counts(as_of=as_of, entity_ids=entity_ids, window_end=window_end)
     pending = counts["pending"]
 
     # Colour cycles through a small fixed palette — categories aren't part of
     # the status vocabulary and must not borrow its colours, which each mean
     # something specific about health.
-    category_rows = category_counts(entity_ids=entity_ids)
+    category_rows = category_counts(entity_ids=entity_ids, window_end=window_end)
     categories = _scaled_bars(
         [
             (row["label"], row["count"], f"category-{(index % 6) + 1}")
@@ -242,12 +246,8 @@ def dashboard(request: HttpRequest) -> HttpResponse:
     # Appended verbatim after `?status=...` on every stat tile's (and now the
     # donut legend's) link to the calendar, so a tile clicked while the
     # dashboard is narrowed to one entity lands on that entity's rows, not
-    # every entity's. `within=all` for the same reason: these counts cover the
-    # planner's whole horizon, and the calendar otherwise opens on its default
-    # "Due within" window — a click on "Pending: 212" would land on fewer.
-    dashboard_calendar_qs = "&within=all" + (
-        f"&entity={selected_entity.id}" if selected_entity else ""
-    )
+    # every entity's.
+    dashboard_calendar_qs = f"&entity={selected_entity.id}" if selected_entity else ""
     calendar_url = reverse("compliance:calendar")
 
     context = {
@@ -703,8 +703,9 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
     ``registered_office_state`` both drive applicability, so an edit can change
     what the entity owes — and this product's rule is that such a change
     produces a reviewable plan rather than taking effect silently. The toast
-    points at "Save changes" (``entity_build_button_label.html``'s
-    ``has_calendar`` branch), which is that review.
+    points at "Rebuild calendar" (``entity_build_button_label.html``'s
+    ``has_calendar`` branch), and the entity's Compliance card says what a
+    rebuild would change — that is the review.
     """
     entity = Entity.objects.filter(pk=pk, archived_at__isnull=True).first()
     if entity is None:
@@ -789,7 +790,10 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
             request,
             Fragment("tenancy/_fragments/entity_row.html", {"entity": row}),
             toast=Toast(
-                _("%(name)s updated. Save changes to apply it to the calendar.")
+                _(
+                    "%(name)s updated. Open it and choose Rebuild calendar to apply "
+                    "the change to its due dates."
+                )
                 % {"name": entity.name}
             ),
             triggers={"stacos:modal-close": True},

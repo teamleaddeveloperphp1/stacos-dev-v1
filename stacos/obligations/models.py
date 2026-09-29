@@ -831,7 +831,7 @@ class CustomObligation(TenantScopedModel):
     to show *who wrote the rule*.
 
     **Split like the catalog.** What the obligation *is* — its name, what it
-    asks for, where the requirement comes from — lives here and is edited in
+    asks for, its category — lives here and is edited in
     place. *When* it falls due lives in :class:`CustomObligationVersion` and is
     never edited: a schedule change is a new version with its own window, so an
     instance keeps pointing at the rule that dated it.
@@ -854,21 +854,12 @@ class CustomObligation(TenantScopedModel):
     #: What has to be done, in the words of whoever owes it. Shown where a
     #: catalog obligation shows its plain-language summary.
     description = models.TextField(blank=True)
-    #: Where the requirement comes from — "Facility agreement cl. 14.2",
-    #: "Factory licence condition 7". The custom obligation's statutory reference.
-    source_reference = models.CharField(max_length=250, blank=True)
     #: What a miss costs, in prose. Shown in the "If this is missed" card.
     consequence = models.CharField(max_length=250, blank=True)
     #: A ``tenancy.ComplianceCategory`` value, and an access boundary: a
     #: department user limited to safety and fire sees a safety obligation and
     #: nothing else, whoever wrote it.
     category = models.CharField(max_length=32, db_index=True)
-
-    #: What closing an instance needs on file. Plain labels; see
-    #: :attr:`evidence_requirements` for the shape the register reads.
-    evidence_labels = ArrayField(models.CharField(max_length=200), default=list, blank=True)
-    #: Whether an instance may be completed without the proof attached.
-    evidence_mandatory = models.BooleanField(default=False)
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
@@ -907,20 +898,6 @@ class CustomObligation(TenantScopedModel):
         except ValueError:
             return self.category
 
-    @property
-    def evidence_requirements(self) -> list[dict[str, Any]]:
-        """The labels, in the shape ``DefinitionVersion.evidence_requirements`` has.
-
-        So the evidence card, the completion modal and the guard in
-        ``transitions.outstanding_mandatory_evidence`` read one shape whoever
-        wrote the rule.
-        """
-        return [
-            {"key": f"item-{index}", "label": label, "mandatory_for_close": self.evidence_mandatory}
-            for index, label in enumerate(self.evidence_labels, start=1)
-            if label
-        ]
-
 
 class CustomObligationVersion(TenantScopedModel):
     """When a custom obligation falls due, for one window of periods.
@@ -932,9 +909,12 @@ class CustomObligationVersion(TenantScopedModel):
     version with a non-empty window, and ``DefinitionSnapshot.is_effective_for``
     does the rest.
 
-    The schedule is stored as the answers to the form, not as a ``due_rule``,
-    because those answers are what an edit has to show back; :attr:`due_rule`
-    derives the engine's shape from them, so there is one source of truth.
+    Each occurrence falls due ``due_offset_months`` after its period ends, on
+    ``due_day_of_month`` (``-1`` is the last day of that month) — the shape the
+    form's single "Due date" is turned into, so one date repeats for every
+    period. A version without a day, written before the form asked, falls due on
+    the last day of each period. :attr:`due_rule` states either in the engine's
+    own vocabulary.
     """
 
     ENTITY_FIELD: ClassVar[str | None] = "entity_id"
@@ -943,10 +923,6 @@ class CustomObligationVersion(TenantScopedModel):
     #: Read by templates that render a catalog ``DefinitionVersion`` or one of
     #: these interchangeably: "what the law says" versus "what you wrote".
     is_custom: ClassVar[bool] = True
-
-    class DueMode(models.TextChoices):
-        DAYS_AFTER_PERIOD = "DAYS_AFTER_PERIOD", _("A number of days after the period ends")
-        DAY_OF_NEXT_MONTH = "DAY_OF_NEXT_MONTH", _("On a day of the month after the period ends")
 
     class PeriodAnchor(models.TextChoices):
         FY = "FY", _("Financial year")
@@ -962,15 +938,12 @@ class CustomObligationVersion(TenantScopedModel):
     period_anchor = models.CharField(
         max_length=10, choices=PeriodAnchor.choices, default=PeriodAnchor.FY
     )
-    due_mode = models.CharField(max_length=20, choices=DueMode.choices)
-    #: For DAYS_AFTER_PERIOD. Zero is "on the last day of the period".
-    due_days = models.PositiveSmallIntegerField(default=0)
-    #: For DAY_OF_NEXT_MONTH. Clamped to the month's length by the engine, so 31
-    #: reads as "the last day".
-    due_day_of_month = models.PositiveSmallIntegerField(null=True, blank=True)
-    #: A private deadline is usually a working-day one, unlike a statutory
-    #: filing date — which is why this is a choice here and fixed at NONE there.
-    shift_to_working_day = models.BooleanField(default=False)
+
+    #: Whole months from the end of each period to its due date.
+    due_offset_months = models.PositiveSmallIntegerField(default=0)
+    #: Day of that month it falls due; ``-1`` is the last day, ``None`` is the
+    #: last day of the period itself (every version before this was asked).
+    due_day_of_month = models.SmallIntegerField(null=True, blank=True)
 
     #: Periods ending on or after this date follow this version.
     effective_from = models.DateField()
@@ -999,14 +972,12 @@ class CustomObligationVersion(TenantScopedModel):
     @property
     def due_rule(self) -> dict[str, Any]:
         """The schedule in the engine's own ``due_rule`` vocabulary."""
-        if self.due_mode == self.DueMode.DAY_OF_NEXT_MONTH:
-            offset: dict[str, int] = {"months": 1, "day_of_month": int(self.due_day_of_month or 1)}
-        else:
-            offset = {"days": int(self.due_days)}
+        if self.due_day_of_month is None:
+            return {"anchor": "PERIOD_END", "offset": {"days": 0}, "shift_if_holiday": "NONE"}
         return {
             "anchor": "PERIOD_END",
-            "offset": offset,
-            "shift_if_holiday": "NEXT_WORKING_DAY" if self.shift_to_working_day else "NONE",
+            "offset": {"months": self.due_offset_months, "day_of_month": self.due_day_of_month},
+            "shift_if_holiday": "NONE",
         }
 
     @property
@@ -1023,21 +994,15 @@ class CustomObligationVersion(TenantScopedModel):
     def plain_language_summary(self) -> str:
         return self.obligation.description
 
-    @property
-    def statutory_reference(self) -> str:
-        return self.obligation.source_reference
-
-    @property
-    def penalty_summary(self) -> str:
-        return self.obligation.consequence
-
-    @property
-    def evidence_requirements(self) -> list[dict[str, Any]]:
-        return self.obligation.evidence_requirements
+    #: The form no longer asks what happens if it is missed, so an answer
+    #: stored before that — which nobody can now edit — is not shown either.
+    penalty_summary: ClassVar[str] = ""
 
     #: A person wrote this rule for their own entity; there is no statute to
-    #: compute a penalty from, no editorial review to go stale, and no named
-    #: checklist beyond the generic one.
+    #: cite or compute a penalty from, no proof list, no editorial review to go
+    #: stale, and no named checklist beyond the generic one.
+    statutory_reference: ClassVar[str] = ""
+    evidence_requirements: ClassVar[list[dict[str, Any]]] = []
     penalty_rules: ClassVar[list[dict[str, Any]]] = []
     workflow_steps: ClassVar[list[dict[str, Any]]] = []
     review_is_stale: ClassVar[bool] = False

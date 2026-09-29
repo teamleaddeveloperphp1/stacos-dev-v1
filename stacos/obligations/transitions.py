@@ -50,6 +50,7 @@ __all__ = [
     "complete_step",
     "ensure_steps",
     "nudge",
+    "opens_on",
     "outstanding_mandatory_evidence",
     "record_completion",
     "record_pending",
@@ -122,6 +123,37 @@ _INDEPENDENT_MOVES: frozenset[tuple[State, State]] = frozenset(
 )
 
 
+#: Where a filing whose period has not begun can still go: ruled out, put off,
+#: or disputed. Every other move is working on it, and there is nothing to work
+#: on yet.
+_BEFORE_PERIOD_TARGETS = frozenset({State.NOT_APPLICABLE, State.DEFERRED, State.DISPUTED})
+
+
+def opens_on(obligation: ObligationInstance, *, as_of: date | None = None) -> date | None:
+    """The day work on this can start, while that is still in the future.
+
+    A calendar holds eighteen months of filings, and each one is created
+    ``NOT_STARTED`` — catalog or custom alike. Starting one whose period has not
+    even begun (preparing January 2028 in September 2026) is never real work,
+    only a stray click, and a started row stays on the calendar however far out
+    it falls. So nothing leaves ``NOT_STARTED`` before ``period_start`` except
+    the moves in :data:`_BEFORE_PERIOD_TARGETS`.
+
+    ``None`` once the period has begun, for a row already past ``NOT_STARTED``
+    (whatever moved it there keeps its way back), and for a row with no period.
+    """
+    if obligation.state != State.NOT_STARTED or obligation.period_start is None:
+        return None
+    today = as_of or timezone.localdate()
+    return obligation.period_start if obligation.period_start > today else None
+
+
+def _before_period(obligation: ObligationInstance, move: Transition, *, as_of: date | None) -> bool:
+    return (
+        move.target not in _BEFORE_PERIOD_TARGETS and opens_on(obligation, as_of=as_of) is not None
+    )
+
+
 def submitted_for_review_by(obligation: ObligationInstance) -> Any | None:
     """Who last sent this obligation for review — the maker, for the checker rule.
 
@@ -158,6 +190,7 @@ def available_actions(
     *,
     permissions: frozenset[str],
     actor: Any = None,
+    as_of: date | None = None,
 ) -> tuple[Transition, ...]:
     """Moves this user could make on this obligation, right now.
 
@@ -174,6 +207,7 @@ def available_actions(
         return ()
     permissions = effective_permissions(permissions, obligation.entity_id)
     moves = allowed_transitions(obligation.state, permissions=permissions)
+    moves = tuple(m for m in moves if not _before_period(obligation, m, as_of=as_of))
     if actor is not None and any((m.source, m.target) in _INDEPENDENT_MOVES for m in moves):
         moves = tuple(m for m in moves if not blocked_by_four_eyes(obligation, m, actor))
     if any(move.requires_mandatory_evidence for move in moves) and outstanding_mandatory_evidence(
@@ -220,6 +254,13 @@ def apply_transition(
             )
             % {"state": obligation.get_state_display().lower()},
             code="stale",
+        )
+
+    if _before_period(obligation, move, as_of=as_of):
+        raise TransitionError(
+            _("This period has not started yet. Work on it can begin on %(date)s.")
+            % {"date": f"{obligation.period_start:%d %b %Y}"},
+            code="not_open",
         )
 
     permissions = effective_permissions(permissions, obligation.entity_id)

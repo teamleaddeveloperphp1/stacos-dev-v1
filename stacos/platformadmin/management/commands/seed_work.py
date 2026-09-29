@@ -95,38 +95,22 @@ class Command(BaseCommand):
                         "Certify the debt service coverage ratio for the quarter, signed "
                         "by the CFO, and send it to the relationship manager."
                     ),
-                    "source_reference": "Term loan agreement dated 12 Jan 2024, cl. 14.2",
-                    "consequence": "Event of default if not cured within 30 days of notice.",
                     "category": "INTERNAL_GOVERNANCE",
-                    "evidence_labels": ["Signed DSCR certificate", "Lender's acknowledgement"],
-                    "evidence_mandatory": True,
                 },
                 {
                     "periodicity": "QUARTERLY",
                     "period_anchor": CustomObligationVersion.PeriodAnchor.FY,
-                    "due_mode": CustomObligationVersion.DueMode.DAYS_AFTER_PERIOD,
-                    "due_days": 45,
-                    "due_day_of_month": None,
-                    "shift_to_working_day": True,
                 },
             ),
             (
                 {
                     "title": "Boiler operation log review",
                     "description": "Plant head reviews and signs the month's boiler log.",
-                    "source_reference": "Boiler registration condition 9 (Surat plant)",
-                    "consequence": "",
                     "category": "SAFETY_FIRE",
-                    "evidence_labels": ["Signed log extract"],
-                    "evidence_mandatory": False,
                 },
                 {
                     "periodicity": "MONTHLY",
                     "period_anchor": CustomObligationVersion.PeriodAnchor.FY,
-                    "due_mode": CustomObligationVersion.DueMode.DAY_OF_NEXT_MONTH,
-                    "due_days": 0,
-                    "due_day_of_month": 5,
-                    "shift_to_working_day": True,
                 },
             ),
         ]

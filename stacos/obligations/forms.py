@@ -429,21 +429,6 @@ STATUS_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
     ("all", _("All, including completed")),
 )
 
-#: The calendar's "Due within" window, in whole months from today — see
-#: ``queries.apply_due_window`` for what it hides and, more to the point, what
-#: it never does. Every bound is wider than the 90-day status buckets above, so
-#: picking one can never cut into a window a status already promises. "all"
-#: is the planner's whole horizon.
-DUE_WINDOW_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
-    ("6", _("Due within 6 months")),
-    ("12", _("Due within 12 months")),
-    ("all", _("Any due date")),
-)
-
-#: Where a fresh visit lands: near enough to be this year's work, wide enough
-#: that every annual filing's next occurrence is on it.
-DEFAULT_DUE_WINDOW = "12"
-
 
 def obligation_display(instance: ObligationInstance) -> str:
     """One-line description used in toasts and confirmation dialogs."""
@@ -510,13 +495,9 @@ LIBRARY_ORIGIN_FILTERS: tuple[tuple[str, StrOrPromise], ...] = (
     ("custom", _("Your own")),
 )
 
-#: A generous cap: a checklist of proof longer than this is a procedure
-#: document, and belongs in the description.
-_MAX_EVIDENCE_LINES = 10
-
 
 class CustomObligationForm(forms.Form):
-    """Everything one custom obligation is: what it asks, and when it falls due.
+    """Everything one custom obligation is: what it asks, and how often.
 
     One form for create and edit, the way :class:`TransitionForm` is one form
     for every transition. The split that matters — details edited in place,
@@ -524,30 +505,19 @@ class CustomObligationForm(forms.Form):
     compares what came back here against what is stored; this form only
     produces clean values in the shapes the models hold.
 
-    ``starts_on`` is asked on create and ``applies_from`` on edit. They are the
-    same question at different moments: from which periods on does this
-    schedule govern.
+    One due date, not a rule: ``stacos.obligations.custom.resolve_schedule``
+    turns it into "so long after each period ends", so every later occurrence
+    falls due the same way. Tracking starts today on create; ``applies_from``
+    is asked on edit, for a change of frequency or due date.
     """
 
     title = forms.CharField(label=_("Name"), max_length=200)
     description = forms.CharField(
-        label=_("What has to be done"),
+        label=_("Description"),
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
     )
-    source_reference = forms.CharField(
-        label=_("Where it comes from"),
-        max_length=250,
-        required=False,
-        help_text=_("e.g. Facility agreement clause 14.2, or Factory licence condition 7."),
-    )
     category = forms.ChoiceField(label=_("Category"))
-    consequence = forms.CharField(
-        label=_("If it is missed"),
-        max_length=250,
-        required=False,
-        help_text=_("Optional. Shown on each occurrence, the way a statutory penalty is."),
-    )
 
     periodicity = forms.ChoiceField(label=_("How often"))
     period_anchor = forms.ChoiceField(
@@ -555,42 +525,13 @@ class CustomObligationForm(forms.Form):
         choices=[],
         help_text=_("Ignored for monthly obligations."),
     )
-    due_mode = forms.ChoiceField(label=_("Due"), widget=forms.RadioSelect, choices=[])
-    due_days = forms.IntegerField(
-        label=_("Days after the period ends"),
-        min_value=0,
-        max_value=365,
-        required=False,
-        help_text=_("0 means the last day of the period."),
-    )
-    due_day_of_month = forms.IntegerField(
-        label=_("Day of the following month"),
-        min_value=1,
-        max_value=31,
-        required=False,
-        help_text=_("31 means the last day of that month."),
-    )
-    shift_to_working_day = forms.BooleanField(
-        label=_("If it falls on a weekend, move it to the next working day"),
-        required=False,
-    )
-
-    evidence_labels = forms.CharField(
-        label=_("Proof to keep on file"),
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 2}),
-        help_text=_("One item per line, e.g. Signed compliance certificate."),
-    )
-    evidence_mandatory = forms.BooleanField(
-        label=_("Require the proof to be attached before an occurrence can be completed"),
-        required=False,
-    )
-
-    starts_on = forms.DateField(
-        label=_("Start tracking from"),
-        required=False,
+    due_date = forms.DateField(
+        label=_("Due date"),
         widget=forms.DateInput(attrs={"type": "date"}),
-        help_text=_("The first occurrence is the period that ends on or after this date."),
+        help_text=_(
+            "When the next one falls due. Each later one falls due the same way — a "
+            "quarterly obligation due 20 Oct is next due 20 Jan."
+        ),
     )
     applies_from = forms.DateField(
         label=_("A schedule change applies from"),
@@ -631,16 +572,9 @@ class CustomObligationForm(forms.Form):
         cast(
             forms.ChoiceField, self.fields["period_anchor"]
         ).choices = CustomObligationVersion.PeriodAnchor.choices
-        cast(
-            forms.ChoiceField, self.fields["due_mode"]
-        ).choices = CustomObligationVersion.DueMode.choices
 
-        today = timezone.localdate()
-        self.fields["starts_on"].initial = today
-        self.fields["applies_from"].initial = today
-        if editing:
-            del self.fields["starts_on"]
-        else:
+        self.fields["applies_from"].initial = timezone.localdate()
+        if not editing:
             del self.fields["applies_from"]
 
         self.helper = FormHelper()
@@ -648,78 +582,40 @@ class CustomObligationForm(forms.Form):
         self.helper.layout = Layout(
             "title",
             "description",
-            Row(Column("category"), Column("source_reference")),
-            "consequence",
+            "category",
             Row(Column("periodicity"), Column("period_anchor")),
-            "due_mode",
-            Row(Column("due_days"), Column("due_day_of_month")),
-            "shift_to_working_day",
-            "applies_from" if editing else "starts_on",
-            "evidence_labels",
-            "evidence_mandatory",
+            "due_date",
+            *(["applies_from"] if editing else []),
         )
 
     @classmethod
-    def initial_for(cls, obligation: Any, version: Any) -> dict[str, Any]:
-        """What an edit form opens with: the stored values, in form shapes."""
+    def initial_for(cls, obligation: Any, version: Any, *, next_due: Any = None) -> dict[str, Any]:
+        """What an edit form opens with: the stored values, in form shapes.
+
+        ``next_due`` is the soonest upcoming occurrence's due date — the one
+        date that, given back unchanged, resolves to the same schedule.
+        """
         return {
+            "due_date": next_due,
             "title": obligation.title,
             "description": obligation.description,
-            "source_reference": obligation.source_reference,
             "category": obligation.category,
-            "consequence": obligation.consequence,
             "periodicity": version.periodicity,
             "period_anchor": version.period_anchor,
-            "due_mode": version.due_mode,
-            "due_days": version.due_days,
-            "due_day_of_month": version.due_day_of_month,
-            "shift_to_working_day": version.shift_to_working_day,
-            "evidence_labels": "\n".join(obligation.evidence_labels),
-            "evidence_mandatory": obligation.evidence_mandatory,
         }
 
     def clean_title(self) -> str:
         return str(self.cleaned_data["title"]).strip()
-
-    def clean_evidence_labels(self) -> list[str]:
-        lines = [
-            line.strip()
-            for line in str(self.cleaned_data.get("evidence_labels") or "").splitlines()
-            if line.strip()
-        ]
-        if len(lines) > _MAX_EVIDENCE_LINES:
-            raise forms.ValidationError(
-                _("List at most %(count)s items.") % {"count": _MAX_EVIDENCE_LINES}
-            )
-        if any(len(line) > 200 for line in lines):
-            raise forms.ValidationError(_("Keep each item under 200 characters."))
-        return lines
 
     def clean(self) -> dict[str, Any]:
         from stacos.engine.types import Periodicity
         from stacos.obligations.models import CustomObligationVersion
 
         cleaned = super().clean() or {}
-        mode = cleaned.get("due_mode")
-
-        # Normalised so that an edit which only toggles between the two modes'
-        # hidden values is not mistaken for a schedule change: whichever number
-        # the chosen mode does not use is stored as its default.
-        if mode == CustomObligationVersion.DueMode.DAY_OF_NEXT_MONTH:
-            if cleaned.get("due_day_of_month") is None:
-                self.add_error("due_day_of_month", _("Say which day of the month."))
-            cleaned["due_days"] = 0
-        elif mode == CustomObligationVersion.DueMode.DAYS_AFTER_PERIOD:
-            if cleaned.get("due_days") is None:
-                self.add_error("due_days", _("Say how many days after the period ends."))
-            cleaned["due_day_of_month"] = None
 
         # Monthly periods are the same months whichever year they belong to.
         if cleaned.get("periodicity") == Periodicity.MONTHLY:
             cleaned["period_anchor"] = CustomObligationVersion.PeriodAnchor.FY
-
-        if not self.editing and cleaned.get("starts_on") is None:
-            self.add_error("starts_on", _("Say when to start tracking this."))
         return cleaned
 
     @property
@@ -730,6 +626,8 @@ class CustomObligationForm(forms.Form):
 
     @property
     def schedule(self) -> dict[str, Any]:
-        from stacos.obligations.custom import SCHEDULE_FIELDS
-
-        return {name: self.cleaned_data[name] for name in SCHEDULE_FIELDS}
+        return {
+            "periodicity": self.cleaned_data["periodicity"],
+            "period_anchor": self.cleaned_data["period_anchor"],
+            "due_date": self.cleaned_data["due_date"],
+        }
