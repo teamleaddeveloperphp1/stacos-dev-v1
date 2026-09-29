@@ -46,6 +46,7 @@ from typing import Any, cast
 from django import forms
 from django.db.models import Manager, Model, QuerySet
 from django.forms.models import ModelChoiceIterator
+from django.utils.translation import gettext_lazy as _
 
 __all__ = [
     "ScopedModelChoiceField",
@@ -161,6 +162,7 @@ class ScopedModelChoiceField(_LazyScopedQuerysetMixin, forms.ModelChoiceField[An
     ) -> None:
         self.scoped_model = model
         self.scoped_filters = filters or {}
+        kwargs.setdefault("empty_label", _("Select…"))
         super().__init__(queryset=None, **kwargs)
 
 
@@ -209,6 +211,7 @@ class ScopedUserChoiceField(_LazyScopedQuerysetMixin, forms.ModelChoiceField[Any
 
     def __init__(self, **kwargs: Any) -> None:
         self.scoped_filters = {}
+        kwargs.setdefault("empty_label", _("Select…"))
         super().__init__(queryset=None, **kwargs)
 
     def resolve_queryset(self) -> QuerySet[Any]:

@@ -16,13 +16,16 @@
     <div class="card__header">
       <h2 class="card__title">{% translate "Invite a colleague" %}</h2>
     </div>
+    <p class="text-muted small mb-3">
+      {% translate "They get an email with a link to join. Until they accept, they are listed under “Waiting to be accepted”." %}
+    </p>
 
+    {# The submit button is the last column of the form's own field row — see `InviteColleagueForm`. #}
     <form hx-post="{% url 'app:team_invite' %}"
           hx-target="#team-panel" hx-swap="outerHTML"
           method="post" action="{% url 'app:team_invite' %}">
       {% csrf_token %}
       {% crispy form %}
-      <button class="btn btn-primary" type="submit">{% translate "Send invitation" %}</button>
     </form>
   </section>
 

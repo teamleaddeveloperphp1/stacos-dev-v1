@@ -340,7 +340,6 @@ class AssignForm(forms.Form):
     assigned_to = ScopedUserChoiceField(
         label=_("Assign to"),
         required=False,
-        empty_label="---------",
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -386,7 +385,7 @@ def _attribute_field(attribute: Any) -> forms.Field:
     if attribute.type == "ENUM":
         field: forms.Field = forms.ChoiceField(
             required=False,
-            choices=[("", "—")]
+            choices=[("", _("Select…"))]
             + [
                 (value, value.replace("_", " ").title())
                 for value in (attribute.allowed_values or ())
@@ -522,6 +521,9 @@ class CustomObligationForm(forms.Form):
     periodicity = forms.ChoiceField(label=_("How often"))
     period_anchor = forms.ChoiceField(
         label=_("Quarters and years follow the"),
+        # Optional here only because monthly obligations ignore it; `clean()`
+        # requires it for every other frequency.
+        required=False,
         choices=[],
         help_text=_("Ignored for monthly obligations."),
     )
@@ -561,17 +563,18 @@ class CustomObligationForm(forms.Form):
         # A category-limited member may only file their own obligation under a
         # category they can see — otherwise it would vanish from under them the
         # moment they saved it, taking its calendar rows with it.
-        cast(forms.ChoiceField, self.fields["category"]).choices = [
+        cast(forms.ChoiceField, self.fields["category"]).choices = [("", _("Select…"))] + [
             (value, label)
             for value, label in ComplianceCategory.choices
             if allowed_categories is None or value in allowed_categories
         ]
-        cast(forms.ChoiceField, self.fields["periodicity"]).choices = [
+        cast(forms.ChoiceField, self.fields["periodicity"]).choices = [("", _("Select…"))] + [
             (str(p), periodicity_adjective(str(p))) for p in SCHEDULE_PERIODICITIES
         ]
-        cast(
-            forms.ChoiceField, self.fields["period_anchor"]
-        ).choices = CustomObligationVersion.PeriodAnchor.choices
+        cast(forms.ChoiceField, self.fields["period_anchor"]).choices = [
+            ("", _("Select…")),
+            *CustomObligationVersion.PeriodAnchor.choices,
+        ]
 
         self.fields["applies_from"].initial = timezone.localdate()
         if not editing:
@@ -616,6 +619,8 @@ class CustomObligationForm(forms.Form):
         # Monthly periods are the same months whichever year they belong to.
         if cleaned.get("periodicity") == Periodicity.MONTHLY:
             cleaned["period_anchor"] = CustomObligationVersion.PeriodAnchor.FY
+        elif cleaned.get("periodicity") and not cleaned.get("period_anchor"):
+            self.add_error("period_anchor", _("This field is required."))
         return cleaned
 
     @property

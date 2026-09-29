@@ -183,6 +183,25 @@ def test_the_response_is_the_row_it_replaces(signed_in: Client, entity_a: Entity
     assert "Acme Textiles Limited" in body
 
 
+def test_editing_from_the_entity_page_answers_with_that_page(
+    signed_in: Client, entity_a: Entity
+) -> None:
+    """The entity's own page has no list row to replace, so the modal opened
+    there targets the page body, and the save answers with the page."""
+    url = reverse("app:entity_edit", args=[entity_a.pk])
+
+    modal = signed_in.get(url, {"from": "detail"}, headers=HTMX).content.decode()
+    assert 'hx-target="#main"' in modal
+    assert 'name="from" value="detail"' in modal
+
+    body = signed_in.post(
+        url, {**_payload(entity_a, name="Acme Textiles Limited"), "from": "detail"}, headers=HTMX
+    ).content.decode()
+    assert "entity-row-" not in body
+    assert "Acme Textiles Limited" in body
+    assert "Registrations" in body
+
+
 def test_saving_closes_the_modal_and_toasts(signed_in: Client, entity_a: Entity) -> None:
     response = signed_in.post(
         reverse("app:entity_edit", args=[entity_a.pk]),

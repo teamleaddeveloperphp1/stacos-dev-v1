@@ -4,6 +4,15 @@
                subtitle="{{ entity.legal_name|default:entity.entity_type }}">
   <c-status-chip status="{% if entity.status == 'ACTIVE' %}on-track{% else %}na{% endif %}"
                  label="{{ entity.get_status_display }}" />
+  {# Same modal as the list's Edit; `from=detail` makes it answer with this page. #}
+  {% if "tenancy.entity.edit" in access_scope.permissions and not entity.archived_at %}
+    <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+            hx-get="{% url 'app:entity_edit' entity.pk %}?from=detail"
+            hx-target="#modal-container"
+            hx-swap="innerHTML">
+      <c-icon name="pencil" size="14" /><span>{% translate "Edit details" %}</span>
+    </button>
+  {% endif %}
 </c-page-header>
 
 {% comment %}

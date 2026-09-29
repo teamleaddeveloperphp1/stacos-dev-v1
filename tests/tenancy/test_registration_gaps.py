@@ -114,7 +114,15 @@ def test_the_flag_is_read_from_the_pack(signed_in: Client, entity_a: Entity) -> 
     pack.save(update_fields=["registration_types"])
 
     assert "TAN" in _options(_modal(signed_in, entity_a), "type")
-    assert "" not in _options(_modal(signed_in, entity_a, type="TAN"), "jurisdiction")
+    # The blank slot is held, so the "Select…" placeholder no longer means
+    # "not state-specific": leaving it is refused, not saved as a duplicate.
+    response = signed_in.post(
+        reverse("app:registration_create", args=[entity_a.pk]),
+        {"type": "TAN", "value": "MUMA12345B", "jurisdiction": ""},
+        headers=HTMX,
+    )
+    assert response.status_code == 422
+    assert "already recorded without a state" in response.content.decode()
 
 
 def test_posting_a_taken_state_is_refused_by_name(signed_in: Client, entity_a: Entity) -> None:

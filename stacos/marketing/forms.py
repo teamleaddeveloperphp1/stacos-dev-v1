@@ -42,7 +42,7 @@ TOPICS = (
 )
 
 SIZES = (
-    ("", _("Select one")),
+    ("", _("Select…")),
     ("1", _("One entity")),
     ("2-5", _("2–5 entities")),
     ("6-25", _("6–25 entities")),

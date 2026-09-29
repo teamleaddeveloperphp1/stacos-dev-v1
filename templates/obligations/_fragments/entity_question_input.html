@@ -35,7 +35,7 @@
 {% elif question.fact.type == "ENUM" %}
   <select class="form-select form-select-sm" name="answer" id="q-{{ question.key }}">
     <option value="" {% if question.answered_value == None %}selected{% endif %}>
-      {% translate "Not sure yet" %}
+      {% translate "Select…" %}
     </option>
     {% for value in question.fact.allowed_values %}
       <option value="{{ value }}" {% if question.answered_value == value %}selected{% endif %}>

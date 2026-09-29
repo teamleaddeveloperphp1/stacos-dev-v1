@@ -1,0 +1,70 @@
+{% load i18n %}
+{% comment %}
+  A many-valued field as a dropdown of checkboxes, for crispy's
+  `Field(name, template=...)`. The inputs are ordinary checkboxes posted under
+  the field's own name, so the form and its validation are unchanged; only the
+  presentation folds away. Nothing ticked reads "Select…", the same placeholder
+  every other picker shows.
+{% endcomment %}
+<div id="div_{{ field.auto_id }}" class="mb-3{% if wrapper_class %} {{ wrapper_class }}{% endif %}"
+     data-checkbox-dropdown
+     x-data="{ open: false, picked: [] }"
+     x-init="picked = [...$el.querySelectorAll('input:checked')].map((input) => input.dataset.label)"
+     @keydown.escape.stop="open = false" @click.outside="open = false">
+  <span class="form-label d-block" id="{{ field.auto_id }}_label">{{ field.label }}</span>
+
+  <div class="position-relative">
+    <button type="button"
+            class="form-select text-start text-truncate{% if field.errors %} is-invalid{% endif %}"
+            @click="open = !open" :aria-expanded="open.toString()" aria-expanded="false"
+            aria-controls="{{ field.auto_id }}_menu"
+            aria-labelledby="{{ field.auto_id }}_label {{ field.auto_id }}_summary"
+            {% if field.help_text %}aria-describedby="{{ field.auto_id }}_helptext"{% endif %}>
+      <span id="{{ field.auto_id }}_summary" aria-live="polite">
+        <span x-show="!picked.length">{% translate "Select…" %}</span>
+        <span x-show="picked.length" x-cloak x-text="picked.join(', ')"></span>
+      </span>
+    </button>
+
+    <div id="{{ field.auto_id }}_menu" x-show="open" x-cloak
+         x-transition.opacity.duration.120ms
+         class="card position-absolute w-100 mt-1 p-0 shadow-sm"
+         style="z-index: 60;"
+         role="group" aria-labelledby="{{ field.auto_id }}_label">
+      <div class="p-2" style="max-height: 14rem; overflow-y: auto;">
+      {% for choice in field %}
+        <div class="form-check">
+          <input class="form-check-input{% if field.errors %} is-invalid{% endif %}" type="checkbox"
+                 name="{{ field.html_name }}" value="{{ choice.data.value }}"
+                 id="{{ choice.id_for_label }}" data-label="{{ choice.choice_label }}"
+                 {% if choice.data.selected %}checked{% endif %}
+                 @change="picked = [...$el.closest('[data-checkbox-dropdown]').querySelectorAll('input:checked')].map((input) => input.dataset.label)">
+          <label class="form-check-label" for="{{ choice.id_for_label }}">{{ choice.choice_label }}</label>
+        </div>
+      {% empty %}
+        <p class="text-muted small mb-0">{% translate "Nothing to choose from yet." %}</p>
+      {% endfor %}
+      </div>
+      {% comment %}
+        Its own way out. The menu floats over whatever sits below the field —
+        often the form's submit button — so closing it cannot depend on
+        clicking somewhere else first.
+      {% endcomment %}
+      <div class="d-flex align-items-center gap-2 border-top px-2 py-2">
+        <span class="small text-muted me-auto">
+          <span x-show="!picked.length">{% translate "None ticked means all" %}</span>
+          <span x-show="picked.length" x-cloak><span x-text="picked.length"></span> {% translate "selected" %}</span>
+        </span>
+        <button type="button" class="btn btn-sm btn-link text-decoration-none" x-show="picked.length"
+                @click="$el.closest('[data-checkbox-dropdown]').querySelectorAll('input:checked').forEach((input) => { input.checked = false }); picked = []">
+          {% translate "Clear" %}
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" @click="open = false">
+          {% translate "Done" %}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {% include "bootstrap5/layout/help_text_and_errors.html" %}
+</div>

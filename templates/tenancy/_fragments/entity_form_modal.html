@@ -35,6 +35,7 @@
             hx-disabled-elt="find button[type=submit]"
             hx-indicator="#entity-form-spinner">
         {% csrf_token %}
+        {% if from_detail %}<input type="hidden" name="from" value="detail">{% endif %}
 
         <div class="modal-header">
           <h2 class="modal-title h5" id="entity-form-title">{{ modal_title }}</h2>

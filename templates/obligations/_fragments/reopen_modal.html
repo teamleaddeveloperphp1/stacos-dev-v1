@@ -36,7 +36,7 @@
           </label>
           <select class="form-select mb-2" id="reopen-reason-picker"
                   @change="note = $event.target.value">
-            <option value="">{% translate "Choose a reason, or write your own below" %}</option>
+            <option value="">{% translate "Select…" %}</option>
             <option value="{% translate 'Correction required.' %}">{% translate "Correction required" %}</option>
             <option value="{% translate 'Submission rejected by the authority.' %}">{% translate "Submission rejected" %}</option>
             <option value="{% translate 'Additional information required.' %}">{% translate "Additional information required" %}</option>

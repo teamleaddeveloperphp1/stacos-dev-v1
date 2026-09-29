@@ -13,7 +13,7 @@ from typing import Any, cast
 from uuid import UUID
 
 from crispy_forms.helper import FormHelper
-from crispy_forms.layout import Column, Div, Field, Layout, Row
+from crispy_forms.layout import HTML, Column, Div, Field, Layout, Row
 from django import forms
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -263,23 +263,12 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
             "type",
             "value",
             "jurisdiction",
-            "valid_from",
-            "valid_to",
             "is_primary",
         ]
         labels = {
             "value": _("Number"),
             "jurisdiction": _("State"),
-            "valid_from": _("Valid from"),
-            "valid_to": _("Valid to"),
             "is_primary": _("This is the primary one of its type"),
-        }
-        help_texts = {
-            "valid_to": _("Leave blank while it is current. Set it when a registration lapses."),
-        }
-        widgets = {
-            "valid_from": forms.DateInput(attrs={"type": "date"}),
-            "valid_to": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args: Any, entity: Entity, gaps: RegistrationGaps, **kwargs: Any) -> None:
@@ -307,9 +296,12 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
         )
         type_label = REGISTRATION_TYPE_LABELS.get(chosen, chosen)
 
-        state_choices: list[tuple[str, Any]] = []
-        if "" not in taken:
-            state_choices.append(("", _("Not state-specific")))
+        # "Select…" is always the default, and leaving it means the registration
+        # is not state-specific. When that slot is already held, `clean_jurisdiction`
+        # turns leaving it into an error rather than a unique-constraint failure.
+        self._blank_jurisdiction_taken = "" in taken
+        self._type_label = type_label
+        state_choices: list[tuple[str, Any]] = [("", _("Select…"))]
         state_choices += sorted(
             ((code, STATE_LABELS.get(code, code)) for code in IN_STATE_CODES if code not in taken),
             key=lambda pair: pair[1],
@@ -335,7 +327,6 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
                 % {"type": type_label}
             },
         )
-        self.fields["valid_from"].required = False
 
         self.helper = FormHelper()
         # The submit button lives in the modal footer, not in the form body.
@@ -356,9 +347,17 @@ class RegistrationForm(forms.ModelForm[EntityRegistration]):
                 Column("value"),
             ),
             Div("jurisdiction", css_id="registration-jurisdiction", aria_live="polite"),
-            Row(Column("valid_from"), Column("valid_to")),
             "is_primary",
         )
+
+    def clean_jurisdiction(self) -> str:
+        value = str(self.cleaned_data.get("jurisdiction") or "")
+        if not value and self._blank_jurisdiction_taken:
+            raise forms.ValidationError(
+                _("%(type)s is already recorded without a state. Choose a state.")
+                % {"type": self._type_label}
+            )
+        return value
 
 
 def registration_field_name(code: str) -> str:
@@ -583,7 +582,7 @@ class PremisesForm(forms.ModelForm[EntityPremises]):
         type_choices: list[tuple[str, Any]] = [("", _("Select…"))]
         type_choices += [(code, PREMISES_TYPE_LABELS.get(code, code)) for code in PREMISES_TYPES]
 
-        state_choices: list[tuple[str, Any]] = [("", _("Not state-specific"))]
+        state_choices: list[tuple[str, Any]] = [("", _("Select…"))]
         state_choices += sorted(
             ((code, STATE_LABELS.get(code, code)) for code in IN_STATE_CODES),
             key=lambda pair: pair[1],
@@ -649,7 +648,7 @@ class QuestionForm(forms.Form):
             case FactType.ENUM:
                 field = forms.ChoiceField(
                     required=False,
-                    choices=[("", _("Not sure yet"))]
+                    choices=[("", _("Select…"))]
                     + [
                         (value, value.replace("_", " ").title())
                         for value in (definition.allowed_values or ())
@@ -686,6 +685,18 @@ class QuestionForm(forms.Form):
         return raw
 
 
+#: The invite form's submit, laid out as the last column of the field row. The
+#: invisible label keeps the button level with the inputs beside it.
+INVITE_SUBMIT = (
+    "{% load i18n %}"
+    '<span class="form-label d-none d-lg-block invisible" aria-hidden="true">&nbsp;</span>'
+    '<button class="btn btn-primary w-100" type="submit">{% translate "Send invitation" %}</button>'
+)
+
+#: A many-valued field as a dropdown of checkboxes rather than a long list.
+CHECKBOX_DROPDOWN = "components/forms/checkbox_dropdown.html"
+
+
 class _AccessFieldsMixin:
     """The reach half of an access form: which entities, clients and areas.
 
@@ -697,28 +708,28 @@ class _AccessFieldsMixin:
     tenant: Any
     fields: dict[str, forms.Field]
 
-    def _add_access_fields(self) -> list[str]:
+    def _add_access_fields(self) -> list[Any]:
         tenant_type = getattr(self.tenant, "type", None)
-        names: list[str] = []
+        names: list[Any] = []
         if tenant_type == Tenant.Type.ORGANISATION:
             self.fields["entities"] = ScopedModelMultipleChoiceField(
                 Entity,
                 filters={"archived_at__isnull": True},
                 required=False,
                 label=_("Entities"),
-                help_text=_("Leave all unticked for every entity, including ones added later."),
+                help_text=_("Leave on Select… for every entity, including ones added later."),
                 widget=forms.CheckboxSelectMultiple,
             )
-            names.append("entities")
+            names.append(Field("entities", template=CHECKBOX_DROPDOWN))
         if tenant_type == Tenant.Type.PRACTICE:
             self.fields["client_tenants"] = forms.MultipleChoiceField(
                 required=False,
                 label=_("Clients"),
-                help_text=_("Leave all unticked for the whole client book."),
+                help_text=_("Leave on Select… for the whole client book."),
                 choices=[(str(pk), name) for pk, name in engaged_clients(self.tenant)],
                 widget=forms.CheckboxSelectMultiple,
             )
-            names.append("client_tenants")
+            names.append(Field("client_tenants", template=CHECKBOX_DROPDOWN))
         return names
 
     def grant(self, *, categories: tuple[str, ...] = ()) -> AccessGrant:
@@ -753,26 +764,36 @@ class InviteColleagueForm(_AccessFieldsMixin, forms.Form):
     to "everything" and narrowed a day later has already seen the rest.
     """
 
-    email = forms.EmailField(label=_("Their email"))
+    email = forms.EmailField(label=_("Email"))
     role: forms.ModelChoiceField[Role] = forms.ModelChoiceField(
         label=_("Role"),
         queryset=Role.objects.none(),
-        help_text=_("You can add or remove individual permissions once they have joined."),
+        empty_label=_("Select…"),
+        help_text=_("Fine-tune individual permissions once they have joined."),
     )
+
     def __init__(self, *args: Any, tenant: Any = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.tenant = tenant
         role_field = cast("forms.ModelChoiceField[Role]", self.fields["role"])
-        access_fields: list[str] = []
+        access_fields: list[Any] = []
         if tenant is not None:
             role_field.queryset = _system_roles_for(tenant)
             access_fields = self._add_access_fields()
 
         self.helper = FormHelper()
         self.helper.form_tag = False
+        # One line on a wide screen, the button last. The entity menu drops
+        # down over the page below rather than over the button that sends it.
+        width = "col-lg-3" if access_fields else "col-lg-5"
         self.helper.layout = Layout(
-            Row(Column("email"), Column("role")),
-            *([Div(*access_fields, css_class="access-fields")] if access_fields else []),
+            Row(
+                Column("email", css_class=f"col-12 col-md-6 {width}"),
+                Column("role", css_class=f"col-12 col-md-6 {width}"),
+                *[Column(field, css_class="col-12 col-md-6 col-lg-4") for field in access_fields],
+                Column(HTML(INVITE_SUBMIT), css_class="col-12 col-md-6 col-lg-2"),
+                css_class="g-3 align-items-start",
+            ),
         )
 
     def clean_email(self) -> str:
@@ -785,6 +806,7 @@ class MemberAccessForm(_AccessFieldsMixin, forms.Form):
     role: forms.ModelChoiceField[Role] = forms.ModelChoiceField(
         label=_("Role"),
         queryset=Role.objects.none(),
+        empty_label=_("Select…"),
         help_text=_("Changing the role resets any individual permission changes below."),
     )
 

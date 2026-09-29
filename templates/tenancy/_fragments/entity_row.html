@@ -34,13 +34,14 @@
     403s on click is worse than one that is absent.
   {% endcomment %}
   <td class="text-end">
-    <div class="d-flex justify-content-end align-items-center gap-3">
+    <div class="d-flex justify-content-end align-items-center gap-2">
       {% if "tenancy.entity.edit" in access_scope.permissions %}
-        <button class="btn btn-sm btn-link text-muted p-0"
+        <button class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
                 hx-get="{% url 'app:entity_edit' entity.pk %}"
                 hx-target="#modal-container"
-                hx-swap="innerHTML">
-          {% translate "Edit" %}
+                hx-swap="innerHTML"
+                aria-label="{% blocktranslate with name=entity.name %}Edit {{ name }}{% endblocktranslate %}">
+          <c-icon name="pencil" size="14" /><span>{% translate "Edit" %}</span>
         </button>
       {% endif %}
       {% if "tenancy.entity.archive" in access_scope.permissions %}
@@ -49,8 +50,9 @@
               hx-swap="outerHTML"
               hx-confirm="{% translate 'Archive this entity? Its history is kept, and it stops generating obligations.' %}">
           {% csrf_token %}
-          <button class="btn btn-sm btn-link text-muted p-0" type="submit">
-            {% translate "Archive" %}
+          <button class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" type="submit"
+                  aria-label="{% blocktranslate with name=entity.name %}Archive {{ name }}{% endblocktranslate %}">
+            <c-icon name="archive" size="14" /><span>{% translate "Archive" %}</span>
           </button>
         </form>
       {% endif %}

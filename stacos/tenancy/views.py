@@ -721,6 +721,12 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
     # there is something to compare against, the "before" side is already gone.
     original = model_to_dict(entity, fields=AUDITED_ENTITY_FIELDS)
 
+    # Opened from the entity's own page rather than the list: there is no row to
+    # replace there, so a save answers with the whole page body instead.
+    from_detail = (request.POST if request.method == "POST" else request.GET).get(
+        "from"
+    ) == "detail"
+
     form = EntityForm(
         request.POST or None, instance=entity, can_manage_registrations=can_manage_registrations
     )
@@ -780,6 +786,28 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
             if reg_form is not None:
                 _save_registration_fields(request, entity, reg_form)
 
+        toast = Toast(
+            _(
+                "%(name)s updated. Open it and choose Rebuild calendar to apply "
+                "the change to its due dates."
+            )
+            % {"name": entity.name}
+        )
+        if from_detail:
+            return oob(
+                request,
+                Fragment(
+                    "tenancy/_fragments/entity_detail_body.html",
+                    {
+                        "entity": entity,
+                        "registrations": entity.registrations.filter(archived_at__isnull=True),
+                        "premises": entity.premises.filter(archived_at__isnull=True),
+                    },
+                ),
+                toast=toast,
+                triggers={"stacos:modal-close": True},
+            )
+
         # Re-read so the row carries `registration_count`. Falling back to the
         # saved instance rather than letting `None` through: the count would be
         # wrong, but an empty `<tr>` swapped into the row's own id is worse —
@@ -789,13 +817,7 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
         return oob(
             request,
             Fragment("tenancy/_fragments/entity_row.html", {"entity": row}),
-            toast=Toast(
-                _(
-                    "%(name)s updated. Open it and choose Rebuild calendar to apply "
-                    "the change to its due dates."
-                )
-                % {"name": entity.name}
-            ),
+            toast=toast,
             triggers={"stacos:modal-close": True},
         )
 
@@ -810,8 +832,9 @@ def entity_edit(request: HttpRequest, pk: str) -> HttpResponse:
             "profile_form": profile_form,
             "can_manage_registrations": can_manage_registrations,
             "form_action": reverse("app:entity_edit", args=[entity.pk]),
-            "form_target": f"#entity-row-{entity.pk}",
-            "form_swap": "outerHTML",
+            "form_target": "#main" if from_detail else f"#entity-row-{entity.pk}",
+            "form_swap": "innerHTML" if from_detail else "outerHTML",
+            "from_detail": from_detail,
             "modal_title": _("Edit entity"),
             "submit_label": _("Save changes"),
         },
